@@ -1,0 +1,153 @@
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+
+type NavItem = {
+  path: string;
+  label: string;
+  icon: string;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { path: '/dashboard', label: 'Dashboard', icon: '⊞' },
+  { path: '/bookings', label: 'Bookings', icon: '📅' },
+  { path: '/customers', label: 'Customers', icon: '👥' },
+  { path: '/vehicles', label: 'Vehicles', icon: '🚗' },
+  { path: '/services', label: 'Services', icon: '🔧' },
+  { path: '/promotions', label: 'Promotions', icon: '🏷️' },
+  { path: '/campaigns', label: 'Campaigns', icon: '📢' },
+  { path: '/statistics', label: 'Statistics', icon: '📊' },
+  { path: '/settings', label: 'Settings', icon: '⚙️' },
+];
+
+interface SidebarProps {
+  isOpen: boolean;
+}
+
+export default function Sidebar({ isOpen }: SidebarProps) {
+  return (
+    <aside style={{
+      width: isOpen ? '240px' : '0',
+      minWidth: isOpen ? '240px' : '0',
+      height: '100vh',
+      backgroundColor: 'var(--color-primary)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      transition: 'width 0.25s ease, min-width 0.25s ease',
+      flexShrink: 0,
+    }}>
+      {/* Logo */}
+      <div style={{
+        padding: '24px 20px 20px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '10px',
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '20px',
+            flexShrink: 0,
+          }}>
+            🔧
+          </div>
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{
+              color: 'white',
+              fontWeight: 700,
+              fontSize: '15px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+            }}>
+              AutoRepair Admin
+            </div>
+            <div style={{
+              color: 'rgba(255,255,255,0.45)',
+              fontSize: '11px',
+              whiteSpace: 'nowrap',
+            }}>
+              Management Portal
+            </div>
+          </div>
+        </div>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          backgroundColor: 'rgba(245,158,11,0.15)',
+          border: '1px solid rgba(245,158,11,0.25)',
+          borderRadius: '4px',
+          padding: '2px 8px',
+          marginTop: '8px',
+        }}>
+          <span style={{ color: 'var(--color-secondary)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.6px' }}>
+            ADMIN PORTAL
+          </span>
+        </div>
+      </div>
+
+      {/* Location Selector */}
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: '12px' }}>📍</span>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Location</div>
+          <div style={{ color: 'var(--color-secondary)', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            San Jose — Joe's Auto
+          </div>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>▾</span>
+      </div>
+
+      {/* Navigation */}
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '11px 20px',
+              color: isActive ? 'white' : 'rgba(255,255,255,0.55)',
+              backgroundColor: isActive ? 'rgba(245,158,11,0.12)' : 'transparent',
+              textDecoration: 'none',
+              fontSize: '14px',
+              fontWeight: isActive ? 600 : 400,
+              position: 'relative',
+              borderLeft: isActive ? '3px solid var(--color-secondary)' : '3px solid transparent',
+              transition: 'background-color 0.15s, color 0.15s',
+              whiteSpace: 'nowrap',
+            })}
+          >
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.icon}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div style={{
+        padding: '12px 20px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        flexShrink: 0,
+      }}>
+        <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', textAlign: 'center' }}>
+          Phase 0 · v1.0.0
+        </div>
+      </div>
+    </aside>
+  );
+}
