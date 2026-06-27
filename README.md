@@ -6,27 +6,21 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 
 | App | Platform | Path | Status |
 |---|---|---|---|
-| Customer App | iOS + Android (React Native / Expo) | `apps/customer-app/` | Phase 0 ✅ |
-| Admin Mobile App | iOS (React Native / Expo) | `apps/admin-app/` | Phase 0 ✅ |
-| Admin Web Portal | Web (React + Vite) | `apps/admin-portal/` | Phase 0 ✅ |
-| Backend | AWS Serverless | `backend/` | Phase 1 🔜 |
+| Customer App | iOS + Android (React Native / Expo) | `apps/customer-app/` | Phase 1 ✅ |
+| Admin Mobile App | iOS + Android (React Native / Expo) | `apps/admin-app/` | Phase 1 ✅ |
+| Admin Web Portal | Web (React + Vite) | `apps/admin-portal/` | Phase 1 ✅ |
+| Backend | AWS Serverless (SAM) | `backend/` | Phase 1 ✅ |
 
 ## Phase Status
 
 | Phase | Description | Status |
 |---|---|---|
 | Phase 0 | Application Skeletons | ✅ Complete |
-| Phase 1 | AWS Foundation (CF, API GW, Lambda, DynamoDB, Cognito) | 🔜 Pending |
-| Phase 2 | Authentication & Authorization | 🔜 Pending |
-| Phase 3 | Tenant & Location Onboarding | 🔜 Pending |
-| Phase 4 | Vehicle Management & NHTSA Integration | 🔜 Pending |
-| Phase 5 | Service Management | 🔜 Pending |
-| Phase 6 | Appointment Booking Engine | 🔜 Pending |
-| Phase 7 | Capacity Management | 🔜 Pending |
-| Phase 8 | Blocked Times | 🔜 Pending |
-| Phase 9 | Promotions | 🔜 Pending |
-| Phase 10 | Marketing Campaigns | 🔜 Pending |
-| Phase 11 | Analytics Dashboard | 🔜 Pending |
+| Phase 1 | AWS Foundation + Authentication | ✅ Complete |
+| Phase 2 | Core Business Features (Services, Vehicles, Bookings, Live Dashboard) | 🔜 Next |
+| Phase 3 | Capacity Management + Blocked Times | 🔜 Pending |
+| Phase 4 | Promotions + Marketing Campaigns | 🔜 Pending |
+| Phase 5 | Analytics Dashboard | 🔜 Pending |
 
 ---
 
@@ -36,48 +30,65 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 
 - Node.js 20+
 - npm 10+
-- Expo CLI: `npm install -g expo-cli`
-- EAS CLI (for device builds): `npm install -g eas-cli`
+- AWS CLI + AWS SAM CLI (for backend deployment)
+- Android Studio with an emulator (for Android development)
+- Xcode (for iOS development — Mac only)
+
+### Environment Setup
+
+Each app reads from a `.env` file. Copy the example and fill in the values from your AWS stack outputs:
+
+```bash
+cp apps/customer-app/.env.example apps/customer-app/.env
+cp apps/admin-app/.env.example apps/admin-app/.env
+cp apps/admin-portal/.env.example apps/admin-portal/.env
+```
 
 ---
 
 ## Customer App
 
-**Technology:** React Native + Expo (TypeScript)
+**Technology:** React Native + Expo bare workflow (TypeScript)
 
 ```bash
 cd apps/customer-app
 npm install
-npx expo start
+npx expo run:android   # Android emulator
+npx expo run:ios       # iOS simulator (Mac only)
 ```
 
-### Run Options
+> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
 
-| Command | Target |
-|---|---|
-| `npx expo start` | Opens Expo Dev Tools (choose target from there) |
-| `npx expo start --ios` | iOS Simulator |
-| `npx expo start --android` | Android Emulator |
-| `npx expo start --web` | Web Browser |
+### Environment variables (`apps/customer-app/.env`)
 
-### Physical Device
-1. Install **Expo Go** from the App Store or Google Play
-2. Run `npx expo start`
-3. Scan the QR code with Expo Go (Android) or Camera app (iOS)
+```
+EXPO_PUBLIC_COGNITO_USER_POOL_ID=
+EXPO_PUBLIC_COGNITO_CUSTOMER_CLIENT_ID=
+EXPO_PUBLIC_API_BASE_URL=
+```
 
 ---
 
 ## Admin Mobile App
 
-**Technology:** React Native + Expo (TypeScript)
+**Technology:** React Native + Expo bare workflow (TypeScript)
 
 ```bash
 cd apps/admin-app
 npm install
-npx expo start
+npx expo run:android   # Android emulator
+npx expo run:ios       # iOS simulator (Mac only)
 ```
 
-Same run options as Customer App above.
+> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
+
+### Environment variables (`apps/admin-app/.env`)
+
+```
+EXPO_PUBLIC_COGNITO_USER_POOL_ID=
+EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID=
+EXPO_PUBLIC_API_BASE_URL=
+```
 
 ---
 
@@ -99,11 +110,51 @@ Open `http://localhost:5173` in your browser.
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 
+### Environment variables (`apps/admin-portal/.env`)
+
+```
+VITE_COGNITO_USER_POOL_ID=
+VITE_COGNITO_PORTAL_CLIENT_ID=
+VITE_API_BASE_URL=
+```
+
+---
+
+## Backend
+
+**Technology:** AWS SAM — Lambda (Node 20, TypeScript, arm64) + API Gateway + Cognito + DynamoDB + S3
+
+```bash
+cd backend
+npm install
+sam build
+sam deploy          # first time: sam deploy --guided
+```
+
+### AWS Resources (deployed to us-east-1)
+
+| Resource | Details |
+|---|---|
+| Cognito User Pool | Single pool, 3 app clients, 4 user groups |
+| DynamoDB | 12 tables, on-demand billing, PK/SK pattern |
+| S3 | 2 buckets (uploads + assets), versioning enabled |
+| API Gateway | REST API, regional endpoint, `/prod` stage |
+| Lambda | PreSignUp trigger + Health endpoint |
+
+### Cognito User Groups
+
+| Group | Who |
+|---|---|
+| `super-admins` | Platform administrators |
+| `tenant-owners` | Shop owners |
+| `location-managers` | Location-level staff |
+| `customers` | End customers |
+
 ---
 
 ## Architecture
 
-See [ADR.md](./ADR.md) for full Architecture Decision Record covering:
+See [ADR.md](./ADR.md) for the full Architecture Decision Record covering:
 
 - Tenant Isolation Strategy
 - Location Isolation Strategy
@@ -118,16 +169,23 @@ See [ADR.md](./ADR.md) for full Architecture Decision Record covering:
 
 ```
 auto-repair/
-├── ADR.md                    Architecture Decision Record
-├── README.md                 This file
+├── ADR.md                        Architecture Decision Record
+├── README.md                     This file
 ├── apps/
-│   ├── customer-app/         Customer iOS + Android app
-│   ├── admin-app/            Admin iOS app
-│   └── admin-portal/         Admin web portal
-└── backend/                  AWS Serverless backend (Phase 1+)
-    ├── functions/            Lambda functions
-    ├── infrastructure/       CloudFormation templates
-    └── shared/               Shared utilities and types
+│   ├── customer-app/             Customer iOS + Android app
+│   ├── admin-app/                Admin iOS + Android app
+│   └── admin-portal/             Admin web portal (React + Vite)
+└── backend/                      AWS Serverless backend
+    ├── src/
+    │   ├── functions/
+    │   │   ├── auth/preSignUp/   Cognito Pre-SignUp trigger
+    │   │   └── health/           GET /health
+    │   └── shared/
+    │       ├── middleware/        Tenant claim extraction
+    │       ├── types/             Shared TypeScript interfaces
+    │       └── utils/             DynamoDB client, HTTP response helpers
+    ├── template.yaml             SAM template (all AWS resources)
+    └── samconfig.toml            SAM deploy configuration
 ```
 
 ---
@@ -162,4 +220,4 @@ Joe's Auto Repair (Tenant)
   └── Oakland (Location)
 ```
 
-No data crosses tenant boundaries. See ADR.md for full isolation strategy.
+No data crosses tenant boundaries. See ADR.md for the full isolation strategy.
