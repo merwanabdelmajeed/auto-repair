@@ -1,0 +1,21 @@
+{
+  "name": "autorepair-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && esbuild src/functions/**/*.ts --bundle --platform=node --target=node20 --outdir=dist --external:@aws-sdk/* --external:aws-lambda",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.4.5"
+  }
+}

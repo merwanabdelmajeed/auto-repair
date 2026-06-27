@@ -1,0 +1,6 @@
+.aws-sam/
+node_modules/
+dist/
+*.js
+*.d.ts
+*.tsbuildinfo

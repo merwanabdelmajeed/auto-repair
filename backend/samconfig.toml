@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "autorepair-stack"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+s3_prefix = "autorepair-stack"
+resolve_s3 = true
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-1"

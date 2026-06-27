@@ -1,3 +1,7 @@
+export type AuthStackParamList = {
+  Login: undefined;
+};
+
 export type AdminDrawerParamList = {
   Dashboard: undefined;
   Bookings: undefined;

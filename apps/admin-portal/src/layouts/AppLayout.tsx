@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
+import { useAuth } from '../auth/AuthContext';
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: "Overview of today's activity" },
@@ -18,7 +19,31 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const { logout, user } = useAuth();
   const pageInfo = PAGE_TITLES[location.pathname] ?? { title: 'AutoRepair Admin', subtitle: '' };
+
+  const logoutBtn = (
+    <button
+      onClick={() => void logout()}
+      title={`Sign out (${user?.email ?? ''})`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 12px',
+        borderRadius: '8px',
+        border: '1px solid var(--color-border)',
+        backgroundColor: 'var(--color-background)',
+        color: 'var(--color-text-secondary)',
+        fontSize: '13px',
+        fontWeight: 500,
+        cursor: 'pointer',
+      }}
+    >
+      <span>↩</span>
+      <span>Sign out</span>
+    </button>
+  );
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -28,6 +53,7 @@ export default function AppLayout() {
           title={pageInfo.title}
           subtitle={pageInfo.subtitle}
           onMenuClick={() => setSidebarOpen((o) => !o)}
+          actions={logoutBtn}
         />
         <main style={{
           flex: 1,
