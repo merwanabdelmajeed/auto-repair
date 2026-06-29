@@ -10,8 +10,9 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/customers': { title: 'Customers', subtitle: 'View and manage customer profiles' },
   '/vehicles': { title: 'Vehicles', subtitle: 'Customer vehicle registry' },
   '/services': { title: 'Services', subtitle: 'Manage your service catalog' },
+  '/capacity': { title: 'Capacity', subtitle: 'Operating hours, slot duration, and concurrent bookings' },
+  '/blocked-times': { title: 'Blocked Times', subtitle: 'Block dates for holidays and closures' },
   '/promotions': { title: 'Promotions', subtitle: 'Create and manage promotions' },
-  '/campaigns': { title: 'Campaigns', subtitle: 'Email and push notification campaigns' },
   '/statistics': { title: 'Statistics', subtitle: 'Analytics and reporting' },
   '/settings': { title: 'Settings', subtitle: 'Configure your shop settings' },
 };

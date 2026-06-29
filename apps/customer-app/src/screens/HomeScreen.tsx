@@ -1,38 +1,17 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-
-const PLACEHOLDER_PROMOTIONS = [
-  {
-    id: '1',
-    title: 'Summer Oil Change Special',
-    description: 'Full synthetic oil change + tire rotation for just $59.99',
-    badge: 'LIMITED TIME',
-    icon: 'water-outline' as const,
-  },
-  {
-    id: '2',
-    title: 'Brake Inspection — FREE',
-    description: 'Complimentary brake inspection with any service this month',
-    badge: 'NEW',
-    icon: 'shield-checkmark-outline' as const,
-  },
-  {
-    id: '3',
-    title: '15% Off AC Service',
-    description: 'Beat the heat — get your AC system checked and recharged',
-    badge: 'SEASONAL',
-    icon: 'thermometer-outline' as const,
-  },
-];
+import { listPromotions, type PublicPromotion } from '../api/promotions';
 
 const QUICK_ACTIONS = [
   { icon: 'calendar-outline' as const, label: 'Book\nAppointment', screen: 'Appointments' },
@@ -41,7 +20,23 @@ const QUICK_ACTIONS = [
   { icon: 'notifications-outline' as const, label: 'Notifications', screen: 'Notifications' },
 ];
 
+function fmtExpiry(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function HomeScreen({ navigation }: any) {
+  const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
+  const [loadingPromos, setLoadingPromos] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    setLoadingPromos(true);
+    listPromotions()
+      .then(data => setPromotions(data.slice(0, 3)))
+      .catch(() => {})
+      .finally(() => setLoadingPromos(false));
+  }, []));
+
   return (
     <Layout>
       <ScrollView
@@ -99,24 +94,40 @@ export default function HomeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {PLACEHOLDER_PROMOTIONS.map((promo) => (
-          <View key={promo.id} style={styles.promoCard}>
-            <View style={styles.promoBadgeRow}>
-              <View style={styles.promoBadge}>
-                <Text style={styles.promoBadgeText}>{promo.badge}</Text>
-              </View>
-            </View>
-            <View style={styles.promoBody}>
-              <View style={styles.promoIconBox}>
-                <Ionicons name={promo.icon} size={26} color={colors.secondary} />
-              </View>
-              <View style={styles.promoContent}>
-                <Text style={styles.promoTitle}>{promo.title}</Text>
-                <Text style={styles.promoDesc}>{promo.description}</Text>
-              </View>
-            </View>
+        {loadingPromos ? (
+          <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
+        ) : promotions.length === 0 ? (
+          <View style={styles.emptyPromos}>
+            <Text style={styles.emptyPromosText}>No active promotions right now.</Text>
           </View>
-        ))}
+        ) : promotions.map((promo) => {
+          const expiry = fmtExpiry(promo.expiresAt);
+          const badge = promo.type === 'percent' ? `${promo.value}% OFF` : `$${promo.value} OFF`;
+          return (
+            <TouchableOpacity
+              key={promo.promoId}
+              style={styles.promoCard}
+              onPress={() => navigation.navigate('Promotions')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.promoBadgeRow}>
+                <View style={styles.promoBadge}>
+                  <Text style={styles.promoBadgeText}>{badge}</Text>
+                </View>
+                {expiry && <Text style={styles.promoExpiry}>Expires {expiry}</Text>}
+              </View>
+              <View style={styles.promoBody}>
+                <View style={styles.promoIconBox}>
+                  <Ionicons name="pricetag-outline" size={26} color={colors.secondary} />
+                </View>
+                <View style={styles.promoContent}>
+                  <Text style={styles.promoCode}>{promo.code}</Text>
+                  <Text style={styles.promoDesc}>{promo.description}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
 
         {/* Shop Announcement */}
         <View style={styles.announcement}>
@@ -237,6 +248,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  emptyPromos: {
+    marginHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  emptyPromosText: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+
   promoCard: {
     backgroundColor: colors.surface,
     marginHorizontal: spacing.md,
@@ -247,7 +268,12 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: colors.secondary,
   },
-  promoBadgeRow: { marginBottom: spacing.xs },
+  promoBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   promoBadge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.secondary,
@@ -260,6 +286,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
   },
+  promoExpiry: {
+    ...typography.small,
+    color: colors.textMuted,
+  },
   promoBody: { flexDirection: 'row', alignItems: 'flex-start' },
   promoIconBox: {
     width: 44,
@@ -271,9 +301,10 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   promoContent: { flex: 1 },
-  promoTitle: {
+  promoCode: {
     ...typography.h4,
     color: colors.textPrimary,
+    fontFamily: 'monospace',
     marginBottom: 4,
   },
   promoDesc: {

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AutoRepair SaaS Platform - Phase 1 Foundation
+Description: AutoRepair SaaS Platform - Phase 2 Core Business Features
 
 Globals:
   Function:
@@ -55,6 +55,11 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::autorepair-uploads-${AWS::AccountId}/*'
                   - !Sub 'arn:aws:s3:::autorepair-assets-${AWS::AccountId}/*'
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
 
   # ── COGNITO ───────────────────────────────────────────────
   UserPool:
@@ -84,6 +89,10 @@ Resources:
           AttributeDataType: String
           Required: false
           Mutable: true
+        - Name: phone
+          AttributeDataType: String
+          Required: false
+          Mutable: true
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -94,6 +103,7 @@ Resources:
           TemporaryPasswordValidityDays: 7
       LambdaConfig:
         PreSignUp: !GetAtt PreSignUpFunction.Arn
+        PostConfirmation: !GetAtt PostConfirmationFunction.Arn
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -117,13 +127,19 @@ Resources:
         RefreshToken: days
       ReadAttributes:
         - email
+        - given_name
+        - family_name
         - custom:tenantId
         - custom:locationIds
         - custom:role
         - custom:userType
+        - custom:phone
       WriteAttributes:
         - email
+        - given_name
+        - family_name
         - custom:tenantId
+        - custom:phone
 
   UserPoolClientAdmin:
     Type: AWS::Cognito::UserPoolClient
@@ -143,6 +159,8 @@ Resources:
         RefreshToken: days
       ReadAttributes:
         - email
+        - given_name
+        - family_name
         - custom:tenantId
         - custom:locationIds
         - custom:role
@@ -166,6 +184,8 @@ Resources:
         RefreshToken: days
       ReadAttributes:
         - email
+        - given_name
+        - family_name
         - custom:tenantId
         - custom:locationIds
         - custom:role
@@ -204,6 +224,14 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt PreSignUpFunction.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  PostConfirmationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PostConfirmationFunction.Arn
       Principal: cognito-idp.amazonaws.com
       SourceArn: !GetAtt UserPool.Arn
 
@@ -609,7 +637,7 @@ Resources:
       EndpointConfiguration:
         Type: REGIONAL
       Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization,X-Amz-Date'"
         AllowOrigin: "'*'"
       Auth:
@@ -662,6 +690,332 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
+
+  PostConfirmationFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/auth/postConfirmation/handler.ts]
+    Properties:
+      FunctionName: autorepair-post-confirmation
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  ServicesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/services/handler.ts]
+    Properties:
+      FunctionName: autorepair-services
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        ServicesGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /services
+            Method: GET
+        ServicesPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /services
+            Method: POST
+        ServicePut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /services/{serviceId}
+            Method: PUT
+        ServiceDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /services/{serviceId}
+            Method: DELETE
+
+  VehiclesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/vehicles/handler.ts]
+    Properties:
+      FunctionName: autorepair-vehicles
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        VehiclesGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /vehicles
+            Method: GET
+        VehiclesPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /vehicles
+            Method: POST
+        VehicleDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /vehicles/{vehicleId}
+            Method: DELETE
+
+  AppointmentsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/appointments/handler.ts]
+    Properties:
+      FunctionName: autorepair-appointments
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          SES_FROM_EMAIL: merwanabdelmajeed@gmail.com
+      Events:
+        AppointmentsGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /appointments
+            Method: GET
+        AppointmentsPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /appointments
+            Method: POST
+        AppointmentStatusPatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /appointments/{appointmentId}/status
+            Method: PATCH
+
+  CustomersFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/customers/handler.ts]
+    Properties:
+      FunctionName: autorepair-customers
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        CustomersGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /customers
+            Method: GET
+
+  CapacityFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/capacity/handler.ts]
+    Properties:
+      FunctionName: autorepair-capacity
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        CapacityGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /capacity
+            Method: GET
+        CapacityPut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /capacity
+            Method: PUT
+
+  BlockedTimesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/blocked-times/handler.ts]
+    Properties:
+      FunctionName: autorepair-blocked-times
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        BlockedTimesGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /blocked-times
+            Method: GET
+        BlockedTimesPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /blocked-times
+            Method: POST
+        BlockedTimeDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /blocked-times/{blockedTimeId}
+            Method: DELETE
+
+  AvailabilityFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/availability/handler.ts]
+    Properties:
+      FunctionName: autorepair-availability
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        AvailabilityGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /availability
+            Method: GET
+
+  DashboardFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/dashboard/handler.ts]
+    Properties:
+      FunctionName: autorepair-dashboard
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        DashboardGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /dashboard/summary
+            Method: GET
+
+  PromotionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/promotions/handler.ts]
+    Properties:
+      FunctionName: autorepair-promotions
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        PromotionsValidate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions/validate
+            Method: GET
+        PromotionsGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions
+            Method: GET
+        PromotionsPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions
+            Method: POST
+        PromotionsPut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions/{promoId}
+            Method: PUT
+        PromotionsDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions/{promoId}
+            Method: DELETE
+        PromotionsApply:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /promotions/{promoId}/apply
+            Method: POST
 
 # ─────────────────────────────────────────────────────────────
 # OUTPUTS

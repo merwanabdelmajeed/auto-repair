@@ -7,7 +7,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, tenantId: string) => Promise<void>;
+  register: (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(authUser);
   };
 
-  const register = async (email: string, password: string, tenantId: string) => {
-    await CognitoService.register(email, password, tenantId);
+  const register = async (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone?: string) => {
+    await CognitoService.register(email, password, tenantId, firstName, lastName, phone);
     const authUser = await CognitoService.login(email, password);
     setUser(authUser);
   };

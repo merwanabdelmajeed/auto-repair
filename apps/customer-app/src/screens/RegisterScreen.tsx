@@ -22,7 +22,10 @@ const DEFAULT_TENANT_ID = 'demo-tenant';
 
 export default function RegisterScreen({ onNavigateToLogin }: Props) {
   const { register } = useAuth();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -30,7 +33,7 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
-    if (!email || !password || !confirm) {
+    if (!firstName.trim() || !lastName.trim() || !email || !password || !confirm) {
       setError('All fields are required.');
       return;
     }
@@ -45,7 +48,7 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
     setError('');
     setLoading(true);
     try {
-      await register(email.trim(), password, DEFAULT_TENANT_ID);
+      await register(email.trim(), password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(), phone.trim() || undefined);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Registration failed. Please try again.';
       setError(msg);
@@ -80,6 +83,33 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
             </View>
           ) : null}
 
+          <View style={styles.nameRow}>
+            <View style={styles.nameField}>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Jane"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+                autoComplete="given-name"
+              />
+            </View>
+            <View style={styles.nameField}>
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Smith"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+                autoComplete="family-name"
+              />
+            </View>
+          </View>
+
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
@@ -90,6 +120,17 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+          />
+
+          <Text style={styles.label}>Phone <Text style={{ color: colors.textMuted, fontWeight: '400' }}>(optional)</Text></Text>
+          <TextInput
+            style={styles.input}
+            value={phone}
+            onChangeText={setPhone}
+            placeholder="+1 555 123 4567"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="phone-pad"
+            autoComplete="tel"
           />
 
           <Text style={styles.label}>Password</Text>
@@ -191,6 +232,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   errorText: { ...typography.bodySmall, color: colors.error, flex: 1 },
+  nameRow: { flexDirection: 'row', gap: spacing.sm },
+  nameField: { flex: 1 },
   label: {
     ...typography.label,
     color: colors.textPrimary,

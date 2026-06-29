@@ -8,28 +8,38 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class ForbiddenError extends Error {
+  constructor(message = 'Insufficient permissions') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export function extractTenantClaims(event: APIGatewayProxyEvent): ExtractedClaims {
   const claims = event.requestContext?.authorizer?.claims as Record<string, string> | undefined;
 
   if (!claims) throw new UnauthorizedError();
 
   const tenantId = claims['custom:tenantId'];
-  const role = claims['custom:role'] as UserRole;
-  const userType = claims['custom:userType'] as UserType;
   const userId = claims['sub'];
   const email = claims['email'];
+  const firstName = claims['given_name'] ?? '';
+  const lastName = claims['family_name'] ?? '';
   const rawLocationIds = claims['custom:locationIds'] ?? '';
+  // Default to CUSTOMER when role is absent (self-registered users don't have role set in Cognito)
+  const role = (claims['custom:role'] as UserRole) || UserRole.CUSTOMER;
+  const userType = (claims['custom:userType'] as UserType) || 'CUSTOMER';
 
-  if (!tenantId || !role || !userId) throw new UnauthorizedError('Incomplete claims');
+  if (!tenantId || !userId) throw new UnauthorizedError('Incomplete claims');
 
   const locationIds = rawLocationIds ? rawLocationIds.split(',').filter(Boolean) : [];
 
-  return { userId, email, tenantId, locationIds, role, userType };
+  return { userId, email, firstName, lastName, tenantId, locationIds, role, userType };
 }
 
 export function requireRole(claims: ExtractedClaims, ...allowed: UserRole[]): void {
   if (!allowed.includes(claims.role)) {
-    throw new UnauthorizedError(`Role ${claims.role} is not permitted for this action`);
+    throw new ForbiddenError(`Role ${claims.role} is not permitted for this action`);
   }
 }
 

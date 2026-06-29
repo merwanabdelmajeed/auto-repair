@@ -34,11 +34,17 @@ export async function register(
   email: string,
   password: string,
   tenantId: string,
+  firstName: string,
+  lastName: string,
+  phone?: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const attributes = [
       new CognitoUserAttribute({ Name: 'email', Value: email }),
+      new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
+      new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
       new CognitoUserAttribute({ Name: 'custom:tenantId', Value: tenantId }),
+      ...(phone ? [new CognitoUserAttribute({ Name: 'custom:phone', Value: phone })] : []),
     ];
     pool.signUp(email, password, attributes, [], (err) => {
       if (err) return reject(err);
@@ -87,6 +93,17 @@ export async function getAccessToken(): Promise<string | null> {
     user.getSession((err: Error | null, session: CognitoUserSession | null) => {
       if (err || !session || !session.isValid()) return resolve(null);
       resolve(session.getAccessToken().getJwtToken());
+    });
+  });
+}
+
+export async function getIdToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const user = pool.getCurrentUser();
+    if (!user) return resolve(null);
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) return resolve(null);
+      resolve(session.getIdToken().getJwtToken());
     });
   });
 }

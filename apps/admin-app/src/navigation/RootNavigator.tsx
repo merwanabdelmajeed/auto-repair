@@ -13,8 +13,9 @@ import BookingsScreen from '../screens/BookingsScreen';
 import CustomersScreen from '../screens/CustomersScreen';
 import VehiclesScreen from '../screens/VehiclesScreen';
 import ServicesScreen from '../screens/ServicesScreen';
+import CapacityScreen from '../screens/CapacityScreen';
+import BlockedTimesScreen from '../screens/BlockedTimesScreen';
 import PromotionsScreen from '../screens/PromotionsScreen';
-import CampaignsScreen from '../screens/CampaignsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
@@ -39,8 +40,9 @@ function AppNavigator() {
       <Drawer.Screen name="Customers" component={CustomersScreen} options={{ title: 'Customers' }} />
       <Drawer.Screen name="Vehicles" component={VehiclesScreen} options={{ title: 'Vehicles' }} />
       <Drawer.Screen name="Services" component={ServicesScreen} options={{ title: 'Services' }} />
+      <Drawer.Screen name="Capacity" component={CapacityScreen} options={{ title: 'Capacity' }} />
+      <Drawer.Screen name="BlockedTimes" component={BlockedTimesScreen} options={{ title: 'Blocked Times' }} />
       <Drawer.Screen name="Promotions" component={PromotionsScreen} options={{ title: 'Promotions' }} />
-      <Drawer.Screen name="Campaigns" component={CampaignsScreen} options={{ title: 'Campaigns' }} />
       <Drawer.Screen name="Statistics" component={StatisticsScreen} options={{ title: 'Statistics' }} />
       <Drawer.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Drawer.Navigator>

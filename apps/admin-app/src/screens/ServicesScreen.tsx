@@ -1,168 +1,238 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  Modal, TextInput, Alert, ActivityIndicator, Switch,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import {
+  listServices, createService, updateService, deleteService,
+  type Service, type ServiceInput,
+} from '../api/services';
 
-const SERVICE_EXAMPLES = [
-  { icon: 'water-outline', name: 'Oil Change', category: 'Maintenance', est: '30 min' },
-  { icon: 'disc-outline', name: 'Brake Service', category: 'Safety', est: '90 min' },
-  { icon: 'search-outline', name: 'Diagnostics', category: 'Inspection', est: '60 min' },
-  { icon: 'sync-outline', name: 'Tire Rotation', category: 'Maintenance', est: '30 min' },
-  { icon: 'settings-outline', name: 'Transmission Service', category: 'Major Service', est: '120 min' },
-  { icon: 'move-outline', name: 'Alignment', category: 'Maintenance', est: '45 min' },
-];
+const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, isActive: true };
 
 export default function ServicesScreen() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<Service | null>(null);
+  const [form, setForm] = useState<ServiceInput>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setServices(await listServices());
+    } catch {
+      Alert.alert('Error', 'Failed to load services.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  function openAdd() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setFormError('');
+    setShowModal(true);
+  }
+
+  function openEdit(svc: Service) {
+    setEditing(svc);
+    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, isActive: svc.isActive });
+    setFormError('');
+    setShowModal(true);
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) { setFormError('Service name is required.'); return; }
+    if (form.durationMinutes <= 0) { setFormError('Duration must be greater than 0.'); return; }
+    setSaving(true);
+    setFormError('');
+    try {
+      if (editing) {
+        await updateService(editing.serviceId, form);
+        setServices(prev => prev.map(s => s.serviceId === editing.serviceId ? { ...s, ...form } : s));
+      } else {
+        const created = await createService(form);
+        setServices(prev => [created, ...prev]);
+      }
+      setShowModal(false);
+    } catch {
+      setFormError('Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function confirmDelete(svc: Service) {
+    Alert.alert('Delete Service', `Delete "${svc.name}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteService(svc.serviceId);
+            setServices(prev => prev.filter(s => s.serviceId !== svc.serviceId));
+          } catch {
+            Alert.alert('Error', 'Failed to delete service.');
+          }
+        },
+      },
+    ]);
+  }
+
   return (
     <Layout>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={16} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
-            <Text style={styles.searchPlaceholder}>Search services…</Text>
-          </View>
-          <TouchableOpacity style={styles.addBtn} activeOpacity={0.85}>
-            <Ionicons name="add" size={20} color={colors.white} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.infoNote}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.info} />
-          <Text style={styles.infoText}>
-            These are placeholder examples. Real services will be created and managed per location in Phase 5.
-          </Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>Service Catalog (Example)</Text>
-
-        {SERVICE_EXAMPLES.map((service) => (
-          <View key={service.name} style={styles.serviceCard}>
-            <View style={styles.serviceIcon}>
-              <Ionicons name={service.icon as any} size={22} color={colors.secondary} />
-            </View>
-            <View style={styles.serviceInfo}>
-              <Text style={styles.serviceName}>{service.name}</Text>
-              <Text style={styles.serviceMeta}>{service.category} · Est. {service.est}</Text>
-            </View>
-            <View style={styles.serviceActions}>
-              <View style={styles.activeBadge}>
-                <Text style={styles.activeText}>Active</Text>
-              </View>
-              <TouchableOpacity style={styles.editBtn}>
-                <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
+      ) : (
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {services.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}><Ionicons name="construct-outline" size={48} color={colors.textMuted} /></View>
+              <Text style={styles.emptyTitle}>No Services Yet</Text>
+              <Text style={styles.emptyDesc}>Add your first service to make it available for customer bookings.</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={openAdd} activeOpacity={0.85}>
+                <Ionicons name="add" size={20} color={colors.primary} />
+                <Text style={styles.emptyBtnText}>Add Service</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        ))}
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>Services ({services.length})</Text>
+              {services.map(svc => (
+                <View key={svc.serviceId} style={styles.card}>
+                  <View style={styles.cardLeft}>
+                    <View style={styles.cardIcon}>
+                      <Ionicons name="construct-outline" size={22} color={colors.secondary} />
+                    </View>
+                    <View style={styles.cardInfo}>
+                      <View style={styles.cardNameRow}>
+                        <Text style={styles.cardName}>{svc.name}</Text>
+                        <View style={[styles.badge, svc.isActive ? styles.badgeActive : styles.badgeInactive]}>
+                          <Text style={[styles.badgeText, svc.isActive ? styles.badgeTextActive : styles.badgeTextInactive]}>
+                            {svc.isActive ? 'Active' : 'Inactive'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.cardMeta}>{svc.durationMinutes} min</Text>
+                      {svc.description ? <Text style={styles.cardDesc} numberOfLines={1}>{svc.description}</Text> : null}
+                    </View>
+                  </View>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity onPress={() => openEdit(svc)} style={styles.actionBtn}>
+                      <Ionicons name="pencil-outline" size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => confirmDelete(svc)} style={styles.actionBtn}>
+                      <Ionicons name="trash-outline" size={18} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+        </ScrollView>
+      )}
 
-        <View style={styles.capabilityCard}>
-          <Text style={styles.capabilityTitle}>Service Management Features</Text>
-          {['Create & categorize services', 'Set duration & price per location', 'Enable/disable per location', 'Drag to reorder in customer app'].map((cap) => (
-            <View key={cap} style={styles.capRow}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.success} style={{ marginRight: spacing.sm }} />
-              <Text style={styles.capText}>{cap}</Text>
+      {!loading && (
+        <TouchableOpacity style={styles.fab} onPress={openAdd} activeOpacity={0.85}>
+          <Ionicons name="add" size={28} color={colors.white} />
+        </TouchableOpacity>
+      )}
+
+      <Modal visible={showModal} animationType="slide" transparent>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>{editing ? 'Edit Service' : 'Add Service'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-          ))}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {formError ? (
+                <View style={styles.errorBox}><Text style={styles.errorText}>{formError}</Text></View>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>Service Name *</Text>
+              <TextInput style={styles.input} value={form.name} onChangeText={v => setForm(p => ({ ...p, name: v }))} placeholder="e.g. Oil Change" placeholderTextColor={colors.textMuted} />
+
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput style={[styles.input, { height: 72, textAlignVertical: 'top' }]} value={form.description} onChangeText={v => setForm(p => ({ ...p, description: v }))} placeholder="Optional description…" placeholderTextColor={colors.textMuted} multiline />
+
+              <Text style={styles.fieldLabel}>Duration (min) *</Text>
+              <TextInput style={styles.input} value={String(form.durationMinutes)} onChangeText={v => setForm(p => ({ ...p, durationMinutes: parseInt(v) || 0 }))} keyboardType="number-pad" placeholderTextColor={colors.textMuted} />
+
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>Active (visible to customers)</Text>
+                <Switch value={form.isActive} onValueChange={v => setForm(p => ({ ...p, isActive: v }))} trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.white} />
+              </View>
+
+              <TouchableOpacity style={[styles.saveBtn, saving && styles.saveBtnDisabled]} onPress={() => void handleSave()} disabled={saving} activeOpacity={0.85}>
+                {saving ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.saveBtnText}>{editing ? 'Save Changes' : 'Add Service'}</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
         </View>
-      </ScrollView>
+      </Modal>
     </Layout>
   );
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xxl },
+  content: { paddingBottom: 100 },
 
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: spacing.md,
-    gap: spacing.sm,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  searchPlaceholder: { ...typography.body, color: colors.textMuted },
-  addBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...shadows.sm,
-  },
+  emptyState: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md, ...shadows.sm },
+  emptyTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.sm, textAlign: 'center' },
+  emptyDesc: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 22 },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.secondary, borderRadius: borderRadius.lg, paddingVertical: 12, paddingHorizontal: spacing.lg },
+  emptyBtnText: { ...typography.h4, color: colors.primary },
 
-  infoNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(59,130,246,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.2)',
-    borderRadius: borderRadius.lg,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    padding: spacing.md,
-  },
-  infoText: { ...typography.small, color: colors.textSecondary, flex: 1, lineHeight: 18 },
+  sectionTitle: { ...typography.h4, color: colors.textPrimary, paddingHorizontal: spacing.md, marginTop: spacing.md, marginBottom: spacing.sm },
 
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.textPrimary,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  serviceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  serviceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(245,158,11,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  serviceInfo: { flex: 1 },
-  serviceName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '600' },
-  serviceMeta: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  serviceActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  activeBadge: {
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-    borderRadius: borderRadius.xs,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-  },
-  activeText: { ...typography.small, color: colors.success, fontWeight: '600' },
-  editBtn: { padding: spacing.xs },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, marginHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: borderRadius.lg, padding: spacing.md, ...shadows.sm },
+  cardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  cardIcon: { width: 44, height: 44, borderRadius: borderRadius.md, backgroundColor: 'rgba(245,158,11,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: spacing.md },
+  cardInfo: { flex: 1 },
+  cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginBottom: 2 },
+  cardName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700' },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 100 },
+  badgeActive: { backgroundColor: 'rgba(34,197,94,0.12)' },
+  badgeInactive: { backgroundColor: 'rgba(148,163,184,0.15)' },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  badgeTextActive: { color: '#16A34A' },
+  badgeTextInactive: { color: colors.textMuted },
+  cardMeta: { ...typography.small, color: colors.secondary, fontWeight: '600' },
+  cardDesc: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
+  cardActions: { flexDirection: 'row', gap: spacing.xs },
+  actionBtn: { padding: spacing.sm },
 
-  capabilityCard: {
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    borderRadius: borderRadius.xl,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  capabilityTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: spacing.md },
-  capRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
-  capText: { ...typography.bodySmall, color: colors.textSecondary },
+  fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.secondary, justifyContent: 'center', alignItems: 'center', ...shadows.lg },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: 40, maxHeight: '88%' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  sheetTitle: { ...typography.h3, color: colors.textPrimary },
+
+  errorBox: { backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.md },
+  errorText: { ...typography.bodySmall, color: colors.error },
+
+  fieldLabel: { ...typography.small, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: spacing.md },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 11, ...typography.body, color: colors.textPrimary, backgroundColor: colors.background },
+  row2: { flexDirection: 'row', gap: spacing.sm },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider, marginTop: spacing.md },
+  toggleLabel: { ...typography.body, color: colors.textPrimary },
+
+  saveBtn: { backgroundColor: colors.secondary, borderRadius: borderRadius.lg, paddingVertical: 14, alignItems: 'center', marginTop: spacing.lg, ...shadows.sm },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: { ...typography.h4, color: colors.primary },
 });

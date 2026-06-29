@@ -31,5 +31,8 @@ export const forbidden = (error = 'Forbidden'): APIGatewayProxyResult =>
 export const notFound = (error = 'Not found'): APIGatewayProxyResult =>
   json(404, { success: false, error });
 
+export const conflict = (error: string): APIGatewayProxyResult =>
+  json(409, { success: false, error });
+
 export const serverError = (error = 'Internal server error'): APIGatewayProxyResult =>
   json(500, { success: false, error });

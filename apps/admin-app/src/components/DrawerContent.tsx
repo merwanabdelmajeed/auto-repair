@@ -16,8 +16,9 @@ const DRAWER_ITEMS: DrawerItem[] = [
   { name: 'Customers', icon: 'people-outline', label: 'Customers' },
   { name: 'Vehicles', icon: 'car-outline', label: 'Vehicles' },
   { name: 'Services', icon: 'construct-outline', label: 'Services' },
+  { name: 'Capacity', icon: 'time-outline', label: 'Capacity' },
+  { name: 'BlockedTimes', icon: 'calendar-clear-outline', label: 'Blocked Times' },
   { name: 'Promotions', icon: 'pricetag-outline', label: 'Promotions' },
-  { name: 'Campaigns', icon: 'megaphone-outline', label: 'Campaigns' },
   { name: 'Statistics', icon: 'bar-chart-outline', label: 'Statistics' },
   { name: 'Settings', icon: 'settings-outline', label: 'Settings' },
 ];

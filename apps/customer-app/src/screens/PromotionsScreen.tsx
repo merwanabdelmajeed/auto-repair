@@ -1,49 +1,46 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  TouchableOpacity, Alert, Clipboard,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import { listPromotions, type PublicPromotion } from '../api/promotions';
 
-const PROMOTIONS = [
-  {
-    id: '1',
-    title: 'Summer Oil Change Special',
-    description: 'Full synthetic oil change + tire rotation included. Save $20 on your next service visit.',
-    badge: 'LIMITED TIME',
-    badgeColor: '#EF4444',
-    icon: 'water-outline' as const,
-    expires: 'Expires Jul 31, 2026',
-  },
-  {
-    id: '2',
-    title: 'Free Brake Inspection',
-    description: 'Complimentary 21-point brake inspection with any service this month. No purchase necessary.',
-    badge: 'NEW',
-    badgeColor: '#22C55E',
-    icon: 'shield-checkmark-outline' as const,
-    expires: 'Expires Jun 30, 2026',
-  },
-  {
-    id: '3',
-    title: '15% Off AC Service',
-    description: 'Full AC system inspection, recharge, and leak check. Beat the summer heat!',
-    badge: 'SEASONAL',
-    badgeColor: '#3B82F6',
-    icon: 'thermometer-outline' as const,
-    expires: 'Expires Aug 15, 2026',
-  },
-  {
-    id: '4',
-    title: 'Senior Discount — 10% Off',
-    description: 'We appreciate our senior customers. 10% off all labor on Tuesdays and Wednesdays.',
-    badge: 'ONGOING',
-    badgeColor: '#8B5CF6',
-    icon: 'heart-outline' as const,
-    expires: 'No expiry',
-  },
-];
+function fmtExpiry(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDiscount(p: PublicPromotion) {
+  return p.type === 'percent' ? `${p.value}% off` : `$${p.value.toFixed(2)} off`;
+}
 
 export default function PromotionsScreen() {
+  const [promos, setPromos] = useState<PublicPromotion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setPromos(await listPromotions());
+    } catch {
+      // Silently fail — not critical
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  function copyCode(code: string) {
+    Clipboard.setString(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }
+
   return (
     <Layout>
       <ScrollView
@@ -51,41 +48,69 @@ export default function PromotionsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.pageHeader}>
           <Text style={styles.pageTitle}>Current Offers</Text>
           <Text style={styles.pageSubtitle}>
-            Exclusive deals for our valued customers
+            Tap a code to copy it, then enter it at checkout when booking.
           </Text>
         </View>
 
-        {PROMOTIONS.map((promo) => (
-          <View key={promo.id} style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={styles.iconBox}>
-                <Ionicons name={promo.icon} size={28} color={colors.secondary} />
-              </View>
-              <View
-                style={[styles.badge, { backgroundColor: promo.badgeColor + '20', borderColor: promo.badgeColor + '40' }]}
-              >
-                <Text style={[styles.badgeText, { color: promo.badgeColor }]}>
-                  {promo.badge}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.cardTitle}>{promo.title}</Text>
-            <Text style={styles.cardDesc}>{promo.description}</Text>
-            <View style={styles.cardFooter}>
-              <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.expiresText}>{promo.expires}</Text>
-            </View>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
-        ))}
+        ) : promos.length === 0 ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="pricetag-outline" size={44} color={colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>No Active Offers</Text>
+            <Text style={styles.emptyDesc}>
+              Check back soon — promotions will appear here when available.
+            </Text>
+          </View>
+        ) : (
+          promos.map(p => (
+            <TouchableOpacity
+              key={p.promoId}
+              style={styles.card}
+              onPress={() => copyCode(p.code)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.cardTop}>
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>{formatDiscount(p)}</Text>
+                </View>
+                {copiedCode === p.code ? (
+                  <View style={styles.copiedTag}>
+                    <Ionicons name="checkmark-circle" size={13} color={colors.success} />
+                    <Text style={styles.copiedTagText}>Copied!</Text>
+                  </View>
+                ) : (
+                  <View style={styles.copyTag}>
+                    <Ionicons name="copy-outline" size={13} color={colors.textMuted} />
+                    <Text style={styles.copyTagText}>Tap to copy</Text>
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.code}>{p.code}</Text>
+              {p.description ? <Text style={styles.description}>{p.description}</Text> : null}
+
+              {p.expiresAt && (
+                <View style={styles.expiryRow}>
+                  <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+                  <Text style={styles.expiryText}>Expires {fmtExpiry(p.expiresAt)}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))
+        )}
 
         <View style={styles.notice}>
-          <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
+          <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.noticeText}>
-            Promotions are managed by your selected shop location. Offers may vary by location.
+            One promo code per appointment. Enter your code on the booking confirmation screen.
           </Text>
         </View>
       </ScrollView>
@@ -102,15 +127,19 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
   },
-  pageTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    marginBottom: 4,
+  pageTitle: { ...typography.h2, color: colors.textPrimary, marginBottom: 4 },
+  pageSubtitle: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+
+  center: { paddingTop: spacing.xxl, alignItems: 'center' },
+
+  emptyState: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl },
+  emptyIcon: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center',
+    marginBottom: spacing.md, ...shadows.sm,
   },
-  pageSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
+  emptyTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.sm, textAlign: 'center' },
+  emptyDesc: { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 
   card: {
     backgroundColor: colors.surface,
@@ -119,54 +148,42 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
     ...shadows.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.secondary,
   },
   cardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: borderRadius.lg,
-    backgroundColor: 'rgba(245,158,11,0.1)',
-    justifyContent: 'center',
     alignItems: 'center',
-  },
-  badge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-  },
-  badgeText: {
-    ...typography.small,
-    fontWeight: '700',
-  },
-  cardTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
     marginBottom: spacing.sm,
   },
-  cardDesc: {
+  discountBadge: {
+    backgroundColor: colors.secondary,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  discountText: { fontSize: 13, fontWeight: '800', color: colors.primary },
+  copyTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  copyTagText: { ...typography.small, color: colors.textMuted },
+  copiedTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  copiedTagText: { ...typography.small, color: colors.success, fontWeight: '600' },
+
+  code: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 2,
+    marginBottom: spacing.xs,
+  },
+  description: {
     ...typography.body,
     color: colors.textSecondary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     lineHeight: 22,
   },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    paddingTop: spacing.sm,
-  },
-  expiresText: {
-    ...typography.small,
-    color: colors.textMuted,
-  },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  expiryText: { ...typography.small, color: colors.textMuted },
 
   notice: {
     flexDirection: 'row',

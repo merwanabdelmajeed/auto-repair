@@ -13,8 +13,9 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/customers', label: 'Customers', icon: '👥' },
   { path: '/vehicles', label: 'Vehicles', icon: '🚗' },
   { path: '/services', label: 'Services', icon: '🔧' },
+  { path: '/capacity', label: 'Capacity', icon: '⏱️' },
+  { path: '/blocked-times', label: 'Blocked Times', icon: '🚫' },
   { path: '/promotions', label: 'Promotions', icon: '🏷️' },
-  { path: '/campaigns', label: 'Campaigns', icon: '📢' },
   { path: '/statistics', label: 'Statistics', icon: '📊' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];

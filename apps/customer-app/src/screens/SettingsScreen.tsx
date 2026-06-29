@@ -1,97 +1,69 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Switch,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-
-type SettingSection = {
-  title: string;
-  items: SettingItem[];
-};
-
-type SettingItem =
-  | { type: 'toggle'; icon: keyof typeof Ionicons.glyphMap; label: string; value: boolean }
-  | { type: 'link'; icon: keyof typeof Ionicons.glyphMap; label: string; value?: string };
-
-const SETTINGS: SettingSection[] = [
-  {
-    title: 'Notifications',
-    items: [
-      { type: 'toggle', icon: 'notifications-outline', label: 'Push Notifications', value: true },
-      { type: 'toggle', icon: 'calendar-outline', label: 'Appointment Reminders', value: true },
-      { type: 'toggle', icon: 'pricetag-outline', label: 'Promotion Alerts', value: false },
-    ],
-  },
-  {
-    title: 'App Preferences',
-    items: [
-      { type: 'link', icon: 'location-outline', label: 'Preferred Location', value: 'Not set' },
-      { type: 'link', icon: 'language-outline', label: 'Language', value: 'English' },
-      { type: 'toggle', icon: 'moon-outline', label: 'Dark Mode', value: false },
-    ],
-  },
-  {
-    title: 'About',
-    items: [
-      { type: 'link', icon: 'document-text-outline', label: 'Terms of Service' },
-      { type: 'link', icon: 'shield-outline', label: 'Privacy Policy' },
-      { type: 'link', icon: 'help-circle-outline', label: 'Help & Support' },
-      { type: 'link', icon: 'information-circle-outline', label: 'App Version', value: '1.0.0 (Phase 0)' },
-    ],
-  },
-];
+import { useAuth } from '../auth/AuthContext';
 
 export default function SettingsScreen() {
+  const { user, logout } = useAuth();
+
+  function confirmLogout() {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void logout() },
+    ]);
+  }
+
+  const initials = user?.email ? user.email[0].toUpperCase() : '?';
+
   return (
     <Layout>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {SETTINGS.map((section) => (
-          <View key={section.title}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.card}>
-              {section.items.map((item, i) => (
-                <View
-                  key={item.label}
-                  style={[
-                    styles.row,
-                    i === section.items.length - 1 && styles.rowLast,
-                  ]}
-                >
-                  <View style={styles.rowIcon}>
-                    <Ionicons name={item.icon} size={20} color={colors.primary} />
-                  </View>
-                  <Text style={styles.rowLabel}>{item.label}</Text>
-                  {item.type === 'toggle' ? (
-                    <Switch
-                      value={item.value}
-                      thumbColor={item.value ? colors.white : colors.white}
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                      onValueChange={() => {}}
-                    />
-                  ) : (
-                    <View style={styles.rowRight}>
-                      {item.value ? (
-                        <Text style={styles.rowValue}>{item.value}</Text>
-                      ) : null}
-                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                    </View>
-                  )}
-                </View>
-              ))}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* Account Card */}
+        <View style={styles.accountCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <View style={styles.accountInfo}>
+            <Text style={styles.accountEmail}>{user?.email ?? '—'}</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleText}>Customer</Text>
             </View>
           </View>
-        ))}
+        </View>
+
+        {/* About */}
+        <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.card}>
+          {[
+            { icon: 'document-text-outline' as const, label: 'Terms of Service' },
+            { icon: 'shield-outline' as const, label: 'Privacy Policy' },
+            { icon: 'help-circle-outline' as const, label: 'Help & Support' },
+            { icon: 'information-circle-outline' as const, label: 'App Version', value: '1.0.0' },
+          ].map((item, i, arr) => (
+            <View key={item.label} style={[styles.row, i === arr.length - 1 && styles.rowLast]}>
+              <View style={styles.rowIcon}>
+                <Ionicons name={item.icon} size={20} color={colors.primary} />
+              </View>
+              <Text style={styles.rowLabel}>{item.label}</Text>
+              <View style={styles.rowRight}>
+                {item.value ? <Text style={styles.rowValue}>{item.value}</Text> : null}
+                {!item.value && <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Sign Out */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={confirmLogout} activeOpacity={0.85}>
+          <Ionicons name="log-out-outline" size={20} color={colors.error} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </Layout>
   );
@@ -100,6 +72,30 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingBottom: spacing.xxl },
+
+  accountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    margin: spacing.md,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    ...shadows.md,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  avatarText: { ...typography.h2, color: colors.primary, fontSize: 22 },
+  accountInfo: { flex: 1 },
+  accountEmail: { ...typography.bodySmall, color: 'rgba(255,255,255,0.85)', marginBottom: 6, fontWeight: '500' },
+  roleBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(245,158,11,0.2)', borderRadius: 100, paddingHorizontal: 10, paddingVertical: 3 },
+  roleText: { fontSize: 11, fontWeight: '700', color: colors.secondary },
 
   sectionTitle: {
     ...typography.label,
@@ -110,7 +106,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.xs,
   },
-
   card: {
     backgroundColor: colors.surface,
     marginHorizontal: spacing.md,
@@ -126,9 +121,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
-  rowLast: {
-    borderBottomWidth: 0,
-  },
+  rowLast: { borderBottomWidth: 0 },
   rowIcon: {
     width: 36,
     height: 36,
@@ -138,18 +131,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: spacing.md,
   },
-  rowLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  rowRight: {
+  rowLabel: { ...typography.body, color: colors.textPrimary, flex: 1 },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  rowValue: { ...typography.bodySmall, color: colors.textSecondary },
+
+  signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    margin: spacing.md,
+    marginTop: spacing.lg,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+    borderRadius: borderRadius.xl,
+    paddingVertical: 14,
   },
-  rowValue: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
+  signOutText: { ...typography.h4, color: colors.error },
 });

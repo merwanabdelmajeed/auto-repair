@@ -1,6 +1,7 @@
 import {
   CognitoUserPool,
   CognitoUser,
+  CognitoUserAttribute,
   AuthenticationDetails,
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
@@ -17,6 +18,8 @@ export interface AuthUser {
   tenantId: string;
   role: string;
   locationIds: string[];
+  givenName: string;
+  familyName: string;
 }
 
 export class NewPasswordRequiredError extends Error {
@@ -37,6 +40,8 @@ function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
     tenantId: payload['custom:tenantId'] as string,
     role: payload['custom:role'] as string,
     locationIds: rawLocationIds ? rawLocationIds.split(',').filter(Boolean) : [],
+    givenName: (payload['given_name'] as string) ?? '',
+    familyName: (payload['family_name'] as string) ?? '',
   };
 }
 
@@ -85,6 +90,8 @@ export async function getSessionUser(): Promise<AuthUser | null> {
         tenantId: payload['custom:tenantId'] as string,
         role: payload['custom:role'] as string,
         locationIds: rawLocationIds ? rawLocationIds.split(',').filter(Boolean) : [],
+        givenName: (payload['given_name'] as string) ?? '',
+        familyName: (payload['family_name'] as string) ?? '',
       });
     });
   });
@@ -97,6 +104,35 @@ export async function getAccessToken(): Promise<string | null> {
     user.getSession((err: Error | null, session: CognitoUserSession | null) => {
       if (err || !session || !session.isValid()) return resolve(null);
       resolve(session.getAccessToken().getJwtToken());
+    });
+  });
+}
+
+export async function getIdToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const user = pool.getCurrentUser();
+    if (!user) return resolve(null);
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) return resolve(null);
+      resolve(session.getIdToken().getJwtToken());
+    });
+  });
+}
+
+export async function updateProfile(givenName: string, familyName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = pool.getCurrentUser();
+    if (!user) return reject(new Error('Not authenticated'));
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session?.isValid()) return reject(new Error('Session invalid'));
+      const attrs = [
+        new CognitoUserAttribute({ Name: 'given_name', Value: givenName }),
+        new CognitoUserAttribute({ Name: 'family_name', Value: familyName }),
+      ];
+      user.updateAttributes(attrs, (updateErr) => {
+        if (updateErr) return reject(updateErr);
+        resolve();
+      });
     });
   });
 }
