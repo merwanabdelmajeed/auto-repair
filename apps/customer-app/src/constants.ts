@@ -5,3 +5,6 @@ export const SHOP_NAME =
 
 export const SHOP_CITY =
   (Constants.expoConfig?.extra?.shopCity as string) ?? '';
+
+export const SHOP_ADDRESS =
+  (Constants.expoConfig?.extra?.shopAddress as string) ?? '';

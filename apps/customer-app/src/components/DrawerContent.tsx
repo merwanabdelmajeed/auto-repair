@@ -37,7 +37,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         </View>
         <Text style={styles.appName}>{SHOP_NAME}</Text>
         <Text style={styles.tagline}>
-          {SHOP_CITY ? `Your trusted auto service partner in ${SHOP_CITY}` : 'Your trusted auto service partner'}
+          {SHOP_CITY ? `Your trusted auto service in ${SHOP_CITY}` : 'Your trusted auto service'}
         </Text>
       </View>
 

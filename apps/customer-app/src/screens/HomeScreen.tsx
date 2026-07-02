@@ -7,12 +7,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  Linking,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listPromotions, type PublicPromotion } from '../api/promotions';
 import { useAuth } from '../auth/AuthContext';
+import { SHOP_ADDRESS } from '../constants';
 
 const QUICK_ACTIONS = [
   { icon: 'car-outline' as const, label: 'My Vehicles', screen: 'Vehicles' },
@@ -25,14 +29,36 @@ function fmtExpiry(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+async function openNavigation(address: string) {
+  const encoded = encodeURIComponent(address);
+  const url = Platform.select({
+    ios: `maps://?daddr=${encoded}`,
+    android: `geo:0,0?q=${encoded}`,
+    default: `https://www.google.com/maps/dir/?api=1&destination=${encoded}`,
+  });
+  try {
+    const supported = await Linking.canOpenURL(url);
+    await Linking.openURL(supported ? url : `https://www.google.com/maps/dir/?api=1&destination=${encoded}`);
+  } catch {
+    await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encoded}`);
+  }
+}
+
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuth();
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
+  const [addressCopied, setAddressCopied] = useState(false);
 
   const displayName = user?.givenName && user?.familyName
     ? `${user.givenName} ${user.familyName}`
     : user?.email ?? '';
+
+  async function copyAddress() {
+    await Clipboard.setStringAsync(SHOP_ADDRESS);
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 2000);
+  }
 
   useFocusEffect(useCallback(() => {
     setLoadingPromos(true);
@@ -52,9 +78,6 @@ export default function HomeScreen({ navigation }: any) {
         {/* Welcome Banner */}
         <View style={styles.banner}>
           <View style={styles.bannerInner}>
-            <View style={styles.bannerIcon}>
-              <Ionicons name="construct" size={28} color={colors.secondary} />
-            </View>
             <View style={styles.bannerText}>
               <Text style={styles.bannerGreeting}>Welcome back,</Text>
               <Text style={styles.bannerTitle}>{displayName}</Text>
@@ -87,6 +110,33 @@ export default function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Location */}
+        {SHOP_ADDRESS ? (
+          <>
+            <Text style={styles.sectionTitle}>Our Location</Text>
+            <View style={styles.locationCard}>
+              <View style={styles.locationRow}>
+                <Ionicons name="location" size={20} color={colors.secondary} style={{ marginRight: spacing.sm }} />
+                <Text style={styles.locationAddress}>{SHOP_ADDRESS}</Text>
+              </View>
+              <View style={styles.locationActions}>
+                <TouchableOpacity style={styles.locationBtn} onPress={() => void copyAddress()} activeOpacity={0.75}>
+                  <Ionicons name={addressCopied ? 'checkmark' : 'copy-outline'} size={16} color={colors.primary} />
+                  <Text style={styles.locationBtnText}>{addressCopied ? 'Copied' : 'Copy'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.locationBtn, styles.locationBtnPrimary]}
+                  onPress={() => void openNavigation(SHOP_ADDRESS)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="navigate" size={16} color={colors.white} />
+                  <Text style={[styles.locationBtnText, styles.locationBtnTextPrimary]}>Navigate</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        ) : null}
 
         {/* Active Promotions */}
         <View style={styles.sectionHeader}>
@@ -153,15 +203,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.md,
-  },
-  bannerIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
   },
   bannerText: { flex: 1 },
   bannerGreeting: {
@@ -236,6 +277,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
+
+  locationCard: {
+    backgroundColor: colors.surface,
+    marginHorizontal: spacing.md,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    ...shadows.sm,
+  },
+  locationRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
+  locationAddress: { ...typography.body, color: colors.textPrimary, flex: 1 },
+  locationActions: { flexDirection: 'row', gap: spacing.sm },
+  locationBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingVertical: 10,
+  },
+  locationBtnPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  locationBtnText: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
+  locationBtnTextPrimary: { color: colors.white },
 
   emptyPromos: {
     marginHorizontal: spacing.md,

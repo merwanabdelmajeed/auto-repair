@@ -153,6 +153,18 @@ cp apps/admin-app/.env.example apps/admin-app/.env
 cp apps/admin-portal/.env.example apps/admin-portal/.env
 ```
 
+### Shop Branding
+
+`shop.config.json` (repo root) holds the shop's display name, city, and address. It's read at build time by `app.config.js` in both `customer-app` and `admin-app` and exposed via `src/constants.ts` (`SHOP_NAME`, `SHOP_CITY`, `SHOP_ADDRESS`) — no code changes needed to rebrand:
+
+```json
+{
+  "shopName": "Purrfect Auto Service #17",
+  "shopCity": "Lake Forest",
+  "shopAddress": "20732 Lake Forest Dr suit b1, Lake Forest, CA 92630"
+}
+```
+
 ---
 
 ## Customer App
@@ -162,19 +174,20 @@ cp apps/admin-portal/.env.example apps/admin-portal/.env
 ```bash
 cd apps/customer-app
 npm install
-npx expo run:android   # Android emulator
-npx expo run:ios       # iOS simulator (Mac only)
+npx expo run:android   # Android emulator / device — always runs on port 8081
+npx expo run:ios       # iOS simulator (Mac only) — always runs on port 8081
 ```
 
-> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
+> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build. `adb reverse` is not required; Metro connects to the device automatically.
 
 ### Screens
 
 | Screen           | Description                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------- |
 | Login / Register | Email + password auth; first name, last name, phone (optional) on registration                    |
+| Home             | Shop-branded header; welcome banner; Quick Actions; shop location card (copy address, navigate via native maps app); active promotions preview |
 | Appointments     | Upcoming / past tabs, date strip + slot picker booking modal, cancel, sort toggle                 |
-| Vehicles         | Add / delete vehicles; NHTSA-driven year → make → model → trim cascade; VIN auto-fill; tap for service history modal |
+| Vehicles         | Add / delete vehicles; license plate → VIN auto-fill (CarAPI + NHTSA) or manual VIN entry; NHTSA-driven year → make → model → trim cascade; tap for service history modal |
 | Profile          | View name, email, phone; edit first name, last name, phone via modal; sign out                    |
 | Settings         | App info (terms, privacy, help, version); sign out                                                |
 
@@ -195,11 +208,13 @@ EXPO_PUBLIC_API_BASE_URL=
 ```bash
 cd apps/admin-app
 npm install
-npx expo run:android   # Android emulator
-npx expo run:ios       # iOS simulator (Mac only)
+npx expo run:android   # Android emulator / device — always runs on port 8082
+npx expo run:ios       # iOS simulator (Mac only) — always runs on port 8082
 ```
 
-> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
+> Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build. `adb reverse` is not required; Metro connects to the device automatically.
+>
+> Ports are pinned in each app's `package.json` scripts (customer-app: 8081, admin-app: 8082) so both can run at once without colliding.
 
 ### Screens
 
@@ -304,6 +319,16 @@ sam deploy          # first time: sam deploy --guided
 | `autorepair-blocked-times`     | GET/POST/DELETE /blocked-times                         | Date range blocks                                           |
 | `autorepair-availability`      | GET /availability                                      | Available slots for a given date                            |
 | `autorepair-promotions`        | GET/POST/PUT /promotions + POST /promotions/{id}/apply | Promotions CRUD + per-customer apply                        |
+| `autorepair-plate-lookup`      | GET /vehicles/plate                                    | License plate → VIN (CarAPI) → make/model/year/trim (NHTSA)  |
+
+### Third-Party Integrations
+
+License plate lookup (`autorepair-plate-lookup`) calls [CarAPI](https://carapi.app) for plate → VIN resolution, then NHTSA's free `vPIC` API to decode make/model/year/trim from the VIN. CarAPI credentials are read from SSM Parameter Store at runtime (not env vars, so they never appear in the template or deploy history):
+
+```bash
+aws ssm put-parameter --name /autorepair/carapi-token  --type SecureString --value "<api_token>"  --region us-east-1
+aws ssm put-parameter --name /autorepair/carapi-secret --type SecureString --value "<api_secret>" --region us-east-1
+```
 
 ### Cognito User Groups
 

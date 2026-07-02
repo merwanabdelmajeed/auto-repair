@@ -7,5 +7,6 @@ module.exports = ({ config }) => ({
     ...config.extra,
     shopName: shopConfig.shopName,
     shopCity: shopConfig.shopCity,
+    shopAddress: shopConfig.shopAddress,
   },
 });

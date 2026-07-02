@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SHOP_NAME } from '../constants';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { CustomerDrawerParamList } from './types';
@@ -71,9 +71,19 @@ function AppNavigator() {
         component={HomeScreen}
         options={{
           headerTitle: () => (
-            <View>
-              <Text style={{ color: colors.white, fontWeight: '700', fontSize: 17 }}>{SHOP_NAME}</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Your trusted auto service partner</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                justifyContent: 'center', alignItems: 'center',
+                marginRight: 10,
+              }}>
+                <Ionicons name="construct" size={20} color={colors.secondary} />
+              </View>
+              <View>
+                <Text style={{ color: colors.white, fontWeight: '700', fontSize: 17 }}>{SHOP_NAME}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Your trusted auto service in {SHOP_CITY}</Text>
+              </View>
             </View>
           ),
         }}
