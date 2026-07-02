@@ -13,4 +13,11 @@ export interface Vehicle {
   createdAt: string;
 }
 
+export interface UpdateVehicleInput {
+  licensePlate?: string | null;
+  vin?: string | null;
+}
+
 export const listVehicles = () => api.get<Vehicle[]>('/vehicles');
+export const updateVehicle = (vehicleId: string, data: UpdateVehicleInput) =>
+  api.put<Vehicle>(`/vehicles/${vehicleId}`, data);

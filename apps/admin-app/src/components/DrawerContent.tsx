@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../theme';
+import { SHOP_NAME } from '../constants';
 
 type DrawerItem = {
   name: string;
@@ -37,7 +38,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.logoCircle}>
           <Ionicons name="construct" size={28} color={colors.secondary} />
         </View>
-        <Text style={styles.appName}>AutoRepair Admin</Text>
+        <Text style={styles.appName}>{SHOP_NAME}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>ADMIN PORTAL</Text>
         </View>

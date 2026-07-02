@@ -11,7 +11,7 @@ import {
   type Service, type ServiceInput,
 } from '../api/services';
 
-const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, isActive: true };
+const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, price: undefined, isActive: true };
 
 export default function ServicesScreen() {
   const [services, setServices] = useState<Service[]>([]);
@@ -44,7 +44,7 @@ export default function ServicesScreen() {
 
   function openEdit(svc: Service) {
     setEditing(svc);
-    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, isActive: svc.isActive });
+    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, price: svc.price, isActive: svc.isActive });
     setFormError('');
     setShowModal(true);
   }
@@ -107,7 +107,7 @@ export default function ServicesScreen() {
             <>
               <Text style={styles.sectionTitle}>Services ({services.length})</Text>
               {services.map(svc => (
-                <View key={svc.serviceId} style={styles.card}>
+                <TouchableOpacity key={svc.serviceId} style={styles.card} onPress={() => openEdit(svc)} activeOpacity={0.8}>
                   <View style={styles.cardLeft}>
                     <View style={styles.cardIcon}>
                       <Ionicons name="construct-outline" size={22} color={colors.secondary} />
@@ -121,19 +121,14 @@ export default function ServicesScreen() {
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.cardMeta}>{svc.durationMinutes} min</Text>
+                      <Text style={styles.cardMeta}>{svc.durationMinutes} min{svc.price != null ? `  ·  $${svc.price.toFixed(2)}` : ''}</Text>
                       {svc.description ? <Text style={styles.cardDesc} numberOfLines={1}>{svc.description}</Text> : null}
                     </View>
                   </View>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity onPress={() => openEdit(svc)} style={styles.actionBtn}>
-                      <Ionicons name="pencil-outline" size={18} color={colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDelete(svc)} style={styles.actionBtn}>
-                      <Ionicons name="trash-outline" size={18} color={colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  <TouchableOpacity onPress={() => confirmDelete(svc)} style={styles.actionBtn}>
+                    <Ionicons name="trash-outline" size={18} color={colors.error} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
               ))}
             </>
           )}
@@ -166,8 +161,16 @@ export default function ServicesScreen() {
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput style={[styles.input, { height: 72, textAlignVertical: 'top' }]} value={form.description} onChangeText={v => setForm(p => ({ ...p, description: v }))} placeholder="Optional description…" placeholderTextColor={colors.textMuted} multiline />
 
-              <Text style={styles.fieldLabel}>Duration (min) *</Text>
-              <TextInput style={styles.input} value={String(form.durationMinutes)} onChangeText={v => setForm(p => ({ ...p, durationMinutes: parseInt(v) || 0 }))} keyboardType="number-pad" placeholderTextColor={colors.textMuted} />
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Duration (min) *</Text>
+                  <TextInput style={styles.input} value={String(form.durationMinutes)} onChangeText={v => setForm(p => ({ ...p, durationMinutes: parseInt(v) || 0 }))} keyboardType="number-pad" placeholderTextColor={colors.textMuted} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Price ($)</Text>
+                  <TextInput style={styles.input} value={form.price != null ? String(form.price) : ''} onChangeText={v => setForm(p => ({ ...p, price: v === '' ? undefined : parseFloat(v) || 0 }))} keyboardType="decimal-pad" placeholder="e.g. 49.99" placeholderTextColor={colors.textMuted} />
+                </View>
+              </View>
 
               <View style={styles.toggleRow}>
                 <Text style={styles.toggleLabel}>Active (visible to customers)</Text>
@@ -213,7 +216,6 @@ const styles = StyleSheet.create({
   badgeTextInactive: { color: colors.textMuted },
   cardMeta: { ...typography.small, color: colors.secondary, fontWeight: '600' },
   cardDesc: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  cardActions: { flexDirection: 'row', gap: spacing.xs },
   actionBtn: { padding: spacing.sm },
 
   fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.secondary, justifyContent: 'center', alignItems: 'center', ...shadows.lg },

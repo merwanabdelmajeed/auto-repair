@@ -4,6 +4,7 @@ import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { UserRole, type Promotion } from '../../shared/types/index.js';
+import { getCustomersWithTokens, notifyUser } from '../../shared/utils/notify.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
 
@@ -132,6 +133,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         createdAt: now,
       };
       await db.send(new PutCommand({ TableName: TABLE.PROMOTIONS, Item: item }));
+      await fanOutPromoNotification(tenantId, id, item.code, item.description as string)
+        .catch(err => console.error('Promo fan-out failed:', err));
       return created(toPromotion(item));
     }
 
@@ -231,3 +234,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return serverError();
   }
 };
+
+async function fanOutPromoNotification(tenantId: string, promoId: string, code: string, description: string): Promise<void> {
+  const customers = await getCustomersWithTokens(tenantId);
+  await Promise.all(customers.map(c =>
+    notifyUser({
+      tenantId,
+      userId: c.userId,
+      type: 'promotion_new',
+      title: `New Promo: ${code}`,
+      body: description || `Use code ${code} on your next visit`,
+      promoId,
+      expoPushToken: c.expoPushToken,
+    }).catch(err => console.error('Promo notif failed for', c.userId, ':', err))
+  ));
+}

@@ -10,6 +10,7 @@
 
 ## Table of Contents
 
+0. [Architecture Diagrams](#0-architecture-diagrams)
 1. [Tenant Isolation Strategy](#1-tenant-isolation-strategy)
 2. [Location Isolation Strategy](#2-location-isolation-strategy)
 3. [DynamoDB Design Strategy](#3-dynamodb-design-strategy)
@@ -20,6 +21,156 @@
 8. [Event-Driven Design Considerations](#8-event-driven-design-considerations)
 9. [S3 Organization Strategy](#9-s3-organization-strategy)
 10. [Cost Estimates](#10-cost-estimates)
+
+---
+
+## 0. Architecture Diagrams
+
+### System Overview
+
+```mermaid
+flowchart TB
+    subgraph clients["Client Layer"]
+        CA["📱 Customer App\nReact Native · Expo"]
+        AA["📱 Admin App\nReact Native · Expo"]
+        AP["🌐 Admin Portal\nReact · Vite"]
+    end
+
+    subgraph aws["AWS — us-east-1"]
+        subgraph identity["Identity"]
+            COG["Cognito User Pool\n3 App Clients · 4 Groups\ncustom:tenantId · role · locationIds"]
+        end
+
+        subgraph gateway["API Gateway — REST /prod"]
+            AGW["Cognito Authorizer\non all routes except /health"]
+        end
+
+        subgraph compute["Lambda — Node 20 · arm64 · esbuild"]
+            direction LR
+            subgraph core["Core Domain"]
+                L_APT["Appointments\nGET · POST · PATCH /status"]
+                L_SVC["Services · Vehicles\nCustomers · Capacity\nAvailability · Blocked Times"]
+                L_PRO["Promotions\nCRUD · /apply · /validate"]
+                L_AN["Analytics\nGET /analytics"]
+            end
+            subgraph notif["Notifications"]
+                L_PT["Push Token\nPUT /users/push-token"]
+                L_NF["Notifications\nGET · PUT /read"]
+                L_RM["Reminder\n⏰ rate(1 hour)"]
+            end
+            subgraph authfn["Auth Triggers"]
+                L_AU["PreSignUp\nPostConfirmation"]
+            end
+        end
+
+        subgraph data["Data Layer"]
+            DDB[("DynamoDB\n12 Tables\nOn-demand · PITR")]
+            S3[("S3\nUploads · Assets\nSigned URLs only")]
+        end
+
+        SES["SES\nTransactional Email"]
+        EB["EventBridge\nScheduler"]
+    end
+
+    subgraph external["External Services"]
+        EXPO["Expo Push Service\nexp.host/--/api/v2/push/send"]
+        NHTSA["NHTSA API\nVIN · Makes · Models"]
+    end
+
+    CA & AA & AP -->|"HTTPS · JWT ID Token"| AGW
+    CA & AA & AP <-->|"SRP auth · token refresh"| COG
+    COG -->|"Lambda triggers"| L_AU
+    L_AU --> DDB
+    AGW --> core & notif
+    EB -->|"Every hour"| L_RM
+    core & notif --> DDB
+    core --> S3
+    L_APT & L_PRO -->|"Status change email"| SES
+    L_APT & L_PRO & L_RM -->|"Push notification"| EXPO
+    CA -->|"VIN decode"| NHTSA
+```
+
+---
+
+### Notification Pipeline
+
+```mermaid
+flowchart LR
+    subgraph triggers["Triggers"]
+        T1["Admin changes\nappointment status\nconfirmed / cancelled /\ncompleted"]
+        T2["Admin creates\na new promotion"]
+        T3["EventBridge\nevery hour"]
+    end
+
+    subgraph lambdas["Lambda"]
+        LA["Appointments\nFunction"]
+        LP["Promotions\nFunction"]
+        LR["Reminder\nFunction"]
+    end
+
+    subgraph persist["Persist"]
+        DDB_N[("autorepair-\nnotifications\nPK: USER#userId\nSK: NOTIF#ts#id")]
+        DDB_A[("autorepair-\nappointments\nreminder24hSentAt\nreminder2hSentAt")]
+        DDB_U[("autorepair-\nusers\nexpoPushToken")]
+    end
+
+    subgraph deliver["Deliver"]
+        SES["SES Email\nstatus change only"]
+        EXPO["Expo Push API\nhttps://exp.host"]
+        APP["Customer App\nIn-app feed\n+ push banner"]
+    end
+
+    T1 --> LA
+    T2 --> LP
+    T3 --> LR
+
+    LA -->|"createNotification"| DDB_N
+    LP -->|"fan-out per customer"| DDB_N
+    LR -->|"atomic SET sentAt\n(skip if exists)"| DDB_A
+    LR -->|"createNotification"| DDB_N
+
+    DDB_U -->|"lookup expoPushToken"| LA & LP & LR
+    LA & LP -->|"confirmed / cancelled"| SES
+    LA & LP & LR -->|"sendPush"| EXPO
+    DDB_N -->|"GET /notifications"| APP
+    EXPO -->|"device push"| APP
+```
+
+---
+
+### Tenant Isolation — DynamoDB Key Pattern
+
+```mermaid
+flowchart TB
+    subgraph jwt["JWT Claims (every request)"]
+        CL["custom:tenantId = 'acme-auto'\ncustom:role = 'CUSTOMER'\ncustom:locationIds = 'loc-1'"]
+    end
+
+    subgraph mw["Lambda Middleware\nextractTenantClaims()"]
+        MW["Validates claims\nInjects tenantId into\nevery DB operation"]
+    end
+
+    subgraph tables["DynamoDB — Pool Model (shared tables)"]
+        direction LR
+        subgraph t1["autorepair-appointments"]
+            R1["PK: TENANT#acme-auto\nSK: APPT#uuid-1"]
+            R2["PK: TENANT#acme-auto\nSK: APPT#uuid-2"]
+            R3["PK: TENANT#other-shop\nSK: APPT#uuid-3"]
+        end
+        subgraph t2["autorepair-users"]
+            U1["PK: TENANT#acme-auto\nSK: USER#user-id"]
+            U2["PK: TENANT#other-shop\nSK: USER#user-id"]
+        end
+    end
+
+    jwt -->|"API Gateway pre-validates"| mw
+    mw -->|"KeyConditionExpression:\nPK = 'TENANT#acme-auto'"| t1 & t2
+
+    style R3 fill:#fee2e2,stroke:#ef4444
+    style U2 fill:#fee2e2,stroke:#ef4444
+```
+
+> Red rows are physically stored in the same table but are **unreachable** — the `tenantId` prefix in every query's `KeyConditionExpression` makes cross-tenant reads impossible without a compromised JWT.
 
 ---
 

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { NewPasswordRequiredError } from '../auth/CognitoService';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 
 export default function LoginScreen() {
   const { login, completeNewPassword } = useAuth();
@@ -86,7 +87,8 @@ export default function LoginScreen() {
           <View style={styles.logoCircle}>
             <Ionicons name="construct" size={36} color={colors.secondary} />
           </View>
-          <Text style={styles.title}>AutoRepair Admin</Text>
+          <Text style={styles.title}>{SHOP_NAME}</Text>
+          {SHOP_CITY ? <Text style={styles.cityLabel}>{SHOP_CITY}</Text> : null}
           <View style={styles.badge}>
             <Text style={styles.badgeText}>ADMIN PORTAL</Text>
           </View>
@@ -223,7 +225,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     ...shadows.md,
   },
-  title: { ...typography.h2, color: colors.primary, marginBottom: spacing.xs },
+  title: { ...typography.h2, color: colors.primary, marginBottom: 2 },
+  cityLabel: { ...typography.small, color: colors.textMuted, marginBottom: spacing.xs },
   badge: {
     backgroundColor: 'rgba(245,158,11,0.15)',
     borderWidth: 1,

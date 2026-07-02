@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SHOP_NAME } from '../constants';
 import {
   View,
   Text,
@@ -19,6 +20,13 @@ type Props = {
 
 // For MVP, tenant ID is hardcoded. Replace with invitation-code flow in a later phase.
 const DEFAULT_TENANT_ID = 'demo-tenant';
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
 
 export default function RegisterScreen({ onNavigateToLogin }: Props) {
   const { register } = useAuth();
@@ -72,7 +80,7 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
             <Ionicons name="construct" size={36} color={colors.secondary} />
           </View>
           <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join AutoRepair Pro</Text>
+          <Text style={styles.subtitle}>Join {SHOP_NAME}</Text>
         </View>
 
         <View style={styles.card}>
@@ -126,8 +134,8 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
           <TextInput
             style={styles.input}
             value={phone}
-            onChangeText={setPhone}
-            placeholder="+1 555 123 4567"
+            onChangeText={(text) => setPhone(formatPhone(text))}
+            placeholder="(555) 123-4567"
             placeholderTextColor={colors.textMuted}
             keyboardType="phone-pad"
             autoComplete="tel"

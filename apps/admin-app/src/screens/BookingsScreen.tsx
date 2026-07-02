@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
+  Alert, ActivityIndicator, RefreshControl, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
@@ -14,15 +14,25 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '../api/appointments';
+import { listCustomers, type Customer } from '../api/customers';
+import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 
-const STATUS_TABS: { label: string; value: AppointmentStatus | 'all' }[] = [
-  { label: 'All', value: 'all' },
+type BookingsTab = AppointmentStatus | 'current' | 'past';
+
+const STATUS_TABS: { label: string; value: BookingsTab }[] = [
+  { label: 'Current', value: 'current' },
+  { label: 'Past', value: 'past' },
   { label: 'Pending', value: 'pending' },
   { label: 'Confirmed', value: 'confirmed' },
   { label: 'In Progress', value: 'in-progress' },
   { label: 'Completed', value: 'completed' },
   { label: 'Cancelled', value: 'cancelled' },
 ];
+
+function todayLocalDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const STATUS_COLOR: Record<AppointmentStatus, { bg: string; text: string }> = {
   pending: { bg: 'rgba(245,158,11,0.12)', text: '#D97706' },
@@ -43,22 +53,42 @@ function statusLabel(s: AppointmentStatus) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function fmtDateOnly(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function BookingsScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
+  const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<AppointmentStatus | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<BookingsTab>('current');
+  const [searchTerm, setSearchTerm] = useState('');
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<Appointment | null>(null);
+  const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
+  const [showVehicleDetail, setShowVehicleDetail] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [editPlate, setEditPlate] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [savingVehicle, setSavingVehicle] = useState(false);
+  const [vehicleEditError, setVehicleEditError] = useState('');
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const data = await listAppointments();
-      setAppointments(data);
+      const [appts, customers, vehicles] = await Promise.all([listAppointments(), listCustomers(), listVehicles()]);
+      setAppointments(appts);
+      const cmap: Record<string, Customer> = {};
+      customers.forEach(c => { cmap[c.userId] = c; });
+      setCustomerMap(cmap);
+      const vmap: Record<string, Vehicle> = {};
+      vehicles.forEach(v => { vmap[v.vehicleId] = v; });
+      setVehicleMap(vmap);
     } catch {
       Alert.alert('Error', 'Failed to load appointments.');
     } finally {
@@ -69,11 +99,19 @@ export default function BookingsScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
+  function openDetail(appt: Appointment) {
+    setDetailAppt(appt);
+    setShowVehicleDetail(false);
+    setEditingVehicle(false);
+    setVehicleEditError('');
+  }
+
   async function handleStatus(appt: Appointment, status: AppointmentStatus) {
     setUpdating(appt.appointmentId);
     try {
       await updateAppointmentStatus(appt.appointmentId, status);
       setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, status } : a));
+      setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, status } : prev);
     } catch {
       Alert.alert('Error', 'Failed to update status.');
     } finally {
@@ -89,6 +127,7 @@ export default function BookingsScreen() {
   function handleStatusSelect(status: AppointmentStatus) {
     if (!statusTarget) return;
     const appt = statusTarget;
+    setStatusTarget(null);
     if (status === 'cancelled') {
       Alert.alert(
         'Cancel Appointment',
@@ -112,13 +151,13 @@ export default function BookingsScreen() {
         {
           text: 'Mark Applied', onPress: async () => {
             if (!appt.promoId) return;
-            // Optimistic update — show applied immediately
             setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, promoApplied: true } : a));
+            setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, promoApplied: true } : prev);
             try {
               await applyPromo(appt.promoId, appt.customerId, appt.appointmentId);
             } catch (err: unknown) {
-              // Revert on failure
               setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, promoApplied: false } : a));
+              setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, promoApplied: false } : prev);
               Alert.alert('Cannot Apply', err instanceof Error ? err.message : 'Failed to apply promo.');
             }
           },
@@ -127,7 +166,52 @@ export default function BookingsScreen() {
     );
   }
 
-  const filtered = (activeTab === 'all' ? appointments : appointments.filter(a => a.status === activeTab))
+  async function saveVehicleEdit(veh: Vehicle) {
+    setSavingVehicle(true);
+    setVehicleEditError('');
+    try {
+      const updated = await updateVehicle(veh.vehicleId, {
+        licensePlate: editPlate.trim() || undefined,
+        vin: editVin.trim() || undefined,
+      });
+      setVehicleMap(prev => ({ ...prev, [veh.vehicleId]: { ...veh, ...updated } }));
+      setEditingVehicle(false);
+    } catch {
+      setVehicleEditError('Failed to save.');
+    } finally {
+      setSavingVehicle(false);
+    }
+  }
+
+  const today = todayLocalDateStr();
+  const currentAppts = appointments.filter(a => a.scheduledAt.slice(0, 10) >= today);
+  const pastAppts = appointments.filter(a => a.scheduledAt.slice(0, 10) < today);
+
+  function tabCount(tab: BookingsTab): number {
+    if (tab === 'current') return currentAppts.length;
+    if (tab === 'past') return pastAppts.length;
+    return currentAppts.filter(a => a.status === tab).length;
+  }
+
+  function matchesSearch(appt: Appointment): boolean {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    const customer = customerMap[appt.customerId];
+    return (
+      appt.serviceName.toLowerCase().includes(q) ||
+      (appt.customerName ?? '').toLowerCase().includes(q) ||
+      appt.customerEmail.toLowerCase().includes(q) ||
+      (appt.vehicleSummary ?? '').toLowerCase().includes(q) ||
+      (customer?.phone ?? '').toLowerCase().includes(q)
+    );
+  }
+
+  const base = activeTab === 'current' ? currentAppts
+    : activeTab === 'past' ? pastAppts
+    : currentAppts.filter(a => a.status === activeTab);
+
+  const filtered = base
+    .filter(matchesSearch)
     .slice()
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
@@ -140,10 +224,25 @@ export default function BookingsScreen() {
         onSelect={handleStatusSelect}
         onDismiss={() => setStatusTarget(null)}
       />
+
+      {/* Search bar */}
+      <View style={styles.searchRow}>
+        <Ionicons name="search-outline" size={16} color={colors.textMuted} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchTerm}
+          onChangeText={setSearchTerm}
+          placeholder="Search service, customer, vehicle…"
+          placeholderTextColor={colors.textMuted}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+        />
+      </View>
+
       {/* Status Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs} style={styles.tabsScroll}>
         {STATUS_TABS.map(tab => {
-          const count = tab.value === 'all' ? appointments.length : appointments.filter(a => a.status === tab.value).length;
+          const count = tabCount(tab.value);
           const active = activeTab === tab.value;
           return (
             <TouchableOpacity key={tab.value} onPress={() => setActiveTab(tab.value)} style={[styles.tab, active && styles.tabActive]} activeOpacity={0.7}>
@@ -170,15 +269,14 @@ export default function BookingsScreen() {
               <View style={styles.emptyIcon}>
                 <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
               </View>
-              <Text style={styles.emptyTitle}>{activeTab === 'all' ? 'No Appointments Yet' : `No ${activeTab} appointments`}</Text>
+              <Text style={styles.emptyTitle}>{activeTab === 'current' ? 'No Upcoming Appointments' : activeTab === 'past' ? 'No Past Appointments' : `No ${activeTab} appointments`}</Text>
               <Text style={styles.emptyDesc}>Appointments appear here when customers book through the app.</Text>
             </View>
           ) : filtered.map(appt => {
             const sc = STATUS_COLOR[appt.status];
             const isUpdating = updating === appt.appointmentId;
             return (
-              <View key={appt.appointmentId} style={styles.card}>
-                {/* Card Header */}
+              <TouchableOpacity key={appt.appointmentId} style={styles.card} onPress={() => openDetail(appt)} activeOpacity={0.85}>
                 <View style={styles.cardTop}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.serviceName}>{appt.serviceName}</Text>
@@ -196,8 +294,6 @@ export default function BookingsScreen() {
                     </View>
                   )}
                 </View>
-
-                {/* Details */}
                 <View style={styles.cardDetails}>
                   <View style={styles.detailRow}>
                     <Ionicons name="car-outline" size={14} color={colors.textMuted} />
@@ -216,8 +312,6 @@ export default function BookingsScreen() {
                     </View>
                   )}
                 </View>
-
-                {/* Actions */}
                 {appt.promoCode && !appt.promoApplied && !isUpdating && (
                   <View style={styles.cardActions}>
                     <TouchableOpacity onPress={() => confirmApplyPromo(appt)} style={styles.promoBtn} activeOpacity={0.8}>
@@ -226,11 +320,162 @@ export default function BookingsScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
       )}
+
+      {/* Detail Modal */}
+      <Modal visible={!!detailAppt} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            {detailAppt && (() => {
+              const sc = STATUS_COLOR[detailAppt.status];
+              const customer = customerMap[detailAppt.customerId];
+              const veh = vehicleMap[detailAppt.vehicleId];
+              const isUpdating = updating === detailAppt.appointmentId;
+              return (
+                <>
+                  <View style={styles.modalHeader}>
+                    <View style={{ flex: 1, marginRight: spacing.md }}>
+                      <Text style={styles.modalTitle} numberOfLines={2}>{detailAppt.serviceName}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: sc.bg, alignSelf: 'flex-start', marginTop: 4 }]}>
+                        <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(detailAppt.status)}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setDetailAppt(null)}>
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
+                    {/* Customer section */}
+                    <Text style={styles.sectionLabel}>Customer</Text>
+                    <View style={styles.infoCard}>
+                      {detailAppt.customerName ? (
+                        <View style={styles.infoRow}>
+                          <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+                          <Text style={styles.infoValue}>{detailAppt.customerName}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.infoRow}>
+                        <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
+                        <Text style={styles.infoValue}>{detailAppt.customerEmail}</Text>
+                      </View>
+                      {customer?.phone ? (
+                        <View style={[styles.infoRow, styles.infoRowLast]}>
+                          <Ionicons name="call-outline" size={15} color={colors.textMuted} />
+                          <Text style={styles.infoValue}>{customer.phone}</Text>
+                        </View>
+                      ) : <View style={styles.infoRowLast} />}
+                    </View>
+
+                    {/* Appointment section */}
+                    <Text style={styles.sectionLabel}>Appointment</Text>
+                    <View style={styles.infoCard}>
+                      {/* Vehicle row — tappable toggle */}
+                      <TouchableOpacity
+                        style={[styles.infoRow, { alignItems: 'center' }]}
+                        onPress={() => setShowVehicleDetail(v => !v)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="car-outline" size={15} color={colors.primary} />
+                        <Text style={[styles.infoValue, { color: colors.primary, fontWeight: '600' }]}>{detailAppt.vehicleSummary}</Text>
+                        <Ionicons name={showVehicleDetail ? 'chevron-down' : 'chevron-forward'} size={14} color={colors.textMuted} />
+                      </TouchableOpacity>
+
+                      {/* Expanded vehicle detail */}
+                      {showVehicleDetail && veh && (
+                        <View style={styles.vehicleExpanded}>
+                          <View style={styles.vehicleFieldRow}>
+                            <Text style={styles.vehicleFieldLabel}>Plate</Text>
+                            {editingVehicle
+                              ? <TextInput style={styles.vehicleInput} value={editPlate} onChangeText={t => setEditPlate(t.toUpperCase())} placeholder="e.g. ABC1234" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
+                              : <Text selectable style={[styles.vehicleFieldValue, styles.vehicleMonoValue, !veh.licensePlate && { color: colors.textMuted }]}>{veh.licensePlate || '—'}</Text>}
+                          </View>
+                          <View style={styles.vehicleFieldRow}>
+                            <Text style={styles.vehicleFieldLabel}>Color</Text>
+                            <Text selectable style={styles.vehicleFieldValue}>{veh.color}</Text>
+                          </View>
+                          <View style={styles.vehicleFieldRow}>
+                            <Text style={styles.vehicleFieldLabel}>VIN</Text>
+                            {editingVehicle
+                              ? <TextInput style={styles.vehicleInput} value={editVin} onChangeText={t => setEditVin(t.toUpperCase())} placeholder="17-char VIN" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
+                              : <Text selectable style={[styles.vehicleFieldValue, styles.vehicleMonoValue, !veh.vin && { color: colors.textMuted }]}>{veh.vin || '—'}</Text>}
+                          </View>
+                          <View style={styles.vehicleFieldRow}>
+                            <Text style={styles.vehicleFieldLabel}>Added</Text>
+                            <Text selectable style={styles.vehicleFieldValue}>{fmtDateOnly(veh.createdAt)}</Text>
+                          </View>
+                          {vehicleEditError ? <Text style={styles.vehicleEditError}>{vehicleEditError}</Text> : null}
+                          {editingVehicle ? (
+                            <View style={styles.vehicleEditActions}>
+                              <TouchableOpacity onPress={() => void saveVehicleEdit(veh)} disabled={savingVehicle} style={styles.vehicleSaveBtn} activeOpacity={0.8}>
+                                {savingVehicle
+                                  ? <ActivityIndicator size="small" color={colors.white} />
+                                  : <Text style={styles.vehicleSaveBtnText}>Save</Text>}
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => { setEditingVehicle(false); setVehicleEditError(''); }} style={styles.vehicleCancelBtn} activeOpacity={0.8}>
+                                <Text style={styles.vehicleCancelBtnText}>Cancel</Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <TouchableOpacity onPress={() => { setEditPlate(veh.licensePlate || ''); setEditVin(veh.vin || ''); setEditingVehicle(true); setVehicleEditError(''); }} style={styles.vehicleEditBtn} activeOpacity={0.8}>
+                              <Ionicons name="pencil-outline" size={13} color={colors.primary} />
+                              <Text style={styles.vehicleEditBtnText}>Edit Plate / VIN</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      <View style={styles.infoRow}>
+                        <Ionicons name="time-outline" size={15} color={colors.textMuted} />
+                        <Text style={styles.infoValue}>{fmtDate(detailAppt.scheduledAt)}</Text>
+                      </View>
+                      {detailAppt.notes ? (
+                        <View style={styles.infoRow}>
+                          <Ionicons name="document-text-outline" size={15} color={colors.textMuted} />
+                          <Text style={styles.infoValue}>{detailAppt.notes}</Text>
+                        </View>
+                      ) : null}
+                      {detailAppt.promoCode ? (
+                        <View style={styles.infoRow}>
+                          <Ionicons name="pricetag-outline" size={15} color={detailAppt.promoApplied ? colors.success : colors.secondary} />
+                          <Text style={[styles.infoValue, { color: detailAppt.promoApplied ? colors.success : colors.textPrimary }]}>
+                            {detailAppt.promoCode}{detailAppt.promoApplied ? ' ✓ Applied' : ' — not yet applied'}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <View style={[styles.infoRow, styles.infoRowLast]}>
+                        <Ionicons name="receipt-outline" size={15} color={colors.textMuted} />
+                        <Text style={styles.infoValue}>Booked {fmtDate(detailAppt.createdAt)}</Text>
+                      </View>
+                    </View>
+
+                    {/* Actions */}
+                    <View style={styles.detailActions}>
+                      {VALID_NEXT[detailAppt.status] && (
+                        <TouchableOpacity onPress={() => openStatusPicker(detailAppt)} style={styles.detailActionBtn} activeOpacity={0.8} disabled={isUpdating}>
+                          {isUpdating
+                            ? <ActivityIndicator size="small" color={colors.primary} />
+                            : <><Ionicons name="swap-horizontal-outline" size={16} color={colors.primary} /><Text style={styles.detailActionText}>Change Status</Text></>}
+                        </TouchableOpacity>
+                      )}
+                      {detailAppt.promoCode && !detailAppt.promoApplied && !isUpdating && (
+                        <TouchableOpacity onPress={() => confirmApplyPromo(detailAppt)} style={[styles.detailActionBtn, styles.detailPromoBtn]} activeOpacity={0.8}>
+                          <Ionicons name="pricetag-outline" size={16} color={colors.secondary} />
+                          <Text style={[styles.detailActionText, { color: colors.secondary }]}>Apply Promo</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </ScrollView>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </Layout>
   );
 }
@@ -239,6 +484,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1 },
   content: { paddingBottom: 32 },
+
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: 2, backgroundColor: colors.surface, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  searchIcon: { marginRight: 4 },
+  searchInput: { flex: 1, ...typography.body, color: colors.textPrimary, paddingVertical: 8 },
 
   tabsScroll: { maxHeight: 52, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
   tabs: { paddingHorizontal: spacing.md, alignItems: 'center', gap: spacing.sm, paddingVertical: 10 },
@@ -268,10 +517,37 @@ const styles = StyleSheet.create({
   detailText: { ...typography.small, color: colors.textSecondary },
 
   cardActions: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: spacing.sm },
-  advanceBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(15,32,68,0.07)', borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
-  advanceBtnText: { ...typography.small, color: colors.primary, fontWeight: '700' },
-  cancelBtn: { borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
-  cancelBtnText: { fontSize: 12, color: colors.error, fontWeight: '600' },
   promoBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: 'rgba(245,158,11,0.4)', borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
   promoBtnText: { fontSize: 12, color: colors.secondary, fontWeight: '600' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: 40, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
+  modalTitle: { ...typography.h3, color: colors.textPrimary },
+
+  sectionLabel: { ...typography.label, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6, marginTop: spacing.md },
+  infoCard: { backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  infoRowLast: { borderBottomWidth: 0 },
+  infoValue: { ...typography.bodySmall, color: colors.textPrimary, flex: 1 },
+
+  vehicleExpanded: { backgroundColor: 'rgba(15,32,68,0.03)', borderBottomWidth: 1, borderBottomColor: colors.divider, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
+  vehicleFieldRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  vehicleFieldLabel: { fontSize: 11, color: colors.textMuted, width: 44, flexShrink: 0 },
+  vehicleFieldValue: { ...typography.bodySmall, color: colors.textPrimary, flex: 1 },
+  vehicleMonoValue: { fontFamily: 'monospace' },
+  vehicleInput: { flex: 1, borderWidth: 1, borderColor: colors.primary, borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 5, fontSize: 13, color: colors.textPrimary },
+  vehicleEditError: { fontSize: 12, color: colors.error, marginTop: 2 },
+  vehicleEditActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  vehicleSaveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: borderRadius.sm, paddingVertical: 8, alignItems: 'center' },
+  vehicleSaveBtnText: { fontSize: 13, fontWeight: '700', color: colors.white },
+  vehicleCancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.sm, paddingVertical: 8, alignItems: 'center' },
+  vehicleCancelBtnText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  vehicleEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: spacing.xs, borderWidth: 1, borderColor: 'rgba(15,32,68,0.3)', borderRadius: borderRadius.sm, paddingVertical: 5, paddingHorizontal: spacing.sm },
+  vehicleEditBtnText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
+
+  detailActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  detailActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingVertical: 12, backgroundColor: colors.background },
+  detailActionText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
+  detailPromoBtn: { borderColor: 'rgba(245,158,11,0.4)' },
 });

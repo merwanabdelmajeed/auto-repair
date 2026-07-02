@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'AutoRepair Pro'
+rootProject.name = 'Purrfect Auto Service'
 
 dependencyResolutionManagement {
   versionCatalogs {

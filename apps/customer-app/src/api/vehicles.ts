@@ -21,6 +21,16 @@ export interface CreateVehicleInput {
   vin?: string;
 }
 
+export interface PlateLookupResult {
+  vin: string;
+  make: string;
+  model: string;
+  year: string;
+  trim?: string;
+}
+
 export const listVehicles = () => api.get<Vehicle[]>('/vehicles');
 export const createVehicle = (data: CreateVehicleInput) => api.post<Vehicle>('/vehicles', data);
 export const deleteVehicle = (vehicleId: string) => api.delete<{ vehicleId: string }>(`/vehicles/${vehicleId}`);
+export const lookupPlate = (plate: string, state: string) =>
+  api.get<PlateLookupResult>(`/vehicles/plate?plate=${encodeURIComponent(plate)}&state=${encodeURIComponent(state)}`);

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator, Switch,
+  Modal, TextInput, Alert, ActivityIndicator, Switch, Platform,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
@@ -58,6 +59,8 @@ export default function PromotionsScreen() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [detailPromo, setDetailPromo] = useState<Promotion | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +83,7 @@ export default function PromotionsScreen() {
   }
 
   function openEdit(p: Promotion) {
+    setDetailPromo(null);
     setEditTarget(p);
     setForm(promoToForm(p));
     setFormError('');
@@ -89,6 +93,7 @@ export default function PromotionsScreen() {
   function closeModal() {
     setShowModal(false);
     setEditTarget(null);
+    setShowDatePicker(false);
   }
 
   async function handleSave() {
@@ -135,6 +140,7 @@ export default function PromotionsScreen() {
     try {
       const updated = await updatePromotion(p.promoId, { isActive: !p.isActive });
       setPromos(prev => prev.map(x => x.promoId === p.promoId ? updated : x));
+      if (detailPromo?.promoId === p.promoId) setDetailPromo(updated);
     } catch {
       Alert.alert('Error', 'Failed to update promotion.');
     }
@@ -149,6 +155,7 @@ export default function PromotionsScreen() {
           try {
             await deletePromotion(p.promoId);
             setPromos(prev => prev.filter(x => x.promoId !== p.promoId));
+            if (detailPromo?.promoId === p.promoId) setDetailPromo(null);
           } catch {
             Alert.alert('Error', 'Failed to delete promotion.');
           }
@@ -197,7 +204,7 @@ export default function PromotionsScreen() {
                 const expired = expiryDate ? expiryDate < new Date() : false;
                 const maxed = p.maxUses !== null && p.usedCount >= p.maxUses;
                 return (
-                  <View key={p.promoId} style={styles.card}>
+                  <TouchableOpacity key={p.promoId} style={styles.card} onPress={() => setDetailPromo(p)} activeOpacity={0.85}>
                     <View style={styles.cardTop}>
                       <View style={styles.codeRow}>
                         <Text style={styles.code}>{p.code}</Text>
@@ -207,14 +214,9 @@ export default function PromotionsScreen() {
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.cardActions}>
-                        <TouchableOpacity onPress={() => openEdit(p)} style={styles.editBtn}>
-                          <Ionicons name="pencil-outline" size={16} color={colors.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => confirmDelete(p)} style={styles.actionBtn}>
-                          <Ionicons name="trash-outline" size={16} color={colors.error} />
-                        </TouchableOpacity>
-                      </View>
+                      <TouchableOpacity onPress={e => { confirmDelete(p); }} style={styles.actionBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={16} color={colors.error} />
+                      </TouchableOpacity>
                     </View>
                     {p.description ? <Text style={styles.cardDesc}>{p.description}</Text> : null}
                     <View style={styles.cardMeta}>
@@ -231,21 +233,14 @@ export default function PromotionsScreen() {
                           </Text>
                         </View>
                       ) : (
-                        <View style={styles.toggleRow}>
-                          <Switch
-                            value={p.isActive}
-                            onValueChange={() => void toggleActive(p)}
-                            trackColor={{ false: colors.border, true: colors.primary }}
-                            thumbColor={colors.white}
-                            style={styles.toggleSwitch}
-                          />
-                          <Text style={[styles.toggleLabel, { color: p.isActive ? colors.success : colors.textMuted }]}>
+                        <View style={[styles.statusBadge, { backgroundColor: p.isActive ? 'rgba(34,197,94,0.12)' : 'rgba(148,163,184,0.15)' }]}>
+                          <Text style={[styles.statusBadgeText, { color: p.isActive ? colors.success : colors.textMuted }]}>
                             {p.isActive ? 'Active' : 'Inactive'}
                           </Text>
                         </View>
                       )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </>
@@ -259,6 +254,91 @@ export default function PromotionsScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Detail Modal */}
+      <Modal visible={!!detailPromo} animationType="slide" transparent>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            {detailPromo && (() => {
+              const p = detailPromo;
+              const expiryDate = p.expiresAt ? new Date(p.expiresAt.length === 10 ? p.expiresAt + 'T23:59:59' : p.expiresAt) : null;
+              const expired = expiryDate ? expiryDate < new Date() : false;
+              const maxed = p.maxUses !== null && p.usedCount >= p.maxUses;
+              return (
+                <>
+                  <View style={styles.sheetHeader}>
+                    <Text style={styles.sheetTitle}>{p.code}</Text>
+                    <TouchableOpacity onPress={() => setDetailPromo(null)}>
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {/* Discount badge */}
+                    <View style={[styles.typeBadge, { alignSelf: 'flex-start', marginBottom: spacing.md, paddingHorizontal: 12, paddingVertical: 5 }, p.type === 'percent' ? styles.typeBadgePercent : styles.typeBadgeFixed]}>
+                      <Text style={[styles.typeBadgeText, { fontSize: 14 }, p.type === 'percent' ? styles.typeBadgeTextPercent : styles.typeBadgeTextFixed]}>
+                        {formatValue(p)}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.detailLabel}>DETAILS</Text>
+                    <View style={styles.infoCard}>
+                      {p.description ? (
+                        <View style={styles.infoRow}>
+                          <Ionicons name="document-text-outline" size={15} color={colors.textMuted} />
+                          <Text style={styles.infoValue}>{p.description}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.infoRow}>
+                        <Ionicons name="bar-chart-outline" size={15} color={colors.textMuted} />
+                        <Text style={styles.infoValue}>Used {p.usedCount}{p.maxUses ? ` of ${p.maxUses}` : ' times'}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="calendar-outline" size={15} color={expired ? colors.error : colors.textMuted} />
+                        <Text style={[styles.infoValue, expired && { color: colors.error }]}>
+                          {p.expiresAt ? (expired ? 'Expired ' : 'Expires ') + fmtDate(p.expiresAt) : 'No expiry date'}
+                        </Text>
+                      </View>
+                      <View style={[styles.infoRow, styles.infoRowLast]}>
+                        <Ionicons name="power-outline" size={15} color={colors.textMuted} />
+                        <Text style={[styles.infoValue, { color: expired || maxed ? colors.textMuted : p.isActive ? colors.success : colors.textMuted }]}>
+                          {expired ? 'Expired' : maxed ? 'Maxed out' : p.isActive ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Toggle active (only if not expired/maxed) */}
+                    {!expired && !maxed && (
+                      <View style={styles.toggleCard}>
+                        <Text style={styles.toggleCardLabel}>Active</Text>
+                        <Switch
+                          value={p.isActive}
+                          onValueChange={() => void toggleActive(p)}
+                          trackColor={{ false: colors.border, true: colors.primary }}
+                          thumbColor={colors.white}
+                          style={styles.toggleSwitch}
+                        />
+                      </View>
+                    )}
+
+                    {/* Actions */}
+                    <View style={styles.detailActions}>
+                      <TouchableOpacity onPress={() => openEdit(p)} style={styles.detailEditBtn} activeOpacity={0.8}>
+                        <Ionicons name="pencil-outline" size={16} color={colors.primary} />
+                        <Text style={styles.detailEditBtnText}>Edit Promotion</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmDelete(p)} style={styles.detailDeleteBtn} activeOpacity={0.8}>
+                        <Ionicons name="trash-outline" size={16} color={colors.error} />
+                        <Text style={styles.detailDeleteBtnText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create / Edit Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={styles.overlay}>
           <View style={styles.sheet}>
@@ -320,8 +400,47 @@ export default function PromotionsScreen() {
                 </View>
               </View>
 
-              <Text style={styles.fieldLabel}>Expires At (YYYY-MM-DD)</Text>
-              <TextInput style={styles.input} value={form.expiresAtStr} onChangeText={v => setForm(p => ({ ...p, expiresAtStr: v }))} placeholder="Leave blank for no expiry" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.fieldLabel}>Expires At</Text>
+              <TouchableOpacity style={[styles.input, styles.dateBtn]} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
+                <Text style={[styles.dateBtnText, !form.expiresAtStr && styles.dateBtnPlaceholder]}>
+                  {form.expiresAtStr ? fmtDate(form.expiresAtStr) : 'No expiry date'}
+                </Text>
+                {form.expiresAtStr ? (
+                  <TouchableOpacity onPress={() => setForm(p => ({ ...p, expiresAtStr: '' }))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
+              </TouchableOpacity>
+
+              {showDatePicker && Platform.OS === 'ios' && (
+                <View style={styles.iosPickerWrap}>
+                  <TouchableOpacity style={styles.iosPickerDone} onPress={() => setShowDatePicker(false)}>
+                    <Text style={styles.iosPickerDoneText}>Done</Text>
+                  </TouchableOpacity>
+                  <DateTimePicker
+                    value={form.expiresAtStr ? new Date(form.expiresAtStr + 'T12:00:00') : new Date()}
+                    mode="date"
+                    display="spinner"
+                    minimumDate={new Date()}
+                    onChange={(_: DateTimePickerEvent, date?: Date) => {
+                      if (date) setForm(p => ({ ...p, expiresAtStr: date.toLocaleDateString('en-CA') }));
+                    }}
+                  />
+                </View>
+              )}
+              {showDatePicker && Platform.OS === 'android' && (
+                <DateTimePicker
+                  value={form.expiresAtStr ? new Date(form.expiresAtStr + 'T12:00:00') : new Date()}
+                  mode="date"
+                  display="default"
+                  minimumDate={new Date()}
+                  onChange={(_: DateTimePickerEvent, date?: Date) => {
+                    setShowDatePicker(false);
+                    if (date) setForm(p => ({ ...p, expiresAtStr: date.toLocaleDateString('en-CA') }));
+                  }}
+                />
+              )}
 
               <TouchableOpacity style={[styles.saveBtn, saving && styles.saveBtnDisabled]} onPress={() => void handleSave()} disabled={saving} activeOpacity={0.85}>
                 {saving
@@ -366,8 +485,6 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 11, fontWeight: '700' },
   typeBadgeTextPercent: { color: '#2563EB' },
   typeBadgeTextFixed: { color: '#16A34A' },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  editBtn: { padding: spacing.xs },
   actionBtn: { padding: spacing.xs },
   cardDesc: { ...typography.small, color: colors.textSecondary, marginBottom: spacing.xs },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs },
@@ -383,6 +500,22 @@ const styles = StyleSheet.create({
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
   sheetTitle: { ...typography.h3, color: colors.textPrimary },
 
+  detailLabel: { ...typography.label, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6, marginTop: spacing.sm },
+  infoCard: { backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  infoRowLast: { borderBottomWidth: 0 },
+  infoValue: { ...typography.bodySmall, color: colors.textPrimary, flex: 1 },
+
+  toggleCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: 12, marginTop: spacing.md },
+  toggleCardLabel: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '600' },
+  toggleSwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
+
+  detailActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  detailEditBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingVertical: 12, backgroundColor: colors.background },
+  detailEditBtnText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
+  detailDeleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: borderRadius.md, paddingVertical: 12, backgroundColor: 'rgba(239,68,68,0.05)' },
+  detailDeleteBtnText: { ...typography.bodySmall, color: colors.error, fontWeight: '700' },
+
   errorBox: { backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
 
@@ -395,9 +528,12 @@ const styles = StyleSheet.create({
   typeChipText: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '600' },
   typeChipTextActive: { color: colors.primary },
 
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  toggleSwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
-  toggleLabel: { ...typography.small, fontWeight: '600' },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dateBtnText: { ...typography.body, color: colors.textPrimary, flex: 1 },
+  dateBtnPlaceholder: { color: colors.textMuted },
+  iosPickerWrap: { backgroundColor: colors.background, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, marginTop: 4, overflow: 'hidden' },
+  iosPickerDone: { alignItems: 'flex-end', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  iosPickerDoneText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
 
   saveBtn: { backgroundColor: colors.secondary, borderRadius: borderRadius.lg, paddingVertical: 14, alignItems: 'center', marginTop: spacing.lg, ...shadows.sm },
   saveBtnDisabled: { opacity: 0.6 },

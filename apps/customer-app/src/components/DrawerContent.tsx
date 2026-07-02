@@ -1,4 +1,5 @@
 import React from 'react';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,8 +35,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.logoCircle}>
           <Ionicons name="construct" size={30} color={colors.secondary} />
         </View>
-        <Text style={styles.appName}>AutoRepair Pro</Text>
-        <Text style={styles.tagline}>Your Trusted Shop Companion</Text>
+        <Text style={styles.appName}>{SHOP_NAME}</Text>
+        <Text style={styles.tagline}>
+          {SHOP_CITY ? `Your trusted auto service partner in ${SHOP_CITY}` : 'Your trusted auto service partner'}
+        </Text>
       </View>
 
       <View style={styles.divider} />

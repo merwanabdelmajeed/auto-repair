@@ -1,176 +1,148 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
+import { useNotifications } from '../contexts/NotificationsContext';
+import type { AppNotification } from '../api/notifications';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TYPE_ICON: Record<string, IoniconsName> = {
+  appointment_confirmed:    'checkmark-circle-outline',
+  appointment_cancelled:    'close-circle-outline',
+  appointment_completed:    'car-outline',
+  appointment_reminder_24h: 'alarm-outline',
+  appointment_reminder_2h:  'alarm-outline',
+  promotion_new:            'pricetag-outline',
+};
+
+const TYPE_COLOR: Record<string, string> = {
+  appointment_confirmed:    '#22c55e',
+  appointment_cancelled:    '#ef4444',
+  appointment_completed:    '#22c55e',
+  appointment_reminder_24h: '#3b82f6',
+  appointment_reminder_2h:  '#f59e0b',
+  promotion_new:            colors.secondary,
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function NotifRow({ notif, onPress }: { notif: AppNotification; onPress: () => void }) {
+  const icon = TYPE_ICON[notif.type] ?? 'notifications-outline';
+  const iconColor = TYPE_COLOR[notif.type] ?? colors.secondary;
+
+  return (
+    <TouchableOpacity
+      style={[styles.row, !notif.read && styles.rowUnread]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: `${iconColor}18` }]}>
+        <Ionicons name={icon} size={22} color={iconColor} />
+      </View>
+      <View style={styles.rowContent}>
+        <View style={styles.rowTop}>
+          <Text style={[styles.rowTitle, !notif.read && styles.rowTitleUnread]} numberOfLines={1}>
+            {notif.title}
+          </Text>
+          <Text style={styles.rowTime}>{timeAgo(notif.createdAt)}</Text>
+        </View>
+        <Text style={styles.rowBody} numberOfLines={2}>{notif.body}</Text>
+      </View>
+      {!notif.read && <View style={styles.unreadDot} />}
+    </TouchableOpacity>
+  );
+}
 
 export default function NotificationsScreen() {
+  const { notifications, loading, markAsRead } = useNotifications();
+
   return (
     <Layout>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Empty State */}
-        <View style={styles.emptyState}>
+      {loading && notifications.length === 0 ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      ) : notifications.length === 0 ? (
+        <ScrollView contentContainerStyle={styles.emptyContent}>
           <View style={styles.emptyIcon}>
             <Ionicons name="notifications-outline" size={52} color={colors.textMuted} />
           </View>
           <Text style={styles.emptyTitle}>No Notifications Yet</Text>
           <Text style={styles.emptyDesc}>
-            We'll notify you about appointment reminders, confirmations, promotions, and shop announcements.
+            You'll be notified about appointment confirmations, reminders, and new promotions.
           </Text>
-        </View>
-
-        {/* What to Expect */}
-        <Text style={styles.sectionTitle}>You'll Receive Notifications For</Text>
-        <View style={styles.card}>
-          {[
-            {
-              icon: 'calendar-outline' as const,
-              title: 'Appointment Confirmation',
-              desc: 'When your booking is confirmed by the shop',
-            },
-            {
-              icon: 'alarm-outline' as const,
-              title: 'Appointment Reminders',
-              desc: '24 hours and 1 hour before your appointment',
-            },
-            {
-              icon: 'checkmark-done-outline' as const,
-              title: 'Service Complete',
-              desc: 'When your vehicle is ready for pickup',
-            },
-            {
-              icon: 'pricetag-outline' as const,
-              title: 'New Promotions',
-              desc: 'Special offers from your preferred location',
-            },
-            {
-              icon: 'megaphone-outline' as const,
-              title: 'Shop Announcements',
-              desc: 'Hours changes, holiday closures, and updates',
-            },
-          ].map((item, i, arr) => (
-            <View
-              key={item.title}
-              style={[styles.notifRow, i === arr.length - 1 && styles.notifRowLast]}
-            >
-              <View style={styles.notifIcon}>
-                <Ionicons name={item.icon} size={20} color={colors.secondary} />
-              </View>
-              <View style={styles.notifContent}>
-                <Text style={styles.notifTitle}>{item.title}</Text>
-                <Text style={styles.notifDesc}>{item.desc}</Text>
-              </View>
-            </View>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {notifications.map((n, i) => (
+            <NotifRow
+              key={n.notifId}
+              notif={n}
+              onPress={() => { if (!n.read) void markAsRead(n.notifId); }}
+            />
           ))}
-        </View>
-
-        <View style={styles.permissionNote}>
-          <Ionicons name="shield-checkmark-outline" size={18} color={colors.success} />
-          <Text style={styles.permissionText}>
-            Notification permissions are managed in Settings. You can opt out at any time.
-          </Text>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </Layout>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xxl },
+  listContent: { paddingVertical: spacing.sm, paddingBottom: spacing.xxl },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  emptyState: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xxl,
-  },
+  emptyContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   emptyIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 96, height: 96, borderRadius: 48,
     backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.sm,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: spacing.lg, ...shadows.sm,
   },
-  emptyTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  emptyDesc: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  emptyTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.sm, textAlign: 'center' },
+  emptyDesc: { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.textPrimary,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    borderRadius: borderRadius.xl,
-    padding: spacing.sm,
-    ...shadows.sm,
-  },
-  notifRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
+    backgroundColor: colors.background,
   },
-  notifRowLast: {
-    borderBottomWidth: 0,
+  rowUnread: {
+    backgroundColor: 'rgba(15,32,68,0.03)',
   },
-  notifIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(245,158,11,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
+  iconWrap: {
+    width: 44, height: 44, borderRadius: borderRadius.md,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: spacing.md, flexShrink: 0,
   },
-  notifContent: { flex: 1 },
-  notifTitle: {
-    ...typography.bodySmall,
-    color: colors.textPrimary,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  notifDesc: {
-    ...typography.small,
-    color: colors.textSecondary,
-  },
-
-  permissionNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    backgroundColor: 'rgba(34,197,94,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.2)',
-    borderRadius: borderRadius.lg,
-  },
-  permissionText: {
-    ...typography.small,
-    color: colors.textSecondary,
-    flex: 1,
-    lineHeight: 18,
+  rowContent: { flex: 1 },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
+  rowTitle: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '500', flex: 1, marginRight: spacing.sm },
+  rowTitleUnread: { fontWeight: '700' },
+  rowTime: { ...typography.small, color: colors.textMuted, flexShrink: 0 },
+  rowBody: { ...typography.small, color: colors.textSecondary, lineHeight: 17 },
+  unreadDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginLeft: spacing.sm, marginTop: 6, flexShrink: 0,
   },
 });

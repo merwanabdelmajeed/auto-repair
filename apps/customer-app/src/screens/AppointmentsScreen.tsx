@@ -23,6 +23,25 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   cancelled: { bg: 'rgba(148,163,184,0.12)', text: '#64748B' },
 };
 
+const POPULAR_KEYWORDS = [
+  'oil change', 'oil', 'tire rotation', 'tire', 'tyre',
+  'brake', 'battery', 'ac service', 'air condition', 'a/c', 'ac',
+  'alignment', 'wheel', 'filter', 'transmission', 'coolant', 'flush',
+  'inspection', 'tune up', 'tune', 'spark', 'engine',
+  'wiper', 'belt', 'fluid', 'exhaust',
+];
+
+function sortByPopularity(svcs: import('../api/services').Service[]) {
+  function rank(name: string): number {
+    const lower = name.toLowerCase();
+    for (let i = 0; i < POPULAR_KEYWORDS.length; i++) {
+      if (lower.includes(POPULAR_KEYWORDS[i]!)) return i;
+    }
+    return POPULAR_KEYWORDS.length;
+  }
+  return [...svcs].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
+}
+
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LOOKAHEAD_DAYS = 30;
@@ -85,6 +104,7 @@ export default function AppointmentsScreen() {
   const [promoError, setPromoError] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState('');
+  const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
 
   const dateListRef = useRef<FlatList>(null);
 
@@ -130,7 +150,7 @@ export default function AppointmentsScreen() {
     setBookingError('');
     setShowBooking(true);
     const [svcs, vehs] = await Promise.all([listServices(), listVehicles()]);
-    setServices(svcs.filter(s => s.isActive));
+    setServices(sortByPopularity(svcs.filter(s => s.isActive)));
     setVehicles(vehs);
   }
 
@@ -219,6 +239,7 @@ export default function AppointmentsScreen() {
           try {
             await cancelAppointment(appt.appointmentId);
             setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, status: 'cancelled' } : a));
+            setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, status: 'cancelled' } : prev);
           } catch {
             Alert.alert('Error', 'Failed to cancel appointment.');
           }
@@ -299,7 +320,7 @@ export default function AppointmentsScreen() {
             shown.map(appt => {
               const sc = STATUS_COLOR[appt.status] ?? STATUS_COLOR.pending;
               return (
-                <View key={appt.appointmentId} style={styles.card}>
+                <TouchableOpacity key={appt.appointmentId} style={styles.card} onPress={() => setDetailAppt(appt)} activeOpacity={0.85}>
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardService}>{appt.serviceName}</Text>
                     <View style={[styles.statusBadge, { backgroundColor: sc!.bg }]}>
@@ -322,7 +343,7 @@ export default function AppointmentsScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -334,6 +355,61 @@ export default function AppointmentsScreen() {
           <Ionicons name="add" size={28} color={colors.white} />
         </TouchableOpacity>
       )}
+
+      {/* Detail Modal */}
+      <Modal visible={!!detailAppt} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, styles.detailSheet]}>
+            {detailAppt && (() => {
+              const sc = STATUS_COLOR[detailAppt.status] ?? STATUS_COLOR.pending;
+              const detailRows = [
+                { label: 'Vehicle', value: detailAppt.vehicleSummary },
+                { label: 'Date & Time', value: fmtDate(detailAppt.scheduledAt) },
+                ...(detailAppt.notes ? [{ label: 'Notes', value: detailAppt.notes }] : []),
+                ...(detailAppt.promoCode ? [{ label: 'Promo Code', value: detailAppt.promoCode }] : []),
+                { label: 'Booked On', value: fmtDate(detailAppt.createdAt) },
+              ];
+              return (
+                <>
+                  <View style={styles.detailHeader}>
+                    <View style={{ flex: 1, marginRight: spacing.md }}>
+                      <Text style={styles.detailService} numberOfLines={2}>{detailAppt.serviceName}</Text>
+                      <View style={[styles.detailBadge, { backgroundColor: sc!.bg }]}>
+                        <Text style={[styles.detailBadgeText, { color: sc!.text }]}>
+                          {detailAppt.status.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setDetailAppt(null)}>
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} style={styles.detailScroll}>
+                    {detailRows.map((row, i) => (
+                      <View key={row.label} style={[styles.detailRow, i === detailRows.length - 1 && styles.detailRowLast]}>
+                        <Text style={styles.detailLabel}>{row.label}</Text>
+                        <Text style={styles.detailValue}>{row.value}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+
+                  {(detailAppt.status === 'pending' || detailAppt.status === 'confirmed') && (
+                    <TouchableOpacity
+                      style={styles.detailCancelBtn}
+                      onPress={() => confirmCancel(detailAppt)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="close-circle-outline" size={18} color={colors.error} />
+                      <Text style={styles.detailCancelText}>Cancel Appointment</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
 
       {/* Booking Modal */}
       <Modal visible={showBooking} animationType="slide" transparent>
@@ -668,4 +744,17 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: colors.secondary, borderRadius: borderRadius.lg, paddingVertical: 14, alignItems: 'center', marginTop: spacing.md, ...shadows.sm },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { ...typography.h4, color: colors.primary },
+
+  detailSheet:      { maxHeight: '60%' },
+  detailHeader:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.lg },
+  detailService:    { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.xs },
+  detailBadge:      { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 100 },
+  detailBadgeText:  { fontSize: 11, fontWeight: '700' as const, textTransform: 'capitalize' as const },
+  detailScroll:     { flexGrow: 0 },
+  detailRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  detailRowLast:    { borderBottomWidth: 0 },
+  detailLabel:      { ...typography.bodySmall, color: colors.textSecondary, width: 100 },
+  detailValue:      { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '600', flex: 1, textAlign: 'right' },
+  detailCancelBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.lg, paddingVertical: 14, borderRadius: borderRadius.lg, borderWidth: 1.5, borderColor: colors.error, backgroundColor: 'rgba(239,68,68,0.05)' },
+  detailCancelText: { ...typography.h4, color: colors.error },
 });

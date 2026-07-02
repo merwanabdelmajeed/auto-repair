@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { QueryCommand, PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
-import { ok, created, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
 import { UserRole } from '../../shared/types/index.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
@@ -69,6 +69,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return created(toVehicle(item));
     }
 
+    // PUT /vehicles/{vehicleId} — admins update licensePlate and/or VIN
+    if (method === 'PUT' && vehicleId) {
+      if (!isAdmin) return forbidden('Admin access required');
+      const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
+      const { licensePlate, vin } = body;
+      const now = new Date().toISOString();
+      const result = await db.send(new UpdateCommand({
+        TableName: TABLE.VEHICLES,
+        Key: { PK: `TENANT#${tenantId}`, SK: `VEHICLE#${vehicleId}` },
+        ConditionExpression: 'attribute_exists(PK)',
+        UpdateExpression: 'SET licensePlate = :lp, vin = :vin, updatedAt = :now',
+        ExpressionAttributeValues: {
+          ':lp': licensePlate ?? null,
+          ':vin': vin ?? null,
+          ':now': now,
+        },
+        ReturnValues: 'ALL_NEW',
+      }));
+      return ok(toVehicle(result.Attributes ?? {}));
+    }
+
     // DELETE /vehicles/{vehicleId}
     if (method === 'DELETE' && vehicleId) {
       await db.send(new DeleteCommand({
@@ -82,6 +103,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
+    if ((e as { name?: string }).name === 'ConditionalCheckFailedException') return notFound('Vehicle not found');
     console.error(e);
     return serverError();
   }

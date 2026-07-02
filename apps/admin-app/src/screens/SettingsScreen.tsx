@@ -8,6 +8,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
+import { SHOP_NAME } from '../constants';
 
 export default function SettingsScreen() {
   const { user, logout, updateUser } = useAuth();
@@ -57,7 +58,7 @@ export default function SettingsScreen() {
     {
       title: 'Location',
       items: [
-        { type: 'link' as const, icon: 'business-outline' as const, label: 'Business Information', value: "Joe's Auto Repair" },
+        { type: 'link' as const, icon: 'business-outline' as const, label: 'Business Information', value: SHOP_NAME },
         { type: 'link' as const, icon: 'location-outline' as const, label: 'Manage Locations', value: '1 location' },
         { type: 'link' as const, icon: 'time-outline' as const, label: 'Business Hours', value: 'Configure' },
       ],

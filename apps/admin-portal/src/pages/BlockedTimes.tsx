@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { listBlockedTimes, createBlockedTime, deleteBlockedTime, type BlockedTime } from '../api/blockedTimes';
 
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function fmtRange(startDate: string, endDate: string): string {
   const fmt = (d: string) =>
     new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -25,26 +30,23 @@ export default function BlockedTimes() {
       const data = await listBlockedTimes();
       setBlockedTimes(data.sort((a, b) => a.startDate.localeCompare(b.startDate)));
     } catch {
-      // silently fail — table stays empty
+      // silently fail
     } finally {
       setLoading(false);
     }
   }
 
   function openModal() {
+    const today = todayStr();
     setLabel('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(today);
+    setEndDate(today);
     setModalError('');
     setShowModal(true);
   }
 
   async function handleSave() {
     if (!label.trim()) { setModalError('Label is required.'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-      setModalError('Enter dates in YYYY-MM-DD format.');
-      return;
-    }
     if (startDate > endDate) { setModalError('Start date must be on or before end date.'); return; }
 
     setSaving(true);
@@ -78,7 +80,7 @@ export default function BlockedTimes() {
         </div>
         <button
           onClick={openModal}
-          style={{ padding: '9px 20px', backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ padding: '9px 20px', backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}
         >
           + Add Block
         </button>
@@ -123,7 +125,6 @@ export default function BlockedTimes() {
         </table>
       </div>
 
-      {/* Add Modal */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: '16px', padding: '28px', width: '440px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
@@ -138,24 +139,38 @@ export default function BlockedTimes() {
               </div>
             )}
 
-            {[
-              { label: 'Label', value: label, setter: setLabel, placeholder: 'e.g. Independence Day, Staff Training', type: 'text' },
-              { label: 'Start Date', value: startDate, setter: setStartDate, placeholder: 'YYYY-MM-DD', type: 'date' },
-              { label: 'End Date', value: endDate, setter: setEndDate, placeholder: 'YYYY-MM-DD', type: 'date' },
-            ].map(field => (
-              <div key={field.label} style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                  {field.label}
-                </label>
-                <input
-                  type={field.type}
-                  value={field.value}
-                  onChange={e => field.setter(e.target.value)}
-                  placeholder={field.placeholder}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
-                />
-              </div>
-            ))}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Label</label>
+              <input
+                type="text"
+                value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="e.g. Independence Day, Staff Training"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                min={todayStr()}
+                onChange={e => setStartDate(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                min={todayStr()}
+                onChange={e => setEndDate(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+              />
+            </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
               <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '11px', border: '1px solid var(--color-border)', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '14px', fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 
 type NavItem = {
   path: string;
@@ -27,8 +28,8 @@ interface SidebarProps {
 export default function Sidebar({ isOpen }: SidebarProps) {
   return (
     <aside style={{
-      width: isOpen ? '240px' : '0',
-      minWidth: isOpen ? '240px' : '0',
+      width: isOpen ? '280px' : '0',
+      minWidth: isOpen ? '280px' : '0',
       height: '100vh',
       backgroundColor: 'var(--color-primary)',
       display: 'flex',
@@ -64,16 +65,22 @@ export default function Sidebar({ isOpen }: SidebarProps) {
               fontSize: '15px',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}>
-              AutoRepair Admin
+              {SHOP_NAME}
             </div>
-            <div style={{
-              color: 'rgba(255,255,255,0.45)',
-              fontSize: '11px',
-              whiteSpace: 'nowrap',
-            }}>
-              Management Portal
-            </div>
+            {SHOP_CITY && (
+              <div style={{
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: '11px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginTop: '2px',
+              }}>
+                {SHOP_CITY}
+              </div>
+            )}
           </div>
         </div>
         <div style={{
@@ -91,25 +98,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         </div>
       </div>
 
-      {/* Location Selector */}
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: '12px' }}>📍</span>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Location</div>
-          <div style={{ color: 'var(--color-secondary)', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            San Jose — Joe's Auto
-          </div>
-        </div>
-        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>▾</span>
-      </div>
+
 
       {/* Navigation */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>

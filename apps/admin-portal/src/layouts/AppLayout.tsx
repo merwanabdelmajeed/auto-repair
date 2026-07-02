@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { useAuth } from '../auth/AuthContext';
+import { SHOP_NAME } from '../constants';
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: "Overview of today's activity" },
@@ -21,7 +22,7 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
   const { logout, user } = useAuth();
-  const pageInfo = PAGE_TITLES[location.pathname] ?? { title: 'AutoRepair Admin', subtitle: '' };
+  const pageInfo = PAGE_TITLES[location.pathname] ?? { title: SHOP_NAME, subtitle: '' };
 
   const logoutBtn = (
     <button

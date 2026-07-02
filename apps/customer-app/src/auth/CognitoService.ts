@@ -17,6 +17,9 @@ export interface AuthUser {
   email: string;
   tenantId: string;
   role: string;
+  givenName?: string;
+  familyName?: string;
+  phone?: string;
 }
 
 function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
@@ -27,6 +30,9 @@ function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
     email,
     tenantId: payload['custom:tenantId'] as string,
     role: payload['custom:role'] as string,
+    givenName: payload['given_name'] as string | undefined,
+    familyName: payload['family_name'] as string | undefined,
+    phone: payload['custom:phone'] as string | undefined,
   };
 }
 
@@ -81,6 +87,9 @@ export async function getSessionUser(): Promise<AuthUser | null> {
         email: payload['email'] as string,
         tenantId: payload['custom:tenantId'] as string,
         role: payload['custom:role'] as string,
+        givenName: payload['given_name'] as string | undefined,
+        familyName: payload['family_name'] as string | undefined,
+        phone: payload['custom:phone'] as string | undefined,
       });
     });
   });
@@ -93,6 +102,25 @@ export async function getAccessToken(): Promise<string | null> {
     user.getSession((err: Error | null, session: CognitoUserSession | null) => {
       if (err || !session || !session.isValid()) return resolve(null);
       resolve(session.getAccessToken().getJwtToken());
+    });
+  });
+}
+
+export async function updateProfile(firstName: string, lastName: string, phone: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = pool.getCurrentUser();
+    if (!user) return reject(new Error('Not authenticated'));
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session?.isValid()) return reject(new Error('Session invalid'));
+      const attrs = [
+        new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
+        new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
+        new CognitoUserAttribute({ Name: 'custom:phone', Value: phone }),
+      ];
+      user.updateAttributes(attrs, (updateErr) => {
+        if (updateErr) return reject(updateErr);
+        resolve();
+      });
     });
   });
 }

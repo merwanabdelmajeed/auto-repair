@@ -26,6 +26,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         name: i.name as string,
         description: i.description as string,
         durationMinutes: i.durationMinutes as number,
+        price: i.price as number | undefined,
         isActive: i.isActive as boolean,
         createdAt: i.createdAt as string,
         updatedAt: i.updatedAt as string,
@@ -37,13 +38,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'POST') {
       requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { name, description, durationMinutes } = body;
+      const { name, description, durationMinutes, price } = body;
       if (!name || durationMinutes === undefined) {
         return badRequest('name and durationMinutes are required');
       }
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const item = {
+      const item: Record<string, unknown> = {
         PK: `TENANT#${tenantId}`,
         SK: `SERVICE#${id}`,
         serviceId: id,
@@ -55,6 +56,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         createdAt: now,
         updatedAt: now,
       };
+      if (price !== undefined && price !== null) item.price = Number(price);
       await db.send(new PutCommand({ TableName: TABLE.SERVICES, Item: item }));
       return created(item);
     }
@@ -63,15 +65,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'PUT' && serviceId) {
       requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { name, description, durationMinutes, isActive } = body;
+      const { name, description, durationMinutes, isActive, price } = body;
       if (!name || durationMinutes === undefined) {
         return badRequest('name and durationMinutes are required');
       }
+      const hasPriceUpdate = price !== undefined;
       try {
         await db.send(new UpdateCommand({
           TableName: TABLE.SERVICES,
           Key: { PK: `TENANT#${tenantId}`, SK: `SERVICE#${serviceId}` },
-          UpdateExpression: 'SET #n = :name, description = :desc, durationMinutes = :dur, isActive = :active, updatedAt = :now',
+          UpdateExpression: `SET #n = :name, description = :desc, durationMinutes = :dur, isActive = :active, updatedAt = :now${hasPriceUpdate ? ', price = :price' : ''}`,
           ExpressionAttributeNames: { '#n': 'name' },
           ExpressionAttributeValues: {
             ':name': name,
@@ -79,6 +82,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ':dur': Number(durationMinutes),
             ':active': isActive ?? true,
             ':now': new Date().toISOString(),
+            ...(hasPriceUpdate && { ':price': price === null ? undefined : Number(price) }),
           },
           ConditionExpression: 'attribute_exists(PK)',
         }));

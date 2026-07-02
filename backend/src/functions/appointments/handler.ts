@@ -4,6 +4,7 @@ import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { sendAppointmentStatusEmail } from '../../shared/utils/ses.js';
+import { notifyUser } from '../../shared/utils/notify.js';
 import { UserRole, type AppointmentStatus, type CapacitySettings } from '../../shared/types/index.js';
 import { isSlotAvailable, DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
 
@@ -188,7 +189,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         throw e;
       }
 
-      // Send email notification — fire-and-forget, never fails the request
+      // Fire-and-forget: email + push/in-app notification
       if (updatedItem?.customerEmail) {
         sendAppointmentStatusEmail({
           toEmail: updatedItem.customerEmail as string,
@@ -197,6 +198,35 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           scheduledAt: updatedItem.scheduledAt as string,
           status,
         }).catch(err => console.error('SES send failed:', err));
+      }
+      if (updatedItem && (status === 'confirmed' || status === 'cancelled' || status === 'completed')) {
+        const timeStr = new Date(updatedItem.scheduledAt as string).toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', hour12: true,
+        });
+        const titles: Partial<Record<AppointmentStatus, string>> = {
+          confirmed:  'Appointment Confirmed',
+          cancelled:  'Appointment Cancelled',
+          completed:  'Your Vehicle Is Ready',
+        };
+        const bodies: Partial<Record<AppointmentStatus, string>> = {
+          confirmed: `${updatedItem.serviceName as string} — ${timeStr}`,
+          cancelled: `${updatedItem.serviceName as string} — ${timeStr}`,
+          completed: `${updatedItem.serviceName as string} is complete. Come pick up your vehicle!`,
+        };
+        const types: Partial<Record<AppointmentStatus, 'appointment_confirmed' | 'appointment_cancelled' | 'appointment_completed'>> = {
+          confirmed: 'appointment_confirmed',
+          cancelled: 'appointment_cancelled',
+          completed: 'appointment_completed',
+        };
+        await notifyUser({
+          tenantId,
+          userId: updatedItem.customerId as string,
+          type: types[status]!,
+          title: titles[status]!,
+          body: bodies[status]!,
+          appointmentId: appointmentId!,
+        }).catch(err => console.error('Notification failed:', err));
       }
 
       return ok({ appointmentId, status });

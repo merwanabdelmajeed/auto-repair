@@ -52,6 +52,7 @@ export default function Promotions() {
   const [form, setForm] = useState<PromoForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [detailPromo, setDetailPromo] = useState<Promotion | null>(null);
 
   useEffect(() => { void load(); }, []);
 
@@ -75,6 +76,7 @@ export default function Promotions() {
   }
 
   function openEdit(p: Promotion) {
+    setDetailPromo(null);
     setEditTarget(p);
     setForm(promoToForm(p));
     setFormError('');
@@ -98,7 +100,6 @@ export default function Promotions() {
         : null;
 
       if (!editTarget) {
-        // Create
         if (!form.code.trim()) { setFormError('Promo code is required.'); setSaving(false); return; }
         const created = await createPromotion({
           code: form.code,
@@ -110,7 +111,6 @@ export default function Promotions() {
         });
         setPromos(prev => [created, ...prev]);
       } else {
-        // Update
         const updated = await updatePromotion(editTarget.promoId, {
           description: form.description,
           type: form.type,
@@ -129,8 +129,13 @@ export default function Promotions() {
   }
 
   async function handleToggleActive(p: Promotion) {
-    const updated = await updatePromotion(p.promoId, { isActive: !p.isActive });
-    setPromos(prev => prev.map(x => x.promoId === p.promoId ? updated : x));
+    try {
+      const updated = await updatePromotion(p.promoId, { isActive: !p.isActive });
+      setPromos(prev => prev.map(x => x.promoId === p.promoId ? updated : x));
+      if (detailPromo?.promoId === p.promoId) setDetailPromo(updated);
+    } catch {
+      alert('Failed to update promotion.');
+    }
   }
 
   async function handleDelete(p: Promotion) {
@@ -138,6 +143,7 @@ export default function Promotions() {
     try {
       await deletePromotion(p.promoId);
       setPromos(prev => prev.filter(x => x.promoId !== p.promoId));
+      if (detailPromo?.promoId === p.promoId) setDetailPromo(null);
     } catch {
       alert('Failed to delete promotion.');
     }
@@ -185,6 +191,15 @@ export default function Promotions() {
       {/* Table */}
       <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <colgroup>
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '10%' }} />
+          </colgroup>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}>
               {['Code', 'Description', 'Discount', 'Uses', 'Expires', 'Status', 'Actions'].map(col => (
@@ -205,8 +220,15 @@ export default function Promotions() {
               const expiryDate = p.expiresAt ? new Date(p.expiresAt.length === 10 ? p.expiresAt + 'T23:59:59' : p.expiresAt) : null;
               const expired = expiryDate ? expiryDate < new Date() : false;
               const maxed = p.maxUses !== null && p.usedCount >= p.maxUses;
+              const isSelected = detailPromo?.promoId === p.promoId;
               return (
-                <tr key={p.promoId} style={{ borderBottom: i < shown.length - 1 ? '1px solid var(--color-divider)' : 'none' }}>
+                <tr
+                  key={p.promoId}
+                  onClick={() => setDetailPromo(prev => prev?.promoId === p.promoId ? null : p)}
+                  style={{ borderBottom: i < shown.length - 1 ? '1px solid var(--color-divider)' : 'none', cursor: 'pointer', backgroundColor: isSelected ? 'rgba(15,32,68,0.06)' : 'transparent', transition: 'background-color 0.15s' }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(15,32,68,0.04)'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
                   <td style={{ padding: '14px 16px', fontWeight: 700, fontSize: '14px', color: 'var(--color-primary)', fontFamily: 'monospace' }}>{p.code}</td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '200px' }}>
                     <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description || '—'}</span>
@@ -222,7 +244,7 @@ export default function Promotions() {
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: expired ? 'var(--color-error)' : 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
                     {p.expiresAt ? fmtDate(p.expiresAt) : '—'}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
+                  <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                     {expired || maxed ? (
                       <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '100px', backgroundColor: 'rgba(148,163,184,0.15)', color: 'var(--color-text-muted)', border: '1px solid rgba(148,163,184,0.25)' }}>
                         {expired ? 'Expired' : 'Maxed'}
@@ -241,15 +263,10 @@ export default function Promotions() {
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => openEdit(p)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                        Edit
-                      </button>
-                      <button onClick={() => void handleDelete(p)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-error)' }}>
-                        Delete
-                      </button>
-                    </div>
+                  <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => void handleDelete(p)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-error)' }}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               );
@@ -258,9 +275,103 @@ export default function Promotions() {
         </table>
       </div>
 
+      {/* Detail panel backdrop */}
+      {detailPromo && (
+        <div
+          onClick={() => setDetailPromo(null)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }}
+        />
+      )}
+
+      {/* Detail panel */}
+      {detailPromo && (() => {
+        const p = detailPromo;
+        const expiryDate = p.expiresAt ? new Date(p.expiresAt.length === 10 ? p.expiresAt + 'T23:59:59' : p.expiresAt) : null;
+        const expired = expiryDate ? expiryDate < new Date() : false;
+        const maxed = p.maxUses !== null && p.usedCount >= p.maxUses;
+        return (
+          <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '400px', backgroundColor: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', zIndex: 201, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {/* Panel header */}
+            <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '1px', marginBottom: '6px' }}>{p.code}</div>
+                <span style={{ fontSize: '13px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', backgroundColor: p.type === 'percent' ? 'rgba(59,130,246,0.1)' : 'rgba(34,197,94,0.1)', color: p.type === 'percent' ? '#2563EB' : '#16A34A' }}>
+                  {formatValue(p)}
+                </span>
+              </div>
+              <button onClick={() => setDetailPromo(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1, padding: '2px', flexShrink: 0 }}>✕</button>
+            </div>
+
+            {/* Panel body */}
+            <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Details */}
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Details</div>
+                <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                  {p.description && (
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-divider)', display: 'flex', gap: '10px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0 }}>📝</span>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{p.description}</span>
+                    </div>
+                  )}
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-divider)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Uses</span>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                      {p.usedCount}{p.maxUses ? ` / ${p.maxUses}` : ''}
+                    </span>
+                  </div>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-divider)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Expires</span>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: expired ? 'var(--color-error)' : 'var(--color-text-primary)' }}>
+                      {p.expiresAt ? fmtDate(p.expiresAt) : 'No expiry'}
+                    </span>
+                  </div>
+                  <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Status</span>
+                    {expired || maxed ? (
+                      <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '100px', backgroundColor: 'rgba(148,163,184,0.15)', color: 'var(--color-text-muted)', border: '1px solid rgba(148,163,184,0.25)' }}>
+                        {expired ? 'Expired' : 'Maxed'}
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          onClick={() => void handleToggleActive(p)}
+                          style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '40px', height: '22px', borderRadius: '11px', backgroundColor: p.isActive ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background-color 0.2s' }}
+                        >
+                          <span style={{ position: 'absolute', left: p.isActive ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s' }} />
+                        </button>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: p.isActive ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                          {p.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  onClick={() => openEdit(p)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  ✏️ Edit Promotion
+                </button>
+                <button
+                  onClick={() => void handleDelete(p)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.05)', color: 'var(--color-error)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  🗑️ Delete Promotion
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Create / Edit Modal */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '20px' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: '20px' }}>
           <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '480px', boxShadow: 'var(--shadow-lg)', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
@@ -275,7 +386,6 @@ export default function Promotions() {
               </div>
             )}
 
-            {/* Code — editable on create, read-only on edit */}
             <label style={labelStyle}>Promo Code {!editTarget && '*'}</label>
             {editTarget ? (
               <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)', fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '1px' }}>

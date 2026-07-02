@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { NewPasswordRequiredError } from '../auth/CognitoService';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 
 type Step = 'login' | 'new-password';
 
@@ -109,7 +110,8 @@ export default function Login() {
     <div style={styles.root}>
       <div style={styles.card}>
         <div style={styles.logoWrap}><div style={styles.logo}>🔧</div></div>
-        <h1 style={styles.title}>AutoRepair Admin</h1>
+        <h1 style={styles.title}>{SHOP_NAME}</h1>
+        {SHOP_CITY && <p style={styles.cityLabel}>{SHOP_CITY}</p>}
         <span style={styles.badge}>ADMIN PORTAL</span>
         <p style={styles.subtitle}>Sign in with your admin credentials</p>
 
@@ -181,7 +183,8 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--color-primary)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px',
   },
-  title: { fontSize: '22px', fontWeight: 700, color: 'var(--color-primary)', margin: '0 0 8px' },
+  title: { fontSize: '22px', fontWeight: 700, color: 'var(--color-primary)', margin: '0 0 2px' },
+  cityLabel: { fontSize: '12px', color: 'var(--color-text-muted)', margin: '0 0 8px' },
   badge: {
     display: 'inline-block', fontSize: '11px', fontWeight: 700, letterSpacing: '0.8px',
     color: 'var(--color-secondary)', backgroundColor: 'rgba(245,158,11,0.12)',

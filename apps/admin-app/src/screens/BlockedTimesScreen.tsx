@@ -1,25 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
+  Modal, TextInput, Alert, ActivityIndicator, RefreshControl, Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listBlockedTimes, createBlockedTime, deleteBlockedTime, type BlockedTime } from '../api/blockedTimes';
 
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fmtPickerDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function fmtRange(startDate: string, endDate: string): string {
   const fmt = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   return startDate === endDate ? fmt(startDate) : `${fmt(startDate)} – ${fmt(endDate)}`;
-}
-
-function handleDateInput(text: string, prev: string): string {
-  const isDeleting = text.length < prev.length;
-  const digits = text.replace(/\D/g, '').slice(0, 8);
-  let f = digits;
-  if (digits.length > 4 || (!isDeleting && digits.length === 4)) f = `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  if (digits.length > 6 || (!isDeleting && digits.length === 6)) f = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-  return f;
 }
 
 export default function BlockedTimesScreen() {
@@ -28,8 +28,9 @@ export default function BlockedTimesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [label, setLabel] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDateObj, setStartDateObj] = useState<Date>(new Date());
+  const [endDateObj, setEndDateObj] = useState<Date>(new Date());
+  const [iosPickerTarget, setIosPickerTarget] = useState<'start' | 'end' | null>(null);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -49,19 +50,38 @@ export default function BlockedTimesScreen() {
   useEffect(() => { void load(); }, [load]);
 
   function openModal() {
+    const today = new Date();
     setLabel('');
-    setStartDate('');
-    setEndDate('');
+    setStartDateObj(today);
+    setEndDateObj(today);
+    setIosPickerTarget(null);
     setModalError('');
     setShowModal(true);
   }
 
+  function openDatePicker(which: 'start' | 'end') {
+    const current = which === 'start' ? startDateObj : endDateObj;
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: current,
+        mode: 'date',
+        minimumDate: new Date(),
+        onChange: (event, date) => {
+          if (event.type === 'set' && date) {
+            if (which === 'start') setStartDateObj(date);
+            else setEndDateObj(date);
+          }
+        },
+      });
+    } else {
+      setIosPickerTarget(prev => (prev === which ? null : which));
+    }
+  }
+
   async function handleSave() {
     if (!label.trim()) { setModalError('Label is required.'); return; }
-    if (!startDate.match(/^\d{4}-\d{2}-\d{2}$/) || !endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      setModalError('Enter dates in YYYY-MM-DD format.');
-      return;
-    }
+    const startDate = toDateStr(startDateObj);
+    const endDate = toDateStr(endDateObj);
     if (startDate > endDate) { setModalError('Start date must be on or before end date.'); return; }
 
     setSaving(true);
@@ -164,26 +184,42 @@ export default function BlockedTimesScreen() {
             />
 
             <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Start Date</Text>
-            <TextInput
-              style={styles.input}
-              value={startDate}
-              onChangeText={text => setStartDate(handleDateInput(text, startDate))}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="number-pad"
-              maxLength={10}
-            />
+            <TouchableOpacity style={styles.dateBtn} onPress={() => openDatePicker('start')} activeOpacity={0.75}>
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              <Text style={styles.dateBtnText}>{fmtPickerDate(startDateObj)}</Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && iosPickerTarget === 'start' && (
+              <DateTimePicker
+                value={startDateObj}
+                mode="date"
+                display="spinner"
+                minimumDate={new Date()}
+                onChange={(event, date) => {
+                  if (date) setStartDateObj(date);
+                  if (event.type === 'set') setIosPickerTarget(null);
+                }}
+              />
+            )}
 
             <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>End Date</Text>
-            <TextInput
-              style={styles.input}
-              value={endDate}
-              onChangeText={text => setEndDate(handleDateInput(text, endDate))}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="number-pad"
-              maxLength={10}
-            />
+            <TouchableOpacity style={styles.dateBtn} onPress={() => openDatePicker('end')} activeOpacity={0.75}>
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              <Text style={styles.dateBtnText}>{fmtPickerDate(endDateObj)}</Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && iosPickerTarget === 'end' && (
+              <DateTimePicker
+                value={endDateObj}
+                mode="date"
+                display="spinner"
+                minimumDate={new Date()}
+                onChange={(event, date) => {
+                  if (date) setEndDateObj(date);
+                  if (event.type === 'set') setIosPickerTarget(null);
+                }}
+              />
+            )}
 
             <TouchableOpacity style={[styles.saveBtn, saving && styles.saveBtnDisabled]} onPress={() => void handleSave()} disabled={saving} activeOpacity={0.85}>
               {saving ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.saveBtnText}>Save</Text>}
@@ -225,6 +261,9 @@ const styles = StyleSheet.create({
 
   fieldLabel: { ...typography.label, color: colors.textSecondary, marginBottom: 6, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 12, ...typography.body, color: colors.textPrimary, backgroundColor: colors.background },
+
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 14, backgroundColor: colors.background },
+  dateBtnText: { flex: 1, ...typography.body, color: colors.textPrimary },
 
   saveBtn: { backgroundColor: colors.secondary, borderRadius: borderRadius.lg, paddingVertical: 14, alignItems: 'center', marginTop: spacing.lg, ...shadows.sm },
   saveBtnDisabled: { opacity: 0.6 },

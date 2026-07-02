@@ -27,6 +27,9 @@
       "bundler": "metro"
     },
     "newArchEnabled": false,
-    "scheme": "autorepair-admin"
+    "scheme": "autorepair-admin",
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

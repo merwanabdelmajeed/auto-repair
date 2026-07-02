@@ -5,6 +5,7 @@ export interface Service {
   name: string;
   description: string;
   durationMinutes: number;
+  price?: number;
   isActive: boolean;
 }
 
@@ -12,6 +13,7 @@ export interface ServiceInput {
   name: string;
   description: string;
   durationMinutes: number;
+  price?: number;
   isActive?: boolean;
 }
 

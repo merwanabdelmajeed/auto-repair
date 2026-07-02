@@ -27,6 +27,13 @@
       "bundler": "metro"
     },
     "newArchEnabled": false,
-    "scheme": "autorepair-customer"
+    "scheme": "autorepair-customer",
+    "extra": {
+      "shopName": "Purrfect Auto Service",
+      "eas": {
+        "projectId": "c2985d16-4381-4278-93a8-0a9b9cb8d8d0"
+      }
+    },
+    "owner": "mabdelmajeed"
   }
 }

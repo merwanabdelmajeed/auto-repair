@@ -25,6 +25,15 @@ apply plugin: "com.facebook.react.rootproject"
 
 allprojects {
     repositories {
+        // Remove sonatype snapshot repos added dynamically by plugins — they 504 on release deps
+        all { ArtifactRepository repo ->
+            if (repo instanceof MavenArtifactRepository &&
+                    repo.url.toString().contains('sonatype.org') &&
+                    repo.url.toString().contains('snapshot')) {
+                remove repo
+            }
+        }
+
         maven {
             // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
             url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))

@@ -4,32 +4,33 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 
 ## Applications
 
-| App | Platform | Path | Status |
-|---|---|---|---|
-| Customer App | iOS + Android (React Native / Expo) | `apps/customer-app/` | Phase 6 🔄 |
-| Admin Mobile App | iOS + Android (React Native / Expo) | `apps/admin-app/` | Phase 6 🔄 |
-| Admin Web Portal | Web (React + Vite) | `apps/admin-portal/` | Phase 6 🔄 |
-| Backend | AWS Serverless (SAM) | `backend/` | Phase 6 🔄 |
+| App              | Platform                            | Path                 | Status     |
+| ---------------- | ----------------------------------- | -------------------- | ---------- |
+| Customer App     | iOS + Android (React Native / Expo) | `apps/customer-app/` | Phase 6 ✅ |
+| Admin Mobile App | iOS + Android (React Native / Expo) | `apps/admin-app/`    | Phase 7 ✅ |
+| Admin Web Portal | Web (React + Vite)                  | `apps/admin-portal/` | Phase 7 ✅ |
+| Backend          | AWS Serverless (SAM)                | `backend/`           | Phase 7 ✅ |
 
 ## Phase Status
 
-| Phase | Description | Status |
-|---|---|---|
-| Phase 0 | Application Skeletons | ✅ Complete |
-| Phase 1 | AWS Foundation + Authentication | ✅ Complete |
-| Phase 2 | Core Business Features (Services, Vehicles, Bookings, Live Dashboard) | ✅ Complete |
-| Phase 3 | Email Notifications + Customer Names + All Admin Screens | ✅ Complete |
-| Phase 4 | Capacity Management + Blocked Times | ✅ Complete |
-| Phase 5 | Promotions + Booking UX Polish | ✅ Complete |
-| Phase 6 | Customer Experience & Vehicle Intelligence | 🔄 In Progress |
-| Phase 7 | Analytics & Reporting | 🔜 Pending |
-| Phase 8 | Notifications & Communication | 🔜 Pending |
-| Phase 9 | Admin & Multi-Location Management | 🔜 Pending |
-| Phase 10 | Data Integrity, Scale & Production Hardening | 🔜 Pending |
+| Phase    | Description                                                           | Status         |
+| -------- | --------------------------------------------------------------------- | -------------- |
+| Phase 0  | Application Skeletons                                                 | ✅ Complete    |
+| Phase 1  | AWS Foundation + Authentication                                       | ✅ Complete    |
+| Phase 2  | Core Business Features (Services, Vehicles, Bookings, Live Dashboard) | ✅ Complete    |
+| Phase 3  | Email Notifications + Customer Names + All Admin Screens              | ✅ Complete    |
+| Phase 4  | Capacity Management + Blocked Times                                   | ✅ Complete    |
+| Phase 5  | Promotions + Booking UX Polish                                        | ✅ Complete    |
+| Phase 6  | Customer Experience & Vehicle Intelligence                            | ✅ Complete    |
+| Phase 7  | Analytics & Reporting                                                 | ✅ Complete    |
+| Phase 8  | Notifications & Communication                                         | 🔜 Pending     |
+| Phase 9  | Admin & Multi-Location Management                                     | 🔜 Pending     |
+| Phase 10 | Data Integrity, Scale & Production Hardening                          | 🔜 Pending     |
 
 ---
 
 ### Phase 2 Delivered
+
 - Service catalog — full CRUD (admin portal + admin app)
 - Vehicle management — add / delete (customer app)
 - 4-step booking flow — service → date/time → vehicle → confirm (customer app)
@@ -40,6 +41,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - API Gateway Cognito Authorizer using ID token
 
 ### Phase 3 Delivered
+
 - SES email notifications on appointment status change
 - First + last name collected at customer registration
 - Customer name shown in Bookings views (admin portal + admin app)
@@ -50,6 +52,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - Customer app SettingsScreen — account card + sign out
 
 ### Phase 4 Delivered
+
 - Availability API — returns open/closed status + time slots with booked counts per date
 - Capacity settings — configurable slot duration, max concurrent bookings, per-day operating hours
 - Blocked times — label + date range blocks that close availability for a given period
@@ -62,6 +65,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - Default schedule: 30-min slots, 7:00 AM – 5:00 PM Mon–Sat, Sunday closed (last slot 4:30 PM)
 
 ### Phase 5 Delivered
+
 - **Promotions** — full CRUD (admin app + portal): create/edit modal, code read-only in edit mode, active/inactive toggle, expiry date, max uses, percent/fixed discount type
 - **Promo apply** — admin marks a promo code as applied against an appointment; optimistic UI update with revert on failure; per-customer usage tracked in DynamoDB to prevent reuse
 - **Status picker — admin app** — custom React Native bottom sheet modal replaces Alert sheet: forward action buttons (color-coded by target status) + "Cancel Appointment" and "Dismiss" side-by-side; shared component across Bookings and Dashboard screens
@@ -71,31 +75,46 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - **Valid transitions** — `VALID_NEXT` map: `pending → confirmed/cancelled`, `confirmed → in-progress/cancelled`, `in-progress → completed/cancelled`
 
 ### Phase 6 Delivered (so far)
+
 - **NHTSA vehicle form** — year-first form with cascading NHTSA lookups: year → make → model (year+make-specific) → trim (dropdown when NHTSA has variants, free-text fallback); VIN at top auto-fills all fields; duplicate model name deduplication
 - **Trim intelligence** — trim variants extracted from NHTSA model-name entries (e.g. "GLS 450 4MATIC"); cached per make+year+model; `trimsFetched` state drives dropdown vs. free-text toggle
 - **License plate optional** — backend and customer app updated; admin portal handles null gracefully
 - **Trim in vehicle summary** — `vehicleSummary` in appointments includes trim (e.g. "2021 Mercedes GLS 450 4MATIC"); admin vehicles table shows trim in name column
 - **Phone number** — collected at customer registration (optional); stored as `custom:phone` Cognito attribute + DynamoDB; displayed in admin app customer cards and admin portal customer table; included in search
+- **Vehicle inline edit in booking detail** — Bookings and Dashboard detail panels (admin app + portal) show an expandable vehicle section with Plate, Color, VIN, and Added date; Plate and VIN are editable inline via `PUT /vehicles/{vehicleId}`; admin app values are selectable (press-and-hold to copy)
+- **Promotions detail view** — admin portal: clicking a row opens a right-side detail panel with status toggle, Edit, and Delete; Edit button removed from table Actions column; admin app: tapping a card opens a bottom sheet with the same actions
+- **Dashboard bookings table** — admin portal today's bookings section converted from card layout to a full table matching the Bookings page exactly (same 7 columns, same hover and selected-row styles)
+- **Services click-to-edit** — admin portal and admin app: clicking/tapping a service row/card opens the edit modal directly; standalone Edit button removed
+- **Customer profile editing** — Profile screen in customer app: edit first name, last name, and phone number via bottom sheet modal; updates Cognito attributes in real time
+- **Vehicle service history** — per-vehicle history modal in customer app Vehicles screen: lists all appointments booked for that vehicle with status, date, and service name
 
-### Phase 6 Remaining
-- Customer profile editing — update name and phone from the customer app Settings screen
-- Appointment & vehicle history — per-vehicle service history view in customer app
+### Phase 7 Delivered
+
+- **Price field on services** — optional `price` added to `Service` type and `ServiceInput` in both admin app and admin portal; stored and returned by `GET/POST/PUT /services`; shown in services table (portal) and card meta line (app); Duration + Price rendered as a 2-column row in the edit modal
+- **Analytics Lambda** — `GET /analytics?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` aggregates all appointments + services for the tenant; returns summary KPIs, per-day breakdown, per-service breakdown, and status counts; new and returning customers computed by comparing period customers against historical bookings; admin-role gated
+- **Analytics API clients** — `apps/admin-portal/src/api/analytics.ts` and `apps/admin-app/src/api/analytics.ts` with typed `AnalyticsResponse`
+- **Admin portal Statistics page** — full rewrite: Last 7 / 30 / 90 Days period toggle; 6-KPI grid (bookings, revenue, unique/new customers, avg service time, cancellation rate, returning customers); SVG bar chart with hover tooltips, switchable between Bookings and Revenue view, weekly grouping for 90-day period; horizontal service popularity bars with revenue; status breakdown with colored progress bars; CSV export (daily + service tables in one file)
+- **Admin app Statistics screen** — full rewrite: 7D / 30D / 90D period tabs; 4-tile KPI grid; View-based bookings mini bar chart; service popularity list with progress bars and revenue; status breakdown with color-coded bars; non-blocking activity indicator on refresh
 
 ---
 
-### Phase 7 — Analytics & Reporting (Pending)
-- **Analytics dashboard** — real revenue totals, bookings over time chart, service popularity breakdown, daily/weekly/monthly periods
-- **Customer retention metrics** — repeat vs. new customer ratio, average visits per customer
-- **Data export** — CSV download for bookings and customer lists (admin portal)
-- **Dashboard date range picker** — filter KPIs by custom date range
+### Phase 8 — Notifications & Communication (Pending)
+
+- **Push notifications** — Expo Notifications + AWS SNS: appointment reminders (24h before), status change alerts delivered to customer device
+- **Email verification** — remove PreSignUp auto-confirm; Cognito sends OTP to email on signup; add verification code screen to customer app registration flow
+- **SMS notifications** — requires phone verification (migrate from `custom:phone` to standard `phone_number` Cognito attribute in E.164 format + SNS/Pinpoint origination)
+- **In-app notification center** — admin app + portal notification feed using `autorepair-notifications` DynamoDB table (already provisioned)
 
 ### Phase 8 — Notifications & Communication (Pending)
+
 - **Push notifications** — Expo Notifications + AWS SNS: appointment reminders (24h before), status change alerts delivered to customer device
 - **Email verification** — remove PreSignUp auto-confirm; Cognito sends OTP to email on signup; add verification code screen to customer app registration flow
 - **SMS notifications** — requires phone verification (migrate from `custom:phone` to standard `phone_number` Cognito attribute in E.164 format + SNS/Pinpoint origination)
 - **In-app notification center** — admin app + portal notification feed using `autorepair-notifications` DynamoDB table (already provisioned)
 
 ### Phase 9 — Admin & Multi-Location Management (Pending)
+
+
 - **Admin user invite flow** — tenant owner sends invite link/code; invitee registers via admin app; replaces current manual Cognito user creation
 - **Role management UI** — tenant owner can assign/revoke Location Manager role per location
 - **Location management UI** — create/edit/deactivate locations; assign services and capacity settings per location
@@ -103,6 +122,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - **Tenant profile** — shop name, address, logo, contact info configurable from admin portal Settings page
 
 ### Phase 10 — Data Integrity, Scale & Production Hardening (Pending)
+
 - **Pagination** — DynamoDB `LastEvaluatedKey` loop + cursor-based API endpoints + `FlatList` `onEndReached` in admin app + server-side paginated tables in admin portal (currently all lists silently truncate at 1MB)
 - **Atomic slot booking** — replace check-then-write with DynamoDB conditional PutItem + atomic counter to eliminate concurrent booking race condition
 - **Availability GSI** — add GSI on `tenantId + scheduledDate` to replace full-table FilterExpression scans on appointment queries
@@ -149,12 +169,14 @@ npx expo run:ios       # iOS simulator (Mac only)
 > Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
 
 ### Screens
-| Screen | Description |
-|---|---|
-| Login / Register | Email + password auth; first name, last name, phone (optional) on registration |
-| Appointments | Upcoming / past tabs, date strip + slot picker booking modal, cancel, sort toggle |
-| Vehicles | Add / delete vehicles; NHTSA-driven year → make → model → trim cascade; VIN auto-fill |
-| Settings | Account info, sign out |
+
+| Screen           | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Login / Register | Email + password auth; first name, last name, phone (optional) on registration                    |
+| Appointments     | Upcoming / past tabs, date strip + slot picker booking modal, cancel, sort toggle                 |
+| Vehicles         | Add / delete vehicles; NHTSA-driven year → make → model → trim cascade; VIN auto-fill; tap for service history modal |
+| Profile          | View name, email, phone; edit first name, last name, phone via modal; sign out                    |
+| Settings         | App info (terms, privacy, help, version); sign out                                                |
 
 ### Environment variables (`apps/customer-app/.env`)
 
@@ -180,17 +202,18 @@ npx expo run:ios       # iOS simulator (Mac only)
 > Uses `expo-dev-client`. Do not use `npx expo start` — it requires a native build.
 
 ### Screens
-| Screen | Description |
-|---|---|
-| Login | Email + password, handles new-password challenge |
-| Dashboard | Live KPIs, today's bookings with inline status bottom sheet and promo apply |
-| Bookings | Appointment list, status tabs, bottom-sheet status picker, promo apply |
-| Customers | Customer list with name, email, phone, joined date; searchable by name / email / phone |
-| Vehicles | All tenant vehicles, searchable by make / model / plate / VIN; trim shown in name |
-| Services | Full CRUD — add, edit, delete, active toggle |
-| Promotions | Full CRUD — create/edit modal, active/inactive card toggle |
-| Capacity | Slot duration, max concurrent, per-day operating hours |
-| Blocked Times | Block date ranges from accepting bookings |
+
+| Screen        | Description                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| Login         | Email + password, handles new-password challenge                                                    |
+| Dashboard     | Live KPIs; today's bookings with status bottom sheet, promo apply, and expandable vehicle detail    |
+| Bookings      | Appointment list, status tabs, bottom-sheet status picker, promo apply, expandable vehicle detail   |
+| Customers     | Customer list with name, email, phone, joined date; searchable by name / email / phone              |
+| Vehicles      | All tenant vehicles, searchable by make / model / plate / VIN; trim shown in name                  |
+| Services      | Full CRUD — tap card to edit, delete button; active toggle in edit modal                            |
+| Promotions    | Full CRUD — tap card for detail sheet with edit/delete/toggle; create via FAB                       |
+| Capacity      | Slot duration, max concurrent, per-day operating hours                                              |
+| Blocked Times | Block date ranges from accepting bookings                                                           |
 
 ### Environment variables (`apps/admin-app/.env`)
 
@@ -214,23 +237,24 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
+| Command           | Description              |
+| ----------------- | ------------------------ |
+| `npm run dev`     | Start development server |
+| `npm run build`   | Build for production     |
 | `npm run preview` | Preview production build |
 
 ### Pages
-| Page | Description |
-|---|---|
-| Dashboard | Live KPIs, today's bookings with inline popover status picker and promo apply |
-| Bookings | Appointment table, status tabs, popover status picker, promo apply |
-| Customers | Customer table with name, email, phone, status, joined date; searchable by name / email / phone |
-| Vehicles | All tenant vehicles with trim; searchable by make / model / plate / VIN |
-| Services | Full CRUD — add, edit, delete, active toggle |
-| Promotions | Full CRUD — create/edit modal, active/inactive card toggle |
-| Capacity | Slot duration, max concurrent, per-day operating hours |
-| Blocked Times | Block date ranges from accepting bookings |
+
+| Page          | Description                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| Dashboard     | Live KPIs; today's bookings table (matches Bookings page) with popover status picker, promo apply, and expandable vehicle detail |
+| Bookings      | Appointment table, status tabs, popover status picker, promo apply, right-panel detail with expandable vehicle section and inline Plate/VIN edit |
+| Customers     | Customer table with name, email, phone, status, joined date; searchable by name / email / phone          |
+| Vehicles      | All tenant vehicles with trim; searchable by make / model / plate / VIN                                  |
+| Services      | Full CRUD — click row to edit, delete button in Actions column; active toggle in edit modal              |
+| Promotions    | Full CRUD — click row for right-side detail panel with edit/delete/toggle; create via Add button         |
+| Capacity      | Slot duration, max concurrent, per-day operating hours                                                   |
+| Blocked Times | Block date ranges from accepting bookings                                                                |
 
 ### Environment variables (`apps/admin-portal/.env`)
 
@@ -255,40 +279,40 @@ sam deploy          # first time: sam deploy --guided
 
 ### AWS Resources (deployed to us-east-1)
 
-| Resource | Details |
-|---|---|
+| Resource          | Details                                                                          |
+| ----------------- | -------------------------------------------------------------------------------- |
 | Cognito User Pool | Single pool, 3 app clients (customer, admin-mobile, admin-portal), 4 user groups |
-| DynamoDB | 12 tables, on-demand billing, PK/SK pattern with GSIs |
-| S3 | 2 buckets (uploads + assets), versioning enabled |
-| API Gateway | REST API, regional endpoint, `/prod` stage, Cognito authorizer |
-| SES | Appointment status change emails (sandbox — sender: verified email) |
-| Lambda | 12 functions — see table below |
+| DynamoDB          | 12 tables, on-demand billing, PK/SK pattern with GSIs                            |
+| S3                | 2 buckets (uploads + assets), versioning enabled                                 |
+| API Gateway       | REST API, regional endpoint, `/prod` stage, Cognito authorizer                   |
+| SES               | Appointment status change emails (sandbox — sender: verified email)              |
+| Lambda            | 12 functions — see table below                                                   |
 
 ### Lambda Functions
 
-| Function | Trigger | Purpose |
-|---|---|---|
-| `autorepair-pre-signup` | Cognito PreSignUp | Auto-confirm customers, block self-signup for admin clients |
-| `autorepair-post-confirmation` | Cognito PostConfirmation | Write customer record to DynamoDB on signup |
-| `autorepair-health` | GET /health | Health check (no auth) |
-| `autorepair-services` | GET/POST/PUT/DELETE /services | Service catalog CRUD |
-| `autorepair-vehicles` | GET/POST/DELETE /vehicles | Vehicle management |
-| `autorepair-appointments` | GET/POST/PATCH /appointments | Booking flow + status updates + SES email |
-| `autorepair-customers` | GET /customers | Customer list (admin only) |
-| `autorepair-dashboard` | GET /dashboard/summary | KPI aggregation |
-| `autorepair-capacity` | GET/PUT /capacity | Slot duration, max concurrent, operating hours |
-| `autorepair-blocked-times` | GET/POST/DELETE /blocked-times | Date range blocks |
-| `autorepair-availability` | GET /availability | Available slots for a given date |
-| `autorepair-promotions` | GET/POST/PUT /promotions + POST /promotions/{id}/apply | Promotions CRUD + per-customer apply |
+| Function                       | Trigger                                                | Purpose                                                     |
+| ------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
+| `autorepair-pre-signup`        | Cognito PreSignUp                                      | Auto-confirm customers, block self-signup for admin clients |
+| `autorepair-post-confirmation` | Cognito PostConfirmation                               | Write customer record to DynamoDB on signup                 |
+| `autorepair-health`            | GET /health                                            | Health check (no auth)                                      |
+| `autorepair-services`          | GET/POST/PUT/DELETE /services                          | Service catalog CRUD                                        |
+| `autorepair-vehicles`          | GET/POST/PUT/DELETE /vehicles                          | Vehicle management + admin Plate/VIN edit                   |
+| `autorepair-appointments`      | GET/POST/PATCH /appointments                           | Booking flow + status updates + SES email                   |
+| `autorepair-customers`         | GET /customers                                         | Customer list (admin only)                                  |
+| `autorepair-dashboard`         | GET /dashboard/summary                                 | KPI aggregation                                             |
+| `autorepair-capacity`          | GET/PUT /capacity                                      | Slot duration, max concurrent, operating hours              |
+| `autorepair-blocked-times`     | GET/POST/DELETE /blocked-times                         | Date range blocks                                           |
+| `autorepair-availability`      | GET /availability                                      | Available slots for a given date                            |
+| `autorepair-promotions`        | GET/POST/PUT /promotions + POST /promotions/{id}/apply | Promotions CRUD + per-customer apply                        |
 
 ### Cognito User Groups
 
-| Group | Who |
-|---|---|
-| `super-admins` | Platform administrators |
-| `tenant-owners` | Shop owners |
-| `location-managers` | Location-level staff |
-| `customers` | End customers |
+| Group               | Who                     |
+| ------------------- | ----------------------- |
+| `super-admins`      | Platform administrators |
+| `tenant-owners`     | Shop owners             |
+| `location-managers` | Location-level staff    |
+| `customers`         | End customers           |
 
 ---
 
@@ -343,15 +367,15 @@ auto-repair/
 
 ## Design System
 
-| Token | Value | Usage |
-|---|---|---|
-| Primary | `#0F2044` | Navigation, headers, buttons |
-| Secondary | `#F59E0B` | Accents, highlights, CTAs |
-| Background | `#F1F5F9` | Screen backgrounds |
-| Surface | `#FFFFFF` | Cards, modals |
-| Text Primary | `#1E293B` | Main text |
-| Text Secondary | `#64748B` | Subtitles, placeholders |
-| Border | `#E2E8F0` | Dividers, card borders |
+| Token          | Value     | Usage                        |
+| -------------- | --------- | ---------------------------- |
+| Primary        | `#0F2044` | Navigation, headers, buttons |
+| Secondary      | `#F59E0B` | Accents, highlights, CTAs    |
+| Background     | `#F1F5F9` | Screen backgrounds           |
+| Surface        | `#FFFFFF` | Cards, modals                |
+| Text Primary   | `#1E293B` | Main text                    |
+| Text Secondary | `#64748B` | Subtitles, placeholders      |
+| Border         | `#E2E8F0` | Dividers, card borders       |
 
 ---
 
@@ -364,6 +388,7 @@ tenantId + locationId
 ```
 
 Example tenant hierarchy:
+
 ```
 Joe's Auto Repair (Tenant)
   ├── San Jose (Location)

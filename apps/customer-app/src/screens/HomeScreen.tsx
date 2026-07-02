@@ -12,10 +12,10 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listPromotions, type PublicPromotion } from '../api/promotions';
+import { useAuth } from '../auth/AuthContext';
 
 const QUICK_ACTIONS = [
-  { icon: 'calendar-outline' as const, label: 'Book\nAppointment', screen: 'Appointments' },
-  { icon: 'car-outline' as const, label: 'My\nVehicles', screen: 'Vehicles' },
+  { icon: 'car-outline' as const, label: 'My Vehicles', screen: 'Vehicles' },
   { icon: 'pricetag-outline' as const, label: 'Promotions', screen: 'Promotions' },
   { icon: 'notifications-outline' as const, label: 'Notifications', screen: 'Notifications' },
 ];
@@ -26,8 +26,13 @@ function fmtExpiry(iso: string | null) {
 }
 
 export default function HomeScreen({ navigation }: any) {
+  const { user } = useAuth();
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
+
+  const displayName = user?.givenName && user?.familyName
+    ? `${user.givenName} ${user.familyName}`
+    : user?.email ?? '';
 
   useFocusEffect(useCallback(() => {
     setLoadingPromos(true);
@@ -51,11 +56,8 @@ export default function HomeScreen({ navigation }: any) {
               <Ionicons name="construct" size={28} color={colors.secondary} />
             </View>
             <View style={styles.bannerText}>
-              <Text style={styles.bannerGreeting}>Welcome back!</Text>
-              <Text style={styles.bannerTitle}>AutoRepair Pro</Text>
-              <Text style={styles.bannerSub}>
-                Your trusted auto service partner
-              </Text>
+              <Text style={styles.bannerGreeting}>Welcome back,</Text>
+              <Text style={styles.bannerTitle}>{displayName}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -129,14 +131,6 @@ export default function HomeScreen({ navigation }: any) {
           );
         })}
 
-        {/* Shop Announcement */}
-        <View style={styles.announcement}>
-          <Ionicons name="megaphone-outline" size={20} color={colors.primary} style={{ marginRight: spacing.sm }} />
-          <Text style={styles.announcementText}>
-            Extended hours this weekend — open Saturday 7AM to 6PM
-          </Text>
-        </View>
-
         <View style={styles.bottomPad} />
       </ScrollView>
     </Layout>
@@ -171,18 +165,13 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1 },
   bannerGreeting: {
-    ...typography.caption,
-    color: 'rgba(255,255,255,0.6)',
-    marginBottom: 2,
+    ...typography.small,
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 4,
   },
   bannerTitle: {
-    ...typography.h3,
+    ...typography.h2,
     color: colors.white,
-    marginBottom: 2,
-  },
-  bannerSub: {
-    ...typography.small,
-    color: 'rgba(255,255,255,0.5)',
   },
   bookBtn: {
     flexDirection: 'row',
@@ -312,21 +301,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 
-  announcement: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245,158,11,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    borderRadius: borderRadius.lg,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    padding: spacing.md,
-  },
-  announcementText: {
-    ...typography.bodySmall,
-    color: colors.textPrimary,
-    flex: 1,
-  },
   bottomPad: { height: spacing.xl },
 });

@@ -1,11 +1,12 @@
 import React from 'react';
+import { SHOP_NAME } from '../constants';
 
 const SETTINGS_SECTIONS = [
   {
     title: 'Business Profile',
     items: [
-      { label: 'Business Name', value: "Joe's Auto Repair", type: 'text' },
-      { label: 'Legal Business Name', value: 'Joe\'s Auto Repair LLC', type: 'text' },
+      { label: 'Business Name', value: SHOP_NAME, type: 'text' },
+      { label: 'Legal Business Name', value: `${SHOP_NAME} LLC`, type: 'text' },
       { label: 'Primary Contact Email', value: 'admin@joesauto.com', type: 'text' },
       { label: 'Business Phone', value: '(408) 555-0100', type: 'text' },
       { label: 'Website', value: 'www.joesauto.com', type: 'text' },
@@ -46,7 +47,7 @@ export default function Settings() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'var(--color-primary)', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px', boxShadow: 'var(--shadow-md)' }}>
         <div style={{ width: '56px', height: '56px', borderRadius: '14px', backgroundColor: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', flexShrink: 0 }}>🏢</div>
         <div style={{ flex: 1 }}>
-          <div style={{ color: 'white', fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>Joe's Auto Repair</div>
+          <div style={{ color: 'white', fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>{SHOP_NAME}</div>
           <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '13px' }}>Tenant Owner · 1 Location · Phase 0</div>
         </div>
         <button style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>

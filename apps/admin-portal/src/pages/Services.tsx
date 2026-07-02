@@ -8,7 +8,7 @@ import {
   type ServiceInput,
 } from '../api/services';
 
-const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, isActive: true };
+const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, price: undefined, isActive: true };
 
 export default function Services() {
   const [services, setServices] = useState<Service[]>([]);
@@ -44,7 +44,7 @@ export default function Services() {
 
   function openEdit(svc: Service) {
     setEditing(svc);
-    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, isActive: svc.isActive });
+    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, price: svc.price, isActive: svc.isActive });
     setFormError('');
     setShowModal(true);
   }
@@ -101,34 +101,42 @@ export default function Services() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}>
-              {['Service Name', 'Description', 'Duration', 'Status', 'Actions'].map(col => (
+              {['Service Name', 'Description', 'Duration', 'Price', 'Status', 'Actions'].map(col => (
                 <th key={col} style={{ textAlign: 'left', padding: '13px 16px', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading services…</td></tr>
+              <tr><td colSpan={6} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading services…</td></tr>
             ) : services.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <tr><td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: '36px', marginBottom: '12px' }}>🔧</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>No services yet</div>
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Add your first service to let customers start booking.</div>
               </td></tr>
             ) : services.map((svc, i) => (
-              <tr key={svc.serviceId} style={{ borderBottom: i < services.length - 1 ? '1px solid var(--color-divider)' : 'none' }}>
+              <tr
+                key={svc.serviceId}
+                onClick={() => openEdit(svc)}
+                style={{ borderBottom: i < services.length - 1 ? '1px solid var(--color-divider)' : 'none', cursor: 'pointer', transition: 'background-color 0.1s' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(15,32,68,0.025)'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
                 <td style={{ padding: '14px 16px', fontWeight: 600, fontSize: '14px', color: 'var(--color-text-primary)' }}>{svc.name}</td>
                 <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '260px' }}>
                   <span style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{svc.description || '—'}</span>
                 </td>
                 <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{svc.durationMinutes} min</td>
+                <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                  {svc.price != null ? `$${svc.price.toFixed(2)}` : '—'}
+                </td>
                 <td style={{ padding: '14px 16px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '100px', backgroundColor: svc.isActive ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.15)', color: svc.isActive ? 'var(--color-success)' : 'var(--color-text-muted)', border: `1px solid ${svc.isActive ? 'rgba(34,197,94,0.25)' : 'rgba(148,163,184,0.25)'}` }}>
                     {svc.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </td>
-                <td style={{ padding: '14px 16px', display: 'flex', gap: '8px' }}>
-                  <button onClick={() => openEdit(svc)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-text-secondary)' }}>Edit</button>
+                <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => void handleDelete(svc)} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-error)' }}>Delete</button>
                 </td>
               </tr>
@@ -153,19 +161,42 @@ export default function Services() {
             {[
               { label: 'Service Name *', key: 'name', type: 'text', placeholder: 'e.g. Oil Change' },
               { label: 'Description', key: 'description', type: 'text', placeholder: 'Brief description…' },
-              { label: 'Duration (minutes) *', key: 'durationMinutes', type: 'number', placeholder: '30' },
             ].map(f => (
               <div key={f.key} style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{f.label}</label>
                 <input
-                  type={f.type}
+                  type="text"
                   value={String(form[f.key as keyof ServiceInput] ?? '')}
-                  onChange={e => setForm(prev => ({ ...prev, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value }))}
+                  onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
                 />
               </div>
             ))}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration (min) *</label>
+                <input
+                  type="number"
+                  value={String(form.durationMinutes)}
+                  onChange={e => setForm(prev => ({ ...prev, durationMinutes: Number(e.target.value) }))}
+                  placeholder="30"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Price ($)</label>
+                <input
+                  type="number"
+                  value={form.price != null ? String(form.price) : ''}
+                  onChange={e => setForm(prev => ({ ...prev, price: e.target.value === '' ? undefined : Number(e.target.value) }))}
+                  placeholder="e.g. 49.99"
+                  min="0"
+                  step="0.01"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
 
             <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <input type="checkbox" id="isActive" checked={form.isActive ?? true} onChange={e => setForm(prev => ({ ...prev, isActive: e.target.checked }))} />

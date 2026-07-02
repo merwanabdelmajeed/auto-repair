@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SHOP_NAME, SHOP_CITY } from '../constants';
 import {
   View,
   Text,
@@ -56,7 +57,8 @@ export default function LoginScreen({ onNavigateToRegister }: Props) {
           <View style={styles.logoCircle}>
             <Ionicons name="construct" size={36} color={colors.secondary} />
           </View>
-          <Text style={styles.title}>AutoRepair Pro</Text>
+          <Text style={styles.title}>{SHOP_NAME}</Text>
+          {SHOP_CITY ? <Text style={styles.cityLabel}>{SHOP_CITY}</Text> : null}
           <Text style={styles.subtitle}>Sign in to your account</Text>
         </View>
 
@@ -150,7 +152,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     ...shadows.md,
   },
-  title: { ...typography.h2, color: colors.primary, marginBottom: spacing.xs },
+  title: { ...typography.h2, color: colors.primary, marginBottom: 2 },
+  cityLabel: { ...typography.small, color: colors.textMuted, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: colors.textSecondary },
   card: {
     backgroundColor: colors.surface,

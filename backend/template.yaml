@@ -60,6 +60,19 @@ Resources:
                   - ses:SendEmail
                   - ses:SendRawEmail
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-token'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-secret'
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
 
   # ── COGNITO ───────────────────────────────────────────────
   UserPool:
@@ -785,6 +798,40 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /vehicles/{vehicleId}
             Method: DELETE
+        VehiclePut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /vehicles/{vehicleId}
+            Method: PUT
+
+  PlateLookupFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/vehicles/plateHandler.ts]
+    Properties:
+      FunctionName: autorepair-plate-lookup
+      Handler: plateHandler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 15
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          CARAPI_TOKEN_PARAM: /autorepair/carapi-token
+          CARAPI_SECRET_PARAM: /autorepair/carapi-secret
+      Events:
+        PlateLookup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /vehicles/plate
+            Method: GET
 
   AppointmentsFunction:
     Type: AWS::Serverless::Function
@@ -1016,6 +1063,115 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /promotions/{promoId}/apply
             Method: POST
+
+# ─────────────────────────────────────────────────────────────
+# NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────
+  PushTokenFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/users/pushToken/handler.ts]
+    Properties:
+      FunctionName: autorepair-push-token
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        PushTokenPut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /users/push-token
+            Method: PUT
+
+  NotificationsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/notifications/handler.ts]
+    Properties:
+      FunctionName: autorepair-notifications
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        NotificationsGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /notifications
+            Method: GET
+        NotificationsRead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /notifications/{notifId}/read
+            Method: PUT
+
+  NotificationReminderFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/notifications/reminder/handler.ts]
+    Properties:
+      FunctionName: autorepair-notification-reminder
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 60
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        HourlySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Name: autorepair-reminder-schedule
+            Description: Send 24h and 2h appointment reminders
+            Enabled: true
+
+# ─────────────────────────────────────────────────────────────
+# ANALYTICS
+# ─────────────────────────────────────────────────────────────
+  AnalyticsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/analytics/handler.ts]
+    Properties:
+      FunctionName: autorepair-analytics
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        AnalyticsGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /analytics
+            Method: GET
 
 # ─────────────────────────────────────────────────────────────
 # OUTPUTS

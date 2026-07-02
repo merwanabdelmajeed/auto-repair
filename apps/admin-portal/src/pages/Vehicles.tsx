@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listVehicles, type Vehicle } from '../api/vehicles';
+import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { listCustomers, type Customer } from '../api/customers';
 
 function fmtDate(iso: string) {
@@ -12,18 +12,45 @@ function displayName(c: Customer) {
   return c.email;
 }
 
+function initials(c: Customer) {
+  if (c.firstName || c.lastName) return `${c.firstName?.[0] ?? ''}${c.lastName?.[0] ?? ''}`.toUpperCase();
+  return c.email[0].toUpperCase();
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', border: '1px solid var(--color-primary)',
+  borderRadius: '6px', padding: '7px 10px', fontSize: '13px',
+  color: 'var(--color-text-primary)', backgroundColor: 'var(--color-surface)', outline: 'none',
+};
+
 export default function Vehicles() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const customerIdFilter = searchParams.get('customerId');
+  const vehicleIdParam = searchParams.get('vehicleId');
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
+
+  // inline edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPlate, setEditPlate] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    if (vehicleIdParam && vehicles.length > 0) {
+      const match = vehicles.find(v => v.vehicleId === vehicleIdParam);
+      if (match) openDetail(match);
+    }
+  }, [vehicleIdParam, vehicles]);
 
   async function load() {
     try {
@@ -38,6 +65,45 @@ export default function Vehicles() {
       setError('Failed to load vehicles.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openDetail(v: Vehicle) {
+    setDetailVehicle(v);
+    setIsEditing(false);
+    setEditError('');
+  }
+
+  function startEdit() {
+    if (!detailVehicle) return;
+    setEditPlate(detailVehicle.licensePlate ?? '');
+    setEditVin(detailVehicle.vin ?? '');
+    setEditError('');
+    setIsEditing(true);
+  }
+
+  function cancelEdit() {
+    setIsEditing(false);
+    setEditError('');
+  }
+
+  async function saveEdit() {
+    if (!detailVehicle) return;
+    setSaving(true);
+    setEditError('');
+    try {
+      const updated = await updateVehicle(detailVehicle.vehicleId, {
+        licensePlate: editPlate.trim() || null,
+        vin: editVin.trim() || null,
+      });
+      const merged = { ...detailVehicle, ...updated };
+      setVehicles(prev => prev.map(v => v.vehicleId === detailVehicle.vehicleId ? merged : v));
+      setDetailVehicle(merged);
+      setIsEditing(false);
+    } catch {
+      setEditError('Failed to save changes.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -57,7 +123,6 @@ export default function Vehicles() {
 
   return (
     <div style={{ maxWidth: '1100px' }}>
-      {/* Search + count */}
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
           <span>🔍</span>
@@ -73,17 +138,13 @@ export default function Vehicles() {
         </div>
       </div>
 
-      {/* Filter banner */}
       {filterCustomer && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(15,32,68,0.06)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 16px', marginBottom: '16px', fontSize: '13px' }}>
           <span>👤</span>
           <span style={{ color: 'var(--color-text-secondary)' }}>
             Showing vehicles for <strong style={{ color: 'var(--color-text-primary)' }}>{displayName(filterCustomer)}</strong>
           </span>
-          <button
-            onClick={() => setSearchParams({})}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '2px 6px' }}
-          >
+          <button onClick={() => setSearchParams({})} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '2px 6px' }}>
             Show all
           </button>
         </div>
@@ -113,29 +174,24 @@ export default function Vehicles() {
                 <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>
                   {search ? 'No vehicles match your search' : filterCustomer ? 'This customer has no registered vehicles' : 'No vehicles registered yet'}
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                  Vehicles are added by customers through the customer app.
-                </div>
+                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Vehicles are added by customers through the customer app.</div>
               </td></tr>
             ) : filtered.map((v, i) => {
               const owner = customerMap[v.customerId];
+              const isDetail = detailVehicle?.vehicleId === v.vehicleId;
               return (
-                <tr key={v.vehicleId} style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--color-divider)' : 'none' }}>
+                <tr
+                  key={v.vehicleId}
+                  onClick={() => openDetail(v)}
+                  style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--color-divider)' : 'none', cursor: 'pointer', backgroundColor: isDetail ? 'rgba(15,32,68,0.04)' : 'transparent', transition: 'background-color 0.1s' }}
+                  onMouseEnter={e => { if (!isDetail) e.currentTarget.style.backgroundColor = 'rgba(15,32,68,0.025)'; }}
+                  onMouseLeave={e => { if (!isDetail) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{v.year} {v.make} {v.model}{v.trim ? ' ' + v.trim : ''}</div>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    {owner ? (
-                      <button
-                        onClick={() => navigate(`/customers?customerId=${v.customerId}`)}
-                        style={{ background: 'none', border: 'none', padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(15,32,68,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-                      >
-                        <span style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: 600 }}>{displayName(owner)}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>›</span>
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>—</span>
-                    )}
+                  <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                    {owner ? displayName(owner) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     {v.licensePlate
@@ -151,6 +207,139 @@ export default function Vehicles() {
           </tbody>
         </table>
       </div>
+
+      {/* Detail Panel */}
+      {detailVehicle && (() => {
+        const v = detailVehicle;
+        const owner = customerMap[v.customerId];
+        return (
+          <>
+            <div onClick={() => { setDetailVehicle(null); setIsEditing(false); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
+            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '400px', backgroundColor: 'var(--color-surface)', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', zIndex: 201, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 16px', borderBottom: '1px solid var(--color-border)' }}>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Vehicle Details</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {!isEditing && (
+                    <button
+                      onClick={startEdit}
+                      style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '5px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600 }}
+                    >
+                      ✏️ Edit Plate / VIN
+                    </button>
+                  )}
+                  <button onClick={() => { setDetailVehicle(null); setIsEditing(false); }} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>✕</button>
+                </div>
+              </div>
+
+              <div style={{ padding: '20px' }}>
+                {/* Vehicle header */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
+                  <div style={{ width: '72px', height: '72px', borderRadius: '16px', backgroundColor: 'rgba(15,32,68,0.08)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', marginBottom: '10px' }}>
+                    🚗
+                  </div>
+                  <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>
+                    {v.year} {v.make} {v.model}{v.trim ? ' ' + v.trim : ''}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Details</div>
+                <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>
+                  {/* License Plate */}
+                  {isEditing ? (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0 }}>🪪</span>
+                      <input
+                        value={editPlate}
+                        onChange={e => setEditPlate(e.target.value.toUpperCase())}
+                        placeholder="License plate"
+                        style={{ ...inputStyle, marginBottom: 0 }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>🪪</span>
+                      <span style={{ fontSize: '13px', color: v.licensePlate ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                        {v.licensePlate || 'No license plate'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>🎨</span>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{v.color}</span>
+                  </div>
+
+                  {/* VIN */}
+                  {isEditing ? (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0 }}>🔢</span>
+                      <input
+                        value={editVin}
+                        onChange={e => setEditVin(e.target.value.toUpperCase())}
+                        placeholder="VIN number"
+                        style={{ ...inputStyle, marginBottom: 0, fontFamily: 'monospace' }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>🔢</span>
+                      <span style={{ fontSize: '13px', color: v.vin ? 'var(--color-text-primary)' : 'var(--color-text-muted)', fontFamily: v.vin ? 'monospace' : 'inherit' }}>
+                        {v.vin ? `VIN: ${v.vin}` : 'No VIN on file'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📅</span>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Added {fmtDate(v.createdAt)}</span>
+                  </div>
+                </div>
+
+                {/* Edit error */}
+                {editError && (
+                  <div style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', color: 'var(--color-error)', fontSize: '13px' }}>
+                    {editError}
+                  </div>
+                )}
+
+                {/* Edit actions */}
+                {isEditing && (
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                    <button onClick={cancelEdit} style={{ flex: 1, padding: '10px', border: '1px solid var(--color-border)', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                    <button onClick={() => void saveEdit()} disabled={saving} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--color-secondary)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                      {saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </div>
+                )}
+
+                {owner && !isEditing && (
+                  <>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Owner</div>
+                    <div
+                      onClick={() => { setDetailVehicle(null); navigate(`/customers?customerId=${v.customerId}`); }}
+                      style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '14px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+                    >
+                      <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'white', flexShrink: 0 }}>
+                        {initials(owner)}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '2px' }}>{displayName(owner)}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: owner.phone ? '2px' : 0 }}>{owner.email}</div>
+                        {owner.phone && <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{owner.phone}</div>}
+                      </div>
+                      <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>›</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

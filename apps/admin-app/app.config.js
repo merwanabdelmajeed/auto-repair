@@ -1,0 +1,10 @@
+const shopConfig = require('../../shop.config.json');
+
+module.exports = ({ config }) => ({
+  ...config,
+  extra: {
+    ...config.extra,
+    shopName: shopConfig.shopName,
+    shopCity: shopConfig.shopCity,
+  },
+});
