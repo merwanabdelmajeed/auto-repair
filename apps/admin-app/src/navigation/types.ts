@@ -4,7 +4,7 @@ export type AuthStackParamList = {
 
 export type AdminDrawerParamList = {
   Dashboard: undefined;
-  Bookings: undefined;
+  Bookings: { appointmentId?: string } | undefined;
   Customers: { customerId?: string } | undefined;
   Vehicles: { customerId?: string } | undefined;
   Services: undefined;
@@ -13,4 +13,5 @@ export type AdminDrawerParamList = {
   Promotions: undefined;
   Statistics: undefined;
   Settings: undefined;
+  Notifications: undefined;
 };

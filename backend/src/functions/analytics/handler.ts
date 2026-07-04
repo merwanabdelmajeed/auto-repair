@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
@@ -25,21 +25,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const pk = `TENANT#${tenantId}`;
 
-    const [apptResult, svcResult] = await Promise.all([
-      db.send(new QueryCommand({
+    const [allAppts, services] = await Promise.all([
+      queryAll({
         TableName: TABLE.APPOINTMENTS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
         ExpressionAttributeValues: { ':pk': pk, ':prefix': 'APPT#' },
-      })),
-      db.send(new QueryCommand({
+      }),
+      queryAll({
         TableName: TABLE.SERVICES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
         ExpressionAttributeValues: { ':pk': pk, ':prefix': 'SERVICE#' },
-      })),
+      }),
     ]);
-
-    const allAppts = apptResult.Items ?? [];
-    const services = svcResult.Items ?? [];
 
     const priceMap = new Map<string, number>();
     const durationMap = new Map<string, number>();
@@ -144,7 +141,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in analytics handler', { error: e });
     return serverError();
   }
 };

@@ -1,8 +1,9 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand, PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
@@ -19,21 +20,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'GET') {
       if (isAdmin) {
         // Admins see all vehicles for the tenant
-        const result = await db.send(new QueryCommand({
+        const items = await queryAll({
           TableName: TABLE.VEHICLES,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
           ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'VEHICLE#' },
-        }));
-        return ok((result.Items ?? []).map(toVehicle));
+        });
+        return ok(items.map(toVehicle));
       } else {
         // Customers see their own vehicles via GSI1
-        const result = await db.send(new QueryCommand({
+        const items = await queryAll({
           TableName: TABLE.VEHICLES,
           IndexName: 'GSI1',
           KeyConditionExpression: 'GSI1PK = :gsi1pk',
           ExpressionAttributeValues: { ':gsi1pk': `CUSTOMER#${userId}` },
-        }));
-        return ok((result.Items ?? []).map(toVehicle));
+        });
+        return ok(items.map(toVehicle));
       }
     }
 
@@ -104,7 +105,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
     if ((e as { name?: string }).name === 'ConditionalCheckFailedException') return notFound('Vehicle not found');
-    console.error(e);
+    logger.error('Unhandled error in vehicles handler', { error: e });
     return serverError();
   }
 };

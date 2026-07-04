@@ -1,8 +1,9 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
@@ -16,12 +17,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // GET /services — all authenticated users
     if (method === 'GET') {
-      const result = await db.send(new QueryCommand({
+      const items = await queryAll({
         TableName: TABLE.SERVICES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'SERVICE#' },
-      }));
-      const services = (result.Items ?? []).map(i => ({
+      });
+      const services = items.map(i => ({
         serviceId: i.serviceId as string,
         name: i.name as string,
         description: i.description as string,
@@ -107,7 +108,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in services handler', { error: e });
     return serverError();
   }
 };

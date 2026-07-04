@@ -5,6 +5,7 @@ export type DayName = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday'
 export interface DayHours {
   open: string;
   close: string;
+  lastAppointment?: string;
 }
 
 export interface CapacitySettings {

@@ -5,7 +5,7 @@ export type AuthStackParamList = {
 
 export type CustomerDrawerParamList = {
   Home: undefined;
-  Appointments: undefined;
+  Appointments: { appointmentId?: string } | undefined;
   Vehicles: undefined;
   Promotions: undefined;
   Notifications: undefined;

@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { AdminDrawerParamList } from './types';
 import { colors } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import DrawerContent from '../components/DrawerContent';
+import { NotificationsProvider, useNotifications } from '../contexts/NotificationsContext';
+import { Ionicons } from '@expo/vector-icons';
 
 import LoginScreen from '../screens/LoginScreen';
 
@@ -18,22 +20,50 @@ import BlockedTimesScreen from '../screens/BlockedTimesScreen';
 import PromotionsScreen from '../screens/PromotionsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 
 const Drawer = createDrawerNavigator<AdminDrawerParamList>();
+
+function NotificationBell({ navigation }: { navigation: any }) {
+  const { unreadCount } = useNotifications();
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Notifications')}
+      style={{ marginRight: 16, position: 'relative' }}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="notifications-outline" size={24} color={colors.white} />
+      {unreadCount > 0 && (
+        <View style={{
+          position: 'absolute', top: -4, right: -4,
+          backgroundColor: colors.error ?? '#ef4444',
+          borderRadius: 8, minWidth: 16, height: 16,
+          justifyContent: 'center', alignItems: 'center',
+          paddingHorizontal: 3,
+        }}>
+          <Text style={{ color: colors.white, fontSize: 9, fontWeight: '700', lineHeight: 14 }}>
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 function AppNavigator() {
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
       drawerContent={(props) => <DrawerContent {...props} />}
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: colors.primary },
         headerTintColor: colors.white,
         headerTitleStyle: { fontWeight: '600', fontSize: 18 },
         drawerStyle: { width: 280, backgroundColor: colors.primary },
         drawerType: 'front',
         overlayColor: colors.overlay,
-      }}
+        headerRight: () => <NotificationBell navigation={navigation} />,
+      })}
     >
       <Drawer.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
       <Drawer.Screen name="Bookings" component={BookingsScreen} options={{ title: 'Bookings' }} />
@@ -44,6 +74,7 @@ function AppNavigator() {
       <Drawer.Screen name="BlockedTimes" component={BlockedTimesScreen} options={{ title: 'Blocked Times' }} />
       <Drawer.Screen name="Promotions" component={PromotionsScreen} options={{ title: 'Promotions' }} />
       <Drawer.Screen name="Statistics" component={StatisticsScreen} options={{ title: 'Statistics' }} />
+      <Drawer.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <Drawer.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Drawer.Navigator>
   );
@@ -60,5 +91,11 @@ export default function RootNavigator() {
     );
   }
 
-  return isAuthenticated ? <AppNavigator /> : <LoginScreen />;
+  if (!isAuthenticated) return <LoginScreen />;
+
+  return (
+    <NotificationsProvider>
+      <AppNavigator />
+    </NotificationsProvider>
+  );
 }

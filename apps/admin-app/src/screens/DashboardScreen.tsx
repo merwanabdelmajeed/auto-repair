@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, RefreshControl, Alert, Modal,
@@ -75,7 +76,7 @@ export default function DashboardScreen({ navigation }: any) {
       setSummary(sum);
       setTodaysAppointments(
         appts
-          .filter(a => a.scheduledAt.startsWith(today) && a.status !== 'cancelled')
+          .filter(a => a.scheduledAt.startsWith(today))
           .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
       );
       const cmap: Record<string, Customer> = {};
@@ -90,7 +91,7 @@ export default function DashboardScreen({ navigation }: any) {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   function openDetail(appt: Appointment) {
     setDetailAppt(appt);

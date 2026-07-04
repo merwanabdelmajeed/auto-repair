@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { extractTenantClaims, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const CARAPI_TOKEN_PARAM = process.env.CARAPI_TOKEN_PARAM ?? '/autorepair/carapi-token';
 const CARAPI_SECRET_PARAM = process.env.CARAPI_SECRET_PARAM ?? '/autorepair/carapi-secret';
@@ -42,7 +43,7 @@ async function getJwt(): Promise<string> {
     body: JSON.stringify({ api_token: token, api_secret: secret }),
   });
   if (!res.ok) {
-    console.error('CarAPI login failed', res.status, await res.text());
+    logger.error('CarAPI login failed', { status: res.status, body: await res.text() });
     throw new Error('CarAPI authentication failed');
   }
   cachedJwt = (await res.text()).trim();
@@ -64,7 +65,7 @@ async function plateToVin(plate: string, state: string): Promise<string | null> 
     headers: { Authorization: `Bearer ${jwt}` },
   });
   if (!res.ok) {
-    console.error('CarAPI plate lookup failed', res.status, await res.text());
+    logger.error('CarAPI plate lookup failed', { status: res.status, body: await res.text(), state });
     return null;
   }
   const data = await res.json() as { vin?: string | null };
@@ -75,7 +76,7 @@ async function decodeVin(vin: string): Promise<{ make: string; model: string; ye
   const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
   const res = await fetch(url);
   if (!res.ok) {
-    console.error('NHTSA decode failed', res.status, await res.text());
+    logger.error('NHTSA decode failed', { status: res.status, body: await res.text(), vin });
     return null;
   }
   const data = await res.json() as { Results?: NhtsaResult[] };
@@ -104,7 +105,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in plate lookup handler', { error: e });
     return serverError();
   }
 };

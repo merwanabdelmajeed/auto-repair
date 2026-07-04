@@ -359,6 +359,12 @@ Every API Gateway endpoint (except `/health`) uses a Cognito Authorizer. Lambda 
 3. `custom:role` is set to `CUSTOMER`
 4. Admin users are created via admin APIs (not self-registration)
 
+### Future: Email & Phone Verification
+Registration currently auto-confirms every user (Pre-SignUp Lambda unconditionally sets `autoConfirmUser = true`) — email and phone are collected but not verified, so an unowned address/number can be used. Planned change:
+- **Email:** `AutoVerifiedAttributes: [email]`, remove the auto-confirm behavior, add an OTP screen to the customer app registration flow.
+- **Phone:** migrate `custom:phone` (free-text) to the standard `phone_number` attribute (E.164 format), add `AutoVerifiedAttributes: [phone_number]`, and grant Cognito an `SnsCallerArn` IAM role to publish OTP codes via SNS.
+- **Carrier registration is a separate prerequisite, not a Cognito setting:** sending OTP SMS to US numbers at real volume requires registering a sending identity with carriers (a toll-free number, or a 10DLC long code via AWS End User Messaging "campaign" registration — a compliance step, not a marketing campaign). This is a one-time, account-level registration outside of Cognito/CloudFormation, and approval can take days, so it should be started well before this feature is otherwise ready to ship.
+
 ---
 
 ## 6. API Versioning Strategy

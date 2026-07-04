@@ -6,12 +6,12 @@ export const DEFAULT_CAPACITY: Omit<CapacitySettings, 'tenantId' | 'updatedAt'> 
   slotDurationMinutes: 30,
   maxConcurrent: 2,
   operatingHours: {
-    monday: { open: '07:00', close: '17:00' },
-    tuesday: { open: '07:00', close: '17:00' },
-    wednesday: { open: '07:00', close: '17:00' },
-    thursday: { open: '07:00', close: '17:00' },
-    friday: { open: '07:00', close: '17:00' },
-    saturday: { open: '07:00', close: '17:00' },
+    monday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
+    tuesday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
+    wednesday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
+    thursday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
+    friday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
+    saturday: { open: '07:00', close: '17:30', lastAppointment: '15:30' },
     sunday: null,
   },
 };
@@ -56,7 +56,12 @@ export function computeAvailability(
   const slots: TimeSlot[] = [];
   let cur = timeToMinutes(hours.open);
   const close = timeToMinutes(hours.close);
-  while (cur + capacity.slotDurationMinutes <= close) {
+  // Older tenant records may not have lastAppointment set — fall back to the
+  // previous behavior of allowing slots right up to close.
+  const lastApptCutoff = hours.lastAppointment
+    ? timeToMinutes(hours.lastAppointment)
+    : close - capacity.slotDurationMinutes;
+  while (cur <= lastApptCutoff && cur + capacity.slotDurationMinutes <= close) {
     const time = minutesToTime(cur);
     slots.push({ time, available: (slotCounts[time] ?? 0) < capacity.maxConcurrent, booked: slotCounts[time] ?? 0 });
     cur += capacity.slotDurationMinutes;

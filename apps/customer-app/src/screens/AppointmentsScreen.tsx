@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, Alert, ActivityIndicator, FlatList, TextInput,
+  Modal, Alert, ActivityIndicator, FlatList, TextInput, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
@@ -79,7 +79,7 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export default function AppointmentsScreen() {
+export default function AppointmentsScreen({ route, navigation }: any) {
   const dates = buildDates();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +105,7 @@ export default function AppointmentsScreen() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const dateListRef = useRef<FlatList>(null);
 
@@ -121,6 +122,30 @@ export default function AppointmentsScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      const data = await listAppointments();
+      setAppointments(data);
+    } catch {
+      // silently ignore — pull-to-refresh failures aren't worth an alert
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  // Auto-open the detail modal when arriving from a notification tap, then
+  // clear the param so it doesn't reopen on a later, unrelated screen focus.
+  useEffect(() => {
+    const targetId = route?.params?.appointmentId;
+    if (!targetId) return;
+    const match = appointments.find(a => a.appointmentId === targetId);
+    if (match) {
+      setDetailAppt(match);
+      navigation.setParams({ appointmentId: undefined });
+    }
+  }, [appointments, route?.params?.appointmentId]);
 
   async function fetchAvailability(date: string) {
     setAvailabilityLoading(true);
@@ -299,7 +324,12 @@ export default function AppointmentsScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
+        >
           {shown.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>

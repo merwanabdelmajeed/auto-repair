@@ -17,4 +17,3 @@ export interface CapacitySettings {
 }
 
 export const getCapacity = () => api.get<CapacitySettings>('/capacity');
-export const updateCapacity = (data: Partial<CapacitySettings>) => api.put<CapacitySettings>('/capacity', data);

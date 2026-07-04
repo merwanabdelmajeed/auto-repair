@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { useAuth } from '../auth/AuthContext';
+import { NotificationsProvider } from '../contexts/NotificationsContext';
 import { SHOP_NAME } from '../constants';
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
@@ -48,24 +49,26 @@ export default function AppLayout() {
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar isOpen={sidebarOpen} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <Header
-          title={pageInfo.title}
-          subtitle={pageInfo.subtitle}
-          onMenuClick={() => setSidebarOpen((o) => !o)}
-          actions={logoutBtn}
-        />
-        <main style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '28px',
-          backgroundColor: 'var(--color-background)',
-        }}>
-          <Outlet />
-        </main>
+    <NotificationsProvider>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <Sidebar isOpen={sidebarOpen} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <Header
+            title={pageInfo.title}
+            subtitle={pageInfo.subtitle}
+            onMenuClick={() => setSidebarOpen((o) => !o)}
+            actions={logoutBtn}
+          />
+          <main style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '28px',
+            backgroundColor: 'var(--color-background)',
+          }}>
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </NotificationsProvider>
   );
 }

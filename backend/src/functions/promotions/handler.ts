@@ -1,10 +1,11 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand, PutCommand, UpdateCommand, DeleteCommand, GetCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { PutCommand, UpdateCommand, DeleteCommand, GetCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { UserRole, type Promotion } from '../../shared/types/index.js';
 import { getCustomersWithTokens, notifyUser } from '../../shared/utils/notify.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
 
@@ -37,15 +38,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const code = (event.queryStringParameters?.code ?? '').toUpperCase();
       if (!code) return badRequest('code query parameter is required');
 
-      const result = await db.send(new QueryCommand({
+      const items = await queryAll({
         TableName: TABLE.PROMOTIONS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         FilterExpression: '#code = :code AND isActive = :true',
         ExpressionAttributeNames: { '#code': 'code' },
         ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'PROMO#', ':code': code, ':true': true },
-      }));
+      });
 
-      const promo = result.Items?.[0];
+      const promo = items[0];
       if (!promo) return notFound('Promo code not found or inactive');
 
       const p = toPromotion(promo);
@@ -67,13 +68,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // GET /promotions — admins see all; customers see active/valid promos only
     if (method === 'GET' && !promoId) {
-      const result = await db.send(new QueryCommand({
+      const items = await queryAll({
         TableName: TABLE.PROMOTIONS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'PROMO#' },
         ScanIndexForward: false,
-      }));
-      const all = (result.Items ?? []).map(toPromotion);
+      });
+      const all = items.map(toPromotion);
       if (isAdmin) return ok(all);
 
       // Customers: filter to active/valid promos only
@@ -134,7 +135,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
       await db.send(new PutCommand({ TableName: TABLE.PROMOTIONS, Item: item }));
       await fanOutPromoNotification(tenantId, id, item.code, item.description as string)
-        .catch(err => console.error('Promo fan-out failed:', err));
+        .catch(err => logger.error('Promo fan-out failed', { error: err, promoId: id }));
       return created(toPromotion(item));
     }
 
@@ -230,7 +231,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in promotions handler', { error: e });
     return serverError();
   }
 };
@@ -246,6 +247,6 @@ async function fanOutPromoNotification(tenantId: string, promoId: string, code: 
       body: description || `Use code ${code} on your next visit`,
       promoId,
       expoPushToken: c.expoPushToken,
-    }).catch(err => console.error('Promo notif failed for', c.userId, ':', err))
+    }).catch(err => logger.error('Promo notif failed', { error: err, userId: c.userId, promoId }))
   ));
 }

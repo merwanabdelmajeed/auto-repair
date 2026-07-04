@@ -87,6 +87,9 @@ export type DayName = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday'
 export interface DayHours {
   open: string;
   close: string;
+  // Latest time a new appointment slot may start; defaults to `close` minus
+  // the slot duration when omitted (older tenant records won't have this set).
+  lastAppointment?: string;
 }
 
 export interface CapacitySettings {

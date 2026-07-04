@@ -22,12 +22,12 @@ export default function Capacity() {
   const [slotDuration, setSlotDuration] = useState(30);
   const [maxConcurrent, setMaxConcurrent] = useState(2);
   const [hours, setHours] = useState<Record<DayName, DayHours | null>>({
-    monday: { open: '07:00', close: '17:00' },
-    tuesday: { open: '07:00', close: '17:00' },
-    wednesday: { open: '07:00', close: '17:00' },
-    thursday: { open: '07:00', close: '17:00' },
-    friday: { open: '07:00', close: '17:00' },
-    saturday: { open: '07:00', close: '17:00' },
+    monday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    tuesday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    wednesday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    thursday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    friday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    saturday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
     sunday: null,
   });
 
@@ -48,10 +48,10 @@ export default function Capacity() {
   }, []);
 
   function toggleDay(day: DayName, isOpen: boolean) {
-    setHours(prev => ({ ...prev, [day]: isOpen ? { open: '07:00', close: '17:00' } : null }));
+    setHours(prev => ({ ...prev, [day]: isOpen ? { open: '07:00', close: '17:00', lastAppointment: '17:00' } : null }));
   }
 
-  function updateTime(day: DayName, field: 'open' | 'close', value: string) {
+  function updateTime(day: DayName, field: 'open' | 'close' | 'lastAppointment', value: string) {
     setHours(prev => ({ ...prev, [day]: { ...prev[day]!, [field]: value } }));
   }
 
@@ -59,12 +59,17 @@ export default function Capacity() {
     for (const day of ALL_DAYS) {
       const h = hours[day];
       if (h) {
-        if (!/^\d{2}:\d{2}$/.test(h.open) || !/^\d{2}:\d{2}$/.test(h.close)) {
+        if (!/^\d{2}:\d{2}$/.test(h.open) || !/^\d{2}:\d{2}$/.test(h.close) || !/^\d{2}:\d{2}$/.test(h.lastAppointment ?? h.close)) {
           setError(`Invalid time for ${DAY_LABEL[day]}. Please select a valid time.`);
           return;
         }
         if (h.open >= h.close) {
           setError(`Open time must be before close time for ${DAY_LABEL[day]}.`);
+          return;
+        }
+        const lastAppt = h.lastAppointment ?? h.close;
+        if (lastAppt < h.open || lastAppt > h.close) {
+          setError(`Last appointment time must be between open and close for ${DAY_LABEL[day]}.`);
           return;
         }
       }
@@ -179,6 +184,19 @@ export default function Capacity() {
                     ) : (
                       <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Closed</span>
                     )}
+                  </td>
+                  <td style={{ padding: '14px 0 14px 16px' }}>
+                    {isOpen && h ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Last appointment</span>
+                        <input
+                          type="time"
+                          value={h.lastAppointment ?? h.close}
+                          onChange={e => updateTime(day, 'lastAppointment', e.target.value)}
+                          style={timeInputStyle}
+                        />
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               );

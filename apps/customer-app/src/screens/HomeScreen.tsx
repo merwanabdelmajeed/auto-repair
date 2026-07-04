@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
   Platform,
   Linking,
 } from 'react-native';
@@ -15,8 +16,20 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listPromotions, type PublicPromotion } from '../api/promotions';
+import { getCapacity, type DayHours } from '../api/capacity';
 import { useAuth } from '../auth/AuthContext';
 import { SHOP_ADDRESS } from '../constants';
+
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+function to12h(time: string): string {
+  const m = time.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return time;
+  const h = parseInt(m[1]!, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m[2]} ${ampm}`;
+}
 
 const QUICK_ACTIONS = [
   { icon: 'car-outline' as const, label: 'My Vehicles', screen: 'Vehicles' },
@@ -49,6 +62,8 @@ export default function HomeScreen({ navigation }: any) {
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
   const [addressCopied, setAddressCopied] = useState(false);
+  const [todayHours, setTodayHours] = useState<DayHours | null | undefined>(undefined);
+  const [refreshing, setRefreshing] = useState(false);
 
   const displayName = user?.givenName && user?.familyName
     ? `${user.givenName} ${user.familyName}`
@@ -60,13 +75,31 @@ export default function HomeScreen({ navigation }: any) {
     setTimeout(() => setAddressCopied(false), 2000);
   }
 
-  useFocusEffect(useCallback(() => {
+  const loadPromotions = useCallback(() => {
     setLoadingPromos(true);
-    listPromotions()
+    return listPromotions()
       .then(data => setPromotions(data.slice(0, 3)))
       .catch(() => {})
       .finally(() => setLoadingPromos(false));
-  }, []));
+  }, []);
+
+  const loadCapacity = useCallback(() => {
+    return getCapacity()
+      .then(settings => {
+        const todayName = DAY_NAMES[new Date().getDay()]!;
+        setTodayHours(settings.operatingHours[todayName]);
+      })
+      .catch(() => setTodayHours(undefined));
+  }, []);
+
+  useFocusEffect(useCallback(() => { void loadPromotions(); }, [loadPromotions]));
+  useFocusEffect(useCallback(() => { void loadCapacity(); }, [loadCapacity]));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await Promise.all([loadPromotions(), loadCapacity()]);
+    setRefreshing(false);
+  }
 
   return (
     <Layout>
@@ -74,6 +107,7 @@ export default function HomeScreen({ navigation }: any) {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
       >
         {/* Welcome Banner */}
         <View style={styles.banner}>
@@ -120,6 +154,18 @@ export default function HomeScreen({ navigation }: any) {
                 <Ionicons name="location" size={20} color={colors.secondary} style={{ marginRight: spacing.sm }} />
                 <Text style={styles.locationAddress}>{SHOP_ADDRESS}</Text>
               </View>
+              {todayHours !== undefined && (
+                <View style={styles.hoursRow}>
+                  <Ionicons name="time-outline" size={16} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+                  {todayHours ? (
+                    <Text style={styles.hoursText}>
+                      Open today <Text style={styles.hoursTextBold}>{to12h(todayHours.open)} – {to12h(todayHours.close)}</Text>
+                    </Text>
+                  ) : (
+                    <Text style={styles.hoursTextClosed}>Closed today</Text>
+                  )}
+                </View>
+              )}
               <View style={styles.locationActions}>
                 <TouchableOpacity style={styles.locationBtn} onPress={() => void copyAddress()} activeOpacity={0.75}>
                   <Ionicons name={addressCopied ? 'checkmark' : 'copy-outline'} size={16} color={colors.primary} />
@@ -285,8 +331,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     ...shadows.sm,
   },
-  locationRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
+  locationRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
   locationAddress: { ...typography.body, color: colors.textPrimary, flex: 1 },
+  hoursRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  hoursText: { ...typography.bodySmall, color: colors.textSecondary },
+  hoursTextBold: { fontWeight: '700', color: colors.textPrimary },
+  hoursTextClosed: { ...typography.bodySmall, color: colors.textMuted, fontStyle: 'italic' },
   locationActions: { flexDirection: 'row', gap: spacing.sm },
   locationBtn: {
     flex: 1,

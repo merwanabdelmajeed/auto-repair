@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Switch, TextInput, ActivityIndicator, Alert,
@@ -48,12 +49,12 @@ export default function CapacityScreen() {
   const [slotDuration, setSlotDuration] = useState(30);
   const [maxConcurrent, setMaxConcurrent] = useState(2);
   const [hours, setHours] = useState<Record<DayName, DayHours | null>>({
-    monday: { open: '07:00', close: '17:00' },
-    tuesday: { open: '07:00', close: '17:00' },
-    wednesday: { open: '07:00', close: '17:00' },
-    thursday: { open: '07:00', close: '17:00' },
-    friday: { open: '07:00', close: '17:00' },
-    saturday: { open: '07:00', close: '17:00' },
+    monday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    tuesday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    wednesday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    thursday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    friday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
+    saturday: { open: '07:00', close: '17:00', lastAppointment: '17:00' },
     sunday: null,
   });
 
@@ -72,16 +73,16 @@ export default function CapacityScreen() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   function toggleDay(day: DayName, isOpen: boolean) {
     setHours(prev => ({
       ...prev,
-      [day]: isOpen ? { open: '07:00', close: '17:00' } : null,
+      [day]: isOpen ? { open: '07:00', close: '17:00', lastAppointment: '17:00' } : null,
     }));
   }
 
-  function updateTime(day: DayName, field: 'open' | 'close', text: string) {
+  function updateTime(day: DayName, field: 'open' | 'close' | 'lastAppointment', text: string) {
     setHours(prev => {
       const current = prev[day];
       const prevTime = current?.[field] ?? '';
@@ -97,12 +98,17 @@ export default function CapacityScreen() {
     for (const day of ALL_DAYS) {
       const h = hours[day];
       if (h) {
-        if (!/^\d{2}:\d{2}$/.test(h.open) || !/^\d{2}:\d{2}$/.test(h.close)) {
+        if (!/^\d{2}:\d{2}$/.test(h.open) || !/^\d{2}:\d{2}$/.test(h.close) || !/^\d{2}:\d{2}$/.test(h.lastAppointment ?? h.close)) {
           Alert.alert('Invalid Time', `Please enter valid times for ${DAY_LABEL[day]}.`);
           return;
         }
         if (h.open >= h.close) {
           Alert.alert('Invalid Hours', `Open time must be before close time for ${DAY_LABEL[day]}.`);
+          return;
+        }
+        const lastAppt = h.lastAppointment ?? h.close;
+        if (lastAppt < h.open || lastAppt > h.close) {
+          Alert.alert('Invalid Hours', `Last appointment time must be between open and close for ${DAY_LABEL[day]}.`);
           return;
         }
       }
@@ -182,23 +188,65 @@ export default function CapacityScreen() {
             const isOpen = hours[day] !== null;
             const h = hours[day];
             return (
-              <View key={day} style={[styles.dayRow, i < ALL_DAYS.length - 1 && styles.dayRowBorder]}>
-                <View style={styles.dayLeft}>
-                  <Text style={styles.dayName}>{DAY_LABEL[day]}</Text>
+              <View key={day} style={[styles.dayBlock, i < ALL_DAYS.length - 1 && styles.dayRowBorder]}>
+                <View style={styles.dayRow}>
+                  <View style={styles.dayLeft}>
+                    <Text style={styles.dayName}>{DAY_LABEL[day]}</Text>
+                  </View>
+                  <Switch
+                    value={isOpen}
+                    onValueChange={v => toggleDay(day, v)}
+                    trackColor={{ false: colors.border, true: 'rgba(15,32,68,0.35)' }}
+                    thumbColor={isOpen ? colors.primary : colors.textMuted}
+                  />
+                  {isOpen && h ? (
+                    <View style={styles.timeInputs}>
+                      {editingKey === `${day}-open` ? (
+                        <TextInput
+                          style={styles.timeInput}
+                          value={h.open}
+                          onChangeText={text => updateTime(day, 'open', text)}
+                          onBlur={() => setEditingKey(null)}
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          autoFocus
+                          placeholderTextColor={colors.textMuted}
+                        />
+                      ) : (
+                        <TouchableOpacity style={styles.timeDisplay} onPress={() => setEditingKey(`${day}-open`)} activeOpacity={0.7}>
+                          <Text style={styles.timeDisplayText}>{to12h(h.open)}</Text>
+                        </TouchableOpacity>
+                      )}
+                      <Text style={styles.timeSep}>–</Text>
+                      {editingKey === `${day}-close` ? (
+                        <TextInput
+                          style={styles.timeInput}
+                          value={h.close}
+                          onChangeText={text => updateTime(day, 'close', text)}
+                          onBlur={() => setEditingKey(null)}
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          autoFocus
+                          placeholderTextColor={colors.textMuted}
+                        />
+                      ) : (
+                        <TouchableOpacity style={styles.timeDisplay} onPress={() => setEditingKey(`${day}-close`)} activeOpacity={0.7}>
+                          <Text style={styles.timeDisplayText}>{to12h(h.close)}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.closedLabel}>Closed</Text>
+                  )}
                 </View>
-                <Switch
-                  value={isOpen}
-                  onValueChange={v => toggleDay(day, v)}
-                  trackColor={{ false: colors.border, true: 'rgba(15,32,68,0.35)' }}
-                  thumbColor={isOpen ? colors.primary : colors.textMuted}
-                />
                 {isOpen && h ? (
-                  <View style={styles.timeInputs}>
-                    {editingKey === `${day}-open` ? (
+                  <View style={styles.lastApptRow}>
+                    <Text style={styles.lastApptLabel}>Last appointment accepted</Text>
+                    {editingKey === `${day}-lastAppointment` ? (
                       <TextInput
                         style={styles.timeInput}
-                        value={h.open}
-                        onChangeText={text => updateTime(day, 'open', text)}
+                        value={h.lastAppointment ?? h.close}
+                        onChangeText={text => updateTime(day, 'lastAppointment', text)}
                         onBlur={() => setEditingKey(null)}
                         keyboardType="number-pad"
                         maxLength={5}
@@ -206,31 +254,12 @@ export default function CapacityScreen() {
                         placeholderTextColor={colors.textMuted}
                       />
                     ) : (
-                      <TouchableOpacity style={styles.timeDisplay} onPress={() => setEditingKey(`${day}-open`)} activeOpacity={0.7}>
-                        <Text style={styles.timeDisplayText}>{to12h(h.open)}</Text>
-                      </TouchableOpacity>
-                    )}
-                    <Text style={styles.timeSep}>–</Text>
-                    {editingKey === `${day}-close` ? (
-                      <TextInput
-                        style={styles.timeInput}
-                        value={h.close}
-                        onChangeText={text => updateTime(day, 'close', text)}
-                        onBlur={() => setEditingKey(null)}
-                        keyboardType="number-pad"
-                        maxLength={5}
-                        autoFocus
-                        placeholderTextColor={colors.textMuted}
-                      />
-                    ) : (
-                      <TouchableOpacity style={styles.timeDisplay} onPress={() => setEditingKey(`${day}-close`)} activeOpacity={0.7}>
-                        <Text style={styles.timeDisplayText}>{to12h(h.close)}</Text>
+                      <TouchableOpacity style={styles.timeDisplay} onPress={() => setEditingKey(`${day}-lastAppointment`)} activeOpacity={0.7}>
+                        <Text style={styles.timeDisplayText}>{to12h(h.lastAppointment ?? h.close)}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                ) : (
-                  <Text style={styles.closedLabel}>Closed</Text>
-                )}
+                ) : null}
               </View>
             );
           })}
@@ -268,8 +297,11 @@ const styles = StyleSheet.create({
   stepBtnDisabled: { borderColor: colors.border },
   stepValue: { ...typography.h2, color: colors.textPrimary, minWidth: 32, textAlign: 'center' },
 
-  dayRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: spacing.sm },
+  dayBlock: { paddingVertical: 12 },
   dayRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  dayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  lastApptRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm, marginTop: 8 },
+  lastApptLabel: { ...typography.small, color: colors.textMuted },
   dayLeft: { width: 84 },
   dayName: { ...typography.body, color: colors.textPrimary, fontWeight: '500' },
   timeInputs: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },

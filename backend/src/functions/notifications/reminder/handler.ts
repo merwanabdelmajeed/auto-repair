@@ -1,8 +1,9 @@
 import type { ScheduledEvent } from 'aws-lambda';
-import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../../shared/utils/dynamodb.js';
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLE, scanAll } from '../../../shared/utils/dynamodb.js';
 import { notifyUser } from '../../../shared/utils/notify.js';
 import type { NotifType } from '../../../shared/utils/notify.js';
+import { logger } from '../../../shared/utils/logger.js';
 
 export const handler = async (_event: ScheduledEvent): Promise<void> => {
   const now = new Date();
@@ -14,20 +15,25 @@ export const handler = async (_event: ScheduledEvent): Promise<void> => {
   const h2From  = new Date(now.getTime() +  1 * 60 * 60 * 1000).toISOString();
   const h2To    = new Date(now.getTime() +  3 * 60 * 60 * 1000).toISOString();
 
-  const result = await db.send(new ScanCommand({
+  // Full table scan across all tenants — this is the highest-risk query in the
+  // backend for the 1MB-per-page silent truncation issue, since it grows with
+  // total platform appointment volume, not just one tenant's. scanAll() pages
+  // through the whole table rather than only reading the first page.
+  const items = await scanAll({
     TableName: TABLE.APPOINTMENTS,
+    // DynamoDB has no "NOT IN" infix operator like SQL — NOT wraps an IN condition instead.
     FilterExpression:
       '(scheduledAt BETWEEN :h24f AND :h24t OR scheduledAt BETWEEN :h2f AND :h2t) ' +
-      'AND #s NOT IN (:cancelled, :completed)',
+      'AND NOT (#s IN (:cancelled, :completed))',
     ExpressionAttributeNames: { '#s': 'status' },
     ExpressionAttributeValues: {
       ':h24f': h24From, ':h24t': h24To,
       ':h2f': h2From,   ':h2t': h2To,
       ':cancelled': 'cancelled', ':completed': 'completed',
     },
-  }));
+  });
 
-  await Promise.all((result.Items ?? []).map(appt => processAppt(appt, now)));
+  await Promise.all(items.map(appt => processAppt(appt, now)));
 };
 
 async function processAppt(appt: Record<string, unknown>, now: Date): Promise<void> {
@@ -72,5 +78,5 @@ async function sendReminder(appt: Record<string, unknown>, window: '24h' | '2h')
   const type: NotifType = window === '24h' ? 'appointment_reminder_24h' : 'appointment_reminder_2h';
 
   await notifyUser({ tenantId, userId: customerId, type, title, body, appointmentId })
-    .catch(err => console.error(`Reminder ${window} failed for`, appointmentId, ':', err));
+    .catch(err => logger.error(`Reminder ${window} failed`, { error: err, appointmentId, tenantId }));
 }

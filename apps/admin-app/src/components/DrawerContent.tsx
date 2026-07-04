@@ -21,6 +21,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
   { name: 'BlockedTimes', icon: 'calendar-clear-outline', label: 'Blocked Times' },
   { name: 'Promotions', icon: 'pricetag-outline', label: 'Promotions' },
   { name: 'Statistics', icon: 'bar-chart-outline', label: 'Statistics' },
+  { name: 'Notifications', icon: 'notifications-outline', label: 'Notifications' },
   { name: 'Settings', icon: 'settings-outline', label: 'Settings' },
 ];
 

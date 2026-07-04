@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   listAppointments,
   updateAppointmentStatus,
@@ -74,7 +75,23 @@ export default function Bookings() {
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [vehicleEditError, setVehicleEditError] = useState('');
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   useEffect(() => { void load(); }, []);
+
+  // Auto-open the detail panel when arriving from a notification click, then
+  // clear the param so it doesn't reopen on a later, unrelated page visit.
+  useEffect(() => {
+    const targetId = searchParams.get('appointmentId');
+    if (!targetId) return;
+    const match = appointments.find(a => a.appointmentId === targetId);
+    if (match) {
+      setDetailAppt(match);
+      const next = new URLSearchParams(searchParams);
+      next.delete('appointmentId');
+      setSearchParams(next, { replace: true });
+    }
+  }, [appointments, searchParams]);
 
   async function load() {
     try {

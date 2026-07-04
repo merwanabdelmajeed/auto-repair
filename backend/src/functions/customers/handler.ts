@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -12,13 +12,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const { tenantId } = claims;
 
-    const result = await db.send(new QueryCommand({
+    const items = await queryAll({
       TableName: TABLE.USERS,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
       ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'USER#' },
-    }));
+    });
 
-    const customers = (result.Items ?? []).map(i => ({
+    const customers = items.map(i => ({
       userId: i.userId as string,
       email: i.email as string,
       firstName: (i.firstName as string) ?? '',
@@ -32,7 +32,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in customers handler', { error: e });
     return serverError();
   }
 };

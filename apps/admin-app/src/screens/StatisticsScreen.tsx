@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
@@ -54,7 +55,7 @@ export default function StatisticsScreen() {
     }
   }, []);
 
-  useEffect(() => { void load(period); }, [load, period]);
+  useFocusEffect(useCallback(() => { void load(period); }, [load, period]));
 
   function changePeriod(p: Period) {
     setPeriod(p);

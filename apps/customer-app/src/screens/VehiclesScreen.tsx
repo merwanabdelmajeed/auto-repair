@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator,
+  Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
@@ -117,6 +117,7 @@ export default function VehiclesScreen() {
   const [historyVehicle, setHistoryVehicle] = useState<Vehicle | null>(null);
   const [history, setHistory]               = useState<Appointment[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const makeBlurTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,6 +132,17 @@ export default function VehiclesScreen() {
       setLoading(false);
     }
   }, []);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      setVehicles(await listVehicles());
+    } catch {
+      // silently ignore — pull-to-refresh failures aren't worth an alert
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (showModal) void fetchMakes(); }, [showModal]);
@@ -401,7 +413,12 @@ export default function VehiclesScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
+        >
           {vehicles.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>

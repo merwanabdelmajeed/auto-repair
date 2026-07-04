@@ -24,9 +24,7 @@ export function usePushNotifications() {
           return;
         }
 
-        const projectId =
-          Constants.expoConfig?.extra?.eas?.projectId ??
-          (Constants as Record<string, unknown>).easConfig?.projectId as string | undefined;
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
         console.log('[Push] projectId:', projectId);
         const tokenData = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
         console.log('[Push] Token:', tokenData.data);

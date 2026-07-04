@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { TABLE, queryAll, queryCount } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -13,27 +13,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const { tenantId } = claims;
     const pk = `TENANT#${tenantId}`;
 
-    const [customersResult, vehiclesResult, appointmentsResult] = await Promise.all([
-      db.send(new QueryCommand({
+    const [customerCount, vehicleCount, allAppointments] = await Promise.all([
+      queryCount({
         TableName: TABLE.USERS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'USER#' },
-        Select: 'COUNT',
-      })),
-      db.send(new QueryCommand({
+      }),
+      queryCount({
         TableName: TABLE.VEHICLES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'VEHICLE#' },
-        Select: 'COUNT',
-      })),
-      db.send(new QueryCommand({
+      }),
+      queryAll({
         TableName: TABLE.APPOINTMENTS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
         ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'APPT#' },
-      })),
+      }),
     ]);
 
-    const allAppointments = appointmentsResult.Items ?? [];
     const activeAppointments = allAppointments.filter(a => a.status !== 'cancelled');
 
     // Use the local date sent by the frontend; Lambda always runs in UTC, which would give the wrong "today"
@@ -48,15 +45,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }).length;
 
     return ok({
-      totalCustomers: customersResult.Count ?? 0,
-      totalVehicles: vehiclesResult.Count ?? 0,
+      totalCustomers: customerCount,
+      totalVehicles: vehicleCount,
       totalAppointments: activeAppointments.length,
       bookingsToday,
     });
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in dashboard handler', { error: e });
     return serverError();
   }
 };

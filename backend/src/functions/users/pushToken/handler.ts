@@ -3,6 +3,7 @@ import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../../shared/utils/dynamodb.js';
 import { extractTenantClaims, UnauthorizedError, ForbiddenError } from '../../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../../shared/utils/response.js';
+import { logger } from '../../../shared/utils/logger.js';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
@@ -23,7 +24,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in push-token handler', { error: e });
     return serverError();
   }
 };

@@ -1,12 +1,12 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { QueryCommand, PutCommand, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { QueryCommand, PutCommand, UpdateCommand, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
-import { sendAppointmentStatusEmail } from '../../shared/utils/ses.js';
-import { notifyUser } from '../../shared/utils/notify.js';
+import { notifyUser, notifyAdmins } from '../../shared/utils/notify.js';
 import { UserRole, type AppointmentStatus, type CapacitySettings } from '../../shared/types/index.js';
 import { isSlotAvailable, DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
 const VALID_STATUSES: AppointmentStatus[] = ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'];
@@ -22,23 +22,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // GET /appointments
     if (method === 'GET' && !appointmentId) {
       if (isAdmin) {
-        const result = await db.send(new QueryCommand({
+        const items = await queryAll({
           TableName: TABLE.APPOINTMENTS,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
           ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'APPT#' },
           ScanIndexForward: false,
-        }));
-        return ok((result.Items ?? []).map(toAppointment));
+        });
+        return ok(items.map(toAppointment));
       } else {
         // Customer sees own appointments via GSI1
-        const result = await db.send(new QueryCommand({
+        const items = await queryAll({
           TableName: TABLE.APPOINTMENTS,
           IndexName: 'GSI1',
           KeyConditionExpression: 'GSI1PK = :gsi1pk',
           ExpressionAttributeValues: { ':gsi1pk': `CUSTOMER#${userId}` },
           ScanIndexForward: false,
-        }));
-        return ok((result.Items ?? []).map(toAppointment));
+        });
+        return ok(items.map(toAppointment));
       }
     }
 
@@ -68,9 +68,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })),
         db.send(new QueryCommand({
           TableName: TABLE.APPOINTMENTS,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          FilterExpression: 'begins_with(scheduledAt, :date)',
-          ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'APPT#', ':date': scheduledDate },
+          IndexName: 'GSI2',
+          KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :date)',
+          ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':date': scheduledDate },
         })),
       ]);
 
@@ -103,14 +103,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       // Validate promo code exists and is active (no price discount — customer presents in person)
       let promoId: string | null = null;
       if (normalizedCode) {
-        const promoResult = await db.send(new QueryCommand({
+        const promoItems = await queryAll({
           TableName: TABLE.PROMOTIONS,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
           FilterExpression: '#code = :code AND isActive = :true',
           ExpressionAttributeNames: { '#code': 'code' },
           ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'PROMO#', ':code': normalizedCode, ':true': true },
-        }));
-        const promoItem = promoResult.Items?.[0];
+        });
+        const promoItem = promoItems[0];
         if (!promoItem) return badRequest('Promo code is invalid or inactive');
         if (promoItem.expiresAt && new Date(promoItem.expiresAt as string) < new Date()) return badRequest('Promo code has expired');
         promoId = promoItem.promoId as string;
@@ -133,8 +133,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         SK: `APPT#${id}`,
         GSI1PK: `CUSTOMER#${userId}`,
         GSI1SK: `APPT#${scheduledAt}#${id}`,
+        // GSI2SK is just scheduledAt (not status-prefixed) so date-range
+        // queries can use begins_with(GSI2SK, date) directly.
         GSI2PK: `TENANT#${tenantId}`,
-        GSI2SK: `STATUS#pending#${scheduledAt}`,
+        GSI2SK: scheduledAt,
         appointmentId: id,
         tenantId,
         customerId: userId,
@@ -154,30 +156,78 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         updatedAt: now,
       };
 
-      await db.send(new PutCommand({ TableName: TABLE.APPOINTMENTS, Item: item }));
+      // Atomically claim a slot in the same transaction as the appointment write.
+      // The isSlotAvailable check above is a fast pre-check (catches blocked
+      // times/operating hours); this counter is what actually prevents two
+      // concurrent bookings from both landing when only one slot is free.
+      try {
+        await db.send(new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: TABLE.APPOINTMENTS,
+                Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${scheduledAt}` },
+                UpdateExpression: 'ADD #cnt :one',
+                ConditionExpression: 'attribute_not_exists(#cnt) OR #cnt < :max',
+                ExpressionAttributeNames: { '#cnt': 'count' },
+                ExpressionAttributeValues: { ':one': 1, ':max': capacity.maxConcurrent },
+              },
+            },
+            {
+              Put: { TableName: TABLE.APPOINTMENTS, Item: item },
+            },
+          ],
+        }));
+      } catch (e) {
+        if (e instanceof Error && e.name === 'TransactionCanceledException') {
+          return conflict('Selected time slot is not available. Please choose a different time.');
+        }
+        throw e;
+      }
+
+      const timeStr = new Date(scheduledAt as string).toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+      });
+      await notifyAdmins(tenantId, {
+        type: 'admin_new_booking',
+        title: 'New Booking',
+        body: `${item.customerName as string} booked ${item.serviceName as string} — ${timeStr}`,
+        appointmentId: id,
+      }).catch(err => logger.error('Admin new-booking notification failed', { error: err, appointmentId: id }));
 
       return created(toAppointment(item));
     }
 
-    // PATCH /appointments/{appointmentId}/status — admin only
+    // PATCH /appointments/{appointmentId}/status — admins can set any valid
+    // status; customers may only cancel their own appointment
     if (method === 'PATCH' && appointmentId) {
-      requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
       const { status } = body as { status: AppointmentStatus };
       if (!status || !VALID_STATUSES.includes(status)) {
         return badRequest(`status must be one of: ${VALID_STATUSES.join(', ')}`);
       }
       const now = new Date().toISOString();
+      const before = await db.send(new GetCommand({
+        TableName: TABLE.APPOINTMENTS,
+        Key: { PK: `TENANT#${tenantId}`, SK: `APPT#${appointmentId}` },
+      }));
+      if (!before.Item) return notFound('Appointment not found');
+      const previousStatus = before.Item.status as AppointmentStatus;
+
+      if (!isAdmin) {
+        if (status !== 'cancelled') return forbidden('Customers may only cancel their own appointments');
+        if (before.Item.customerId !== userId) return forbidden('You can only cancel your own appointments');
+      }
+
       let updatedItem: Record<string, unknown> | undefined;
       try {
         const result = await db.send(new UpdateCommand({
           TableName: TABLE.APPOINTMENTS,
           Key: { PK: `TENANT#${tenantId}`, SK: `APPT#${appointmentId}` },
-          UpdateExpression: 'SET #s = :status, GSI2SK = :gsi2sk, updatedAt = :now',
+          UpdateExpression: 'SET #s = :status, updatedAt = :now',
           ExpressionAttributeNames: { '#s': 'status' },
           ExpressionAttributeValues: {
             ':status': status,
-            ':gsi2sk': `STATUS#${status}#`,
             ':now': now,
           },
           ConditionExpression: 'attribute_exists(PK)',
@@ -189,16 +239,34 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         throw e;
       }
 
-      // Fire-and-forget: email + push/in-app notification
-      if (updatedItem?.customerEmail) {
-        sendAppointmentStatusEmail({
-          toEmail: updatedItem.customerEmail as string,
-          customerName: (updatedItem.customerName as string) || (updatedItem.customerEmail as string),
-          serviceName: updatedItem.serviceName as string,
-          scheduledAt: updatedItem.scheduledAt as string,
-          status,
-        }).catch(err => console.error('SES send failed:', err));
+      // Free up the slot counter when a booking is newly cancelled (best-effort —
+      // if this fails, the counter stays elevated a bit longer, which under-books
+      // rather than over-books, so it's not gated on the status change succeeding).
+      if (status === 'cancelled' && previousStatus !== 'cancelled' && updatedItem?.scheduledAt) {
+        db.send(new UpdateCommand({
+          TableName: TABLE.APPOINTMENTS,
+          Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${updatedItem.scheduledAt as string}` },
+          UpdateExpression: 'ADD #cnt :neg1',
+          ExpressionAttributeNames: { '#cnt': 'count' },
+          ExpressionAttributeValues: { ':neg1': -1 },
+        })).catch(err => logger.error('Slot counter decrement failed', { error: err, appointmentId, scheduledAt: updatedItem?.scheduledAt }));
       }
+
+      // Notify admins only when the customer cancels their own booking — an
+      // admin cancelling it themselves doesn't need to be told about it.
+      if (!isAdmin && status === 'cancelled' && previousStatus !== 'cancelled' && updatedItem) {
+        const timeStr = new Date(updatedItem.scheduledAt as string).toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+        });
+        await notifyAdmins(tenantId, {
+          type: 'admin_appointment_cancelled',
+          title: 'Appointment Cancelled',
+          body: `${updatedItem.customerName as string} cancelled ${updatedItem.serviceName as string} — ${timeStr}`,
+          appointmentId: appointmentId!,
+        }).catch(err => logger.error('Admin cancellation notification failed', { error: err, appointmentId }));
+      }
+
+      // Fire-and-forget: push/in-app notification
       if (updatedItem && (status === 'confirmed' || status === 'cancelled' || status === 'completed')) {
         const timeStr = new Date(updatedItem.scheduledAt as string).toLocaleString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric',
@@ -226,7 +294,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           title: titles[status]!,
           body: bodies[status]!,
           appointmentId: appointmentId!,
-        }).catch(err => console.error('Notification failed:', err));
+        }).catch(err => logger.error('Notification failed', { error: err, appointmentId, status }));
       }
 
       return ok({ appointmentId, status });
@@ -236,7 +304,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in appointments handler', { error: e });
     return serverError();
   }
 };

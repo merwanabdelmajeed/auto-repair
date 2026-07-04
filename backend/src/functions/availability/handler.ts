@@ -3,6 +3,7 @@ import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { type CapacitySettings } from '../../shared/types/index.js';
 import { computeAvailability, DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
 
@@ -28,11 +29,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })),
       db.send(new QueryCommand({
         TableName: TABLE.APPOINTMENTS,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        FilterExpression: 'begins_with(scheduledAt, :date)',
+        IndexName: 'GSI2',
+        KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :date)',
         ExpressionAttributeValues: {
           ':pk': `TENANT#${tenantId}`,
-          ':skPrefix': 'APPT#',
           ':date': date,
         },
       })),
@@ -61,7 +61,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in availability handler', { error: e });
     return serverError();
   }
 };

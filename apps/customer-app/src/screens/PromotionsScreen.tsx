@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Alert, Clipboard,
+  TouchableOpacity, Alert, Clipboard, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
@@ -20,6 +20,7 @@ function formatDiscount(p: PublicPromotion) {
 export default function PromotionsScreen() {
   const [promos, setPromos] = useState<PublicPromotion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -35,6 +36,17 @@ export default function PromotionsScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      setPromos(await listPromotions());
+    } catch {
+      // Silently fail — not critical
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   function copyCode(code: string) {
     Clipboard.setString(code);
     setCopiedCode(code);
@@ -47,6 +59,7 @@ export default function PromotionsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
       >
         <View style={styles.pageHeader}>
           <Text style={styles.pageTitle}>Current Offers</Text>

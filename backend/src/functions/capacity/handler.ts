@@ -3,6 +3,7 @@ import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { logger } from '../../shared/utils/logger.js';
 import { UserRole, type CapacitySettings } from '../../shared/types/index.js';
 import { DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
 
@@ -74,7 +75,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (e) {
     if (e instanceof UnauthorizedError) return unauthorized(e.message);
     if (e instanceof ForbiddenError) return forbidden(e.message);
-    console.error(e);
+    logger.error('Unhandled error in capacity handler', { error: e });
     return serverError();
   }
 };

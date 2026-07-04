@@ -9,21 +9,13 @@ import type { AppNotification } from '../api/notifications';
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TYPE_ICON: Record<string, IoniconsName> = {
-  appointment_confirmed:    'checkmark-circle-outline',
-  appointment_cancelled:    'close-circle-outline',
-  appointment_completed:    'car-outline',
-  appointment_reminder_24h: 'alarm-outline',
-  appointment_reminder_2h:  'alarm-outline',
-  promotion_new:            'pricetag-outline',
+  admin_new_booking:         'calendar-outline',
+  admin_appointment_cancelled: 'close-circle-outline',
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  appointment_confirmed:    '#22c55e',
-  appointment_cancelled:    '#ef4444',
-  appointment_completed:    '#22c55e',
-  appointment_reminder_24h: '#3b82f6',
-  appointment_reminder_2h:  '#f59e0b',
-  promotion_new:            colors.secondary,
+  admin_new_booking:         '#22c55e',
+  admin_appointment_cancelled: '#ef4444',
 };
 
 function timeAgo(iso: string): string {
@@ -77,10 +69,8 @@ export default function NotificationsScreen({ navigation }: any) {
   function handlePress(notif: AppNotification) {
     if (!notif.read) void markAsRead(notif.notifId);
 
-    if (notif.type === 'promotion_new') {
-      navigation.navigate('Promotions');
-    } else if (notif.type.startsWith('appointment_') && notif.appointmentId) {
-      navigation.navigate('Appointments', { appointmentId: notif.appointmentId });
+    if (notif.appointmentId) {
+      navigation.navigate('Bookings', { appointmentId: notif.appointmentId });
     }
   }
 
@@ -100,7 +90,7 @@ export default function NotificationsScreen({ navigation }: any) {
           </View>
           <Text style={styles.emptyTitle}>No Notifications Yet</Text>
           <Text style={styles.emptyDesc}>
-            You'll be notified about appointment confirmations, reminders, and new promotions.
+            You'll be notified here when customers book or cancel appointments.
           </Text>
         </ScrollView>
       ) : (
@@ -110,7 +100,7 @@ export default function NotificationsScreen({ navigation }: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
         >
-          {notifications.map((n, i) => (
+          {notifications.map((n) => (
             <NotifRow
               key={n.notifId}
               notif={n}

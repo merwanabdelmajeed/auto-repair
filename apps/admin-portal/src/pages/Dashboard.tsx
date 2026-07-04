@@ -69,7 +69,7 @@ export default function Dashboard() {
       setSummary(sum);
       setTodaysAppointments(
         appts
-          .filter(a => a.scheduledAt.startsWith(today) && a.status !== 'cancelled')
+          .filter(a => a.scheduledAt.startsWith(today))
           .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
       );
       const map: Record<string, Customer> = {};

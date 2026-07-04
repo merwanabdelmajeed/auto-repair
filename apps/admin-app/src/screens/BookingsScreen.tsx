@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, RefreshControl, Modal,
@@ -60,7 +61,7 @@ function fmtDateOnly(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function BookingsScreen() {
+export default function BookingsScreen({ route, navigation }: any) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
@@ -97,7 +98,19 @@ export default function BookingsScreen() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  // Auto-open the detail modal when arriving from a notification tap, then
+  // clear the param so it doesn't reopen on a later, unrelated screen focus.
+  useEffect(() => {
+    const targetId = route?.params?.appointmentId;
+    if (!targetId) return;
+    const match = appointments.find(a => a.appointmentId === targetId);
+    if (match) {
+      setDetailAppt(match);
+      navigation.setParams({ appointmentId: undefined });
+    }
+  }, [appointments, route?.params?.appointmentId]);
 
   function openDetail(appt: Appointment) {
     setDetailAppt(appt);
