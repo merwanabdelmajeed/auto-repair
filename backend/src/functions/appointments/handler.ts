@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { QueryCommand, PutCommand, UpdateCommand, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
+import { db, TABLE, queryAll, queryPage } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
-import { ok, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { ok, paginated, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { notifyUser, notifyAdmins } from '../../shared/utils/notify.js';
 import { UserRole, type AppointmentStatus, type CapacitySettings } from '../../shared/types/index.js';
 import { isSlotAvailable, DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
@@ -22,13 +22,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // GET /appointments
     if (method === 'GET' && !appointmentId) {
       if (isAdmin) {
-        const items = await queryAll({
+        const cursor = event.queryStringParameters?.cursor ?? null;
+        const limit = Math.min(Number(event.queryStringParameters?.limit ?? 25) || 25, 100);
+        const { items, nextCursor } = await queryPage({
           TableName: TABLE.APPOINTMENTS,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
           ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'APPT#' },
           ScanIndexForward: false,
+          limit,
+          cursor,
         });
-        return ok(items.map(toAppointment));
+        return paginated(items.map(toAppointment), nextCursor);
       } else {
         // Customer sees own appointments via GSI1
         const items = await queryAll({
@@ -46,9 +50,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'POST') {
       requireRole(claims, UserRole.CUSTOMER);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { vehicleId, serviceId, scheduledAt, notes, promoCode } = body;
-      if (!vehicleId || !serviceId || !scheduledAt) {
-        return badRequest('vehicleId, serviceId, and scheduledAt are required');
+      const { locationId, vehicleId, serviceId, scheduledAt, notes, promoCode } = body;
+      if (!locationId || !vehicleId || !serviceId || !scheduledAt) {
+        return badRequest('locationId, vehicleId, serviceId, and scheduledAt are required');
       }
 
 
@@ -56,34 +60,38 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const scheduledTime = (scheduledAt as string).substring(11, 16);
       const normalizedCode = promoCode ? (promoCode as string).toUpperCase().trim() : null;
 
-      // Fetch service, vehicle, capacity, blocked times, and existing appointments in parallel
-      const [serviceResult, vehicleResult, capacityResult, blockedResult, existingAppts] = await Promise.all([
+      // Fetch location, service, vehicle, capacity, blocked times, and existing appointments in parallel
+      const [locationResult, serviceResult, vehicleResult, capacityResult, blockedResult, existingAppts] = await Promise.all([
+        db.send(new GetCommand({ TableName: TABLE.LOCATIONS, Key: { PK: `TENANT#${tenantId}`, SK: `LOCATION#${locationId}` } })),
         db.send(new GetCommand({ TableName: TABLE.SERVICES, Key: { PK: `TENANT#${tenantId}`, SK: `SERVICE#${serviceId}` } })),
         db.send(new GetCommand({ TableName: TABLE.VEHICLES, Key: { PK: `TENANT#${tenantId}`, SK: `VEHICLE#${vehicleId}` } })),
-        db.send(new GetCommand({ TableName: TABLE.CAPACITY, Key: { PK: `TENANT#${tenantId}`, SK: 'CAPACITY#DEFAULT' } })),
+        db.send(new GetCommand({ TableName: TABLE.CAPACITY, Key: { PK: `TENANT#${tenantId}`, SK: `CAPACITY#${locationId}` } })),
         db.send(new QueryCommand({
           TableName: TABLE.BLOCKED_TIMES,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#' },
+          FilterExpression: 'locationId = :locId',
+          ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#', ':locId': locationId },
         })),
         db.send(new QueryCommand({
           TableName: TABLE.APPOINTMENTS,
           IndexName: 'GSI2',
           KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :date)',
-          ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':date': scheduledDate },
+          ExpressionAttributeValues: { ':pk': `LOCATION#${locationId}`, ':date': scheduledDate },
         })),
       ]);
 
+      if (!locationResult.Item || locationResult.Item.isActive !== true) return notFound('Location not found');
       if (!serviceResult.Item) return notFound('Service not found');
       if (!vehicleResult.Item) return notFound('Vehicle not found');
 
       const capacity: CapacitySettings = capacityResult.Item ? {
         tenantId: capacityResult.Item.tenantId as string,
+        locationId: capacityResult.Item.locationId as string,
         slotDurationMinutes: capacityResult.Item.slotDurationMinutes as number,
         maxConcurrent: capacityResult.Item.maxConcurrent as number,
         operatingHours: capacityResult.Item.operatingHours as CapacitySettings['operatingHours'],
         updatedAt: capacityResult.Item.updatedAt as string,
-      } : { tenantId, ...DEFAULT_CAPACITY, updatedAt: '' };
+      } : { tenantId, locationId: locationId as string, ...DEFAULT_CAPACITY, updatedAt: '' };
 
       const blockedTimes = (blockedResult.Items ?? []).map(i => ({
         startDate: i.startDate as string,
@@ -134,11 +142,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         GSI1PK: `CUSTOMER#${userId}`,
         GSI1SK: `APPT#${scheduledAt}#${id}`,
         // GSI2SK is just scheduledAt (not status-prefixed) so date-range
-        // queries can use begins_with(GSI2SK, date) directly.
-        GSI2PK: `TENANT#${tenantId}`,
+        // queries can use begins_with(GSI2SK, date) directly. GSI2PK is
+        // location-scoped (not tenant-scoped) so slot availability is
+        // computed independently per location.
+        GSI2PK: `LOCATION#${locationId}`,
         GSI2SK: scheduledAt,
         appointmentId: id,
         tenantId,
+        locationId,
         customerId: userId,
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || email,
@@ -166,7 +177,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             {
               Update: {
                 TableName: TABLE.APPOINTMENTS,
-                Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${scheduledAt}` },
+                Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${locationId}#${scheduledAt}` },
                 UpdateExpression: 'ADD #cnt :one',
                 ConditionExpression: 'attribute_not_exists(#cnt) OR #cnt < :max',
                 ExpressionAttributeNames: { '#cnt': 'count' },
@@ -245,7 +256,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (status === 'cancelled' && previousStatus !== 'cancelled' && updatedItem?.scheduledAt) {
         db.send(new UpdateCommand({
           TableName: TABLE.APPOINTMENTS,
-          Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${updatedItem.scheduledAt as string}` },
+          Key: { PK: `TENANT#${tenantId}`, SK: `SLOTCOUNT#${updatedItem.locationId as string}#${updatedItem.scheduledAt as string}` },
           UpdateExpression: 'ADD #cnt :neg1',
           ExpressionAttributeNames: { '#cnt': 'count' },
           ExpressionAttributeValues: { ':neg1': -1 },
@@ -313,6 +324,7 @@ function toAppointment(i: Record<string, unknown>) {
   return {
     appointmentId: i.appointmentId,
     tenantId: i.tenantId,
+    locationId: i.locationId,
     customerId: i.customerId,
     customerEmail: i.customerEmail,
     customerName: i.customerName ?? '',

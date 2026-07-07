@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { getNotifications, markRead, type AppNotification } from '../api/notifications';
+import { getNotifications, markRead, markAllRead, type AppNotification } from '../api/notifications';
 
 interface NotificationsContextValue {
   notifications: AppNotification[];
@@ -8,6 +8,7 @@ interface NotificationsContextValue {
   loading: boolean;
   refresh: () => Promise<void>;
   markAsRead: (notifId: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
@@ -56,10 +57,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     );
   }, []);
 
+  const markAllAsRead = useCallback(async () => {
+    await markAllRead().catch(() => {});
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }, []);
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markAsRead }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markAsRead, markAllAsRead }}>
       {children}
     </NotificationsContext.Provider>
   );

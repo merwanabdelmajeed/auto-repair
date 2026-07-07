@@ -39,6 +39,20 @@ export interface Tenant {
   email: string;
   plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
   status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
+  address?: string;
+  phone?: string;
+  contactEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Location {
+  locationId: string;
+  tenantId: string;
+  name: string;
+  address: string;
+  phone?: string;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +108,7 @@ export interface DayHours {
 
 export interface CapacitySettings {
   tenantId: string;
+  locationId: string;
   slotDurationMinutes: number;
   maxConcurrent: number;
   operatingHours: Record<DayName, DayHours | null>;
@@ -103,6 +118,7 @@ export interface CapacitySettings {
 export interface BlockedTime {
   blockedTimeId: string;
   tenantId: string;
+  locationId: string;
   label: string;
   startDate: string;
   endDate: string;
@@ -141,6 +157,7 @@ export type AppointmentStatus = 'pending' | 'confirmed' | 'in-progress' | 'compl
 export interface Appointment {
   appointmentId: string;
   tenantId: string;
+  locationId: string;
   customerId: string;
   vehicleId: string;
   serviceId: string;

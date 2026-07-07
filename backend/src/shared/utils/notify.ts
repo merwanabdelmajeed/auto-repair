@@ -1,5 +1,4 @@
 import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { CognitoIdentityProviderClient, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { db, TABLE, queryAll } from './dynamodb.js';
 import { logger } from './logger.js';
 
@@ -55,7 +54,23 @@ export async function sendPush(token: string, title: string, body: string, data?
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ to: token, sound: 'default', title, body, data: data ?? {} }),
   });
-  if (!res.ok) logger.error('Expo push send failed', { status: res.status, body: await res.text() });
+
+  if (!res.ok) {
+    logger.error('Expo push send failed (HTTP error)', { status: res.status, body: await res.text() });
+    return;
+  }
+
+  // A 200 here only means Expo *accepted the request* — it does not mean the
+  // notification will actually be delivered. Per-notification success/failure
+  // comes back as a "ticket" in the response body (e.g. DeviceNotRegistered,
+  // InvalidCredentials, MismatchSenderId), which we must inspect separately.
+  const json = (await res.json().catch(() => null)) as { data?: { status: string; message?: string; details?: unknown } } | null;
+  const ticket = json?.data;
+  if (ticket?.status === 'error') {
+    logger.error('Expo push send failed (ticket error)', { message: ticket.message, details: ticket.details, token });
+  } else {
+    logger.info('Expo push send accepted', { ticketStatus: ticket?.status, token });
+  }
 }
 
 export async function getPushToken(tenantId: string, userId: string): Promise<string | null> {
@@ -82,49 +97,30 @@ export async function notifyUser(opts: NotifyOpts): Promise<void> {
   }
 }
 
-const cognito = new CognitoIdentityProviderClient({});
 const ADMIN_ROLE_NAMES = new Set(['SUPER_ADMIN', 'TENANT_OWNER', 'LOCATION_MANAGER']);
 
-// Admin users have no corresponding DynamoDB USER# record today — they're
-// created directly in Cognito (manually, pending the Phase 9 invite flow),
-// not through a code path that writes one. So "which admins belong to this
-// tenant" has to be answered by querying Cognito directly, not DynamoDB.
-//
-// Cognito's ListUsers Filter parameter only supports a small set of standard
-// attributes (username, email, phone_number, etc.) — custom attributes like
-// custom:tenantId and custom:role cannot be used there at all (it throws
-// InvalidParameterException). So this fetches all users in the pool, paging
-// through PaginationToken, and filters by tenantId + admin role client-side.
+// Admin users now get a real DynamoDB USER# record at invite time (Phase 9's
+// admin-users invite Lambda writes it directly, since AdminCreateUser'd users
+// never fire PostConfirmation_ConfirmSignUp), so this is a plain DynamoDB
+// query — no more paginating/filtering Cognito's ListUsers client-side.
 export async function getTenantAdminUserIds(tenantId: string): Promise<string[]> {
-  const userPoolId = process.env.USER_POOL_ID;
-  if (!userPoolId) return [];
-
-  const adminIds: string[] = [];
-  let paginationToken: string | undefined;
-  do {
-    const result = await cognito.send(new ListUsersCommand({
-      UserPoolId: userPoolId,
-      PaginationToken: paginationToken,
-    }));
-    for (const u of result.Users ?? []) {
-      const userTenantId = u.Attributes?.find(a => a.Name === 'custom:tenantId')?.Value;
-      const role = u.Attributes?.find(a => a.Name === 'custom:role')?.Value;
-      const sub = u.Attributes?.find(a => a.Name === 'sub')?.Value;
-      if (userTenantId === tenantId && role && ADMIN_ROLE_NAMES.has(role) && sub) {
-        adminIds.push(sub);
-      }
-    }
-    paginationToken = result.PaginationToken;
-  } while (paginationToken);
-
-  return adminIds;
+  const items = await queryAll({
+    TableName: TABLE.USERS,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+    ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'USER#' },
+  });
+  return items
+    .filter(i => ADMIN_ROLE_NAMES.has(i.role as string))
+    .map(i => i.userId as string);
 }
 
-// In-app only — admin app/portal don't register push tokens today.
+// Admin app now registers push tokens the same way the customer app does
+// (see apps/admin-app/src/hooks/usePushNotifications.ts), so notifyUser's
+// normal getPushToken lookup applies here too — no override needed.
 export async function notifyAdmins(tenantId: string, opts: Omit<NotifyOpts, 'userId' | 'tenantId'>): Promise<void> {
   const adminIds = await getTenantAdminUserIds(tenantId);
   await Promise.all(adminIds.map(userId =>
-    notifyUser({ ...opts, tenantId, userId, expoPushToken: null })
+    notifyUser({ ...opts, tenantId, userId })
       .catch(err => logger.error('Admin notification failed', { error: err, userId, tenantId }))
   ));
 }

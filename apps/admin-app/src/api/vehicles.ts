@@ -17,6 +17,14 @@ export interface UpdateVehicleInput {
   vin?: string;
 }
 
-export const listVehicles = () => api.get<Vehicle[]>('/vehicles');
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+// Admin callers get a paginated response ({ items, nextCursor }); this client
+// is admin-only, so it always hits that branch of GET /vehicles.
+export const listVehicles = (cursor?: string | null, limit = 25) =>
+  api.get<Page<Vehicle>>(`/vehicles?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
 export const updateVehicle = (vehicleId: string, data: UpdateVehicleInput) =>
   api.put<Vehicle>(`/vehicles/${vehicleId}`, data);

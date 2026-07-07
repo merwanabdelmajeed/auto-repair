@@ -13,6 +13,7 @@
     "jsx": "react-jsx",
     "strict": true,
 "noFallthroughCasesInSwitch": true,
+    "types": ["vitest/globals"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]

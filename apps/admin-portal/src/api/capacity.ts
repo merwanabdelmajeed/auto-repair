@@ -10,11 +10,14 @@ export interface DayHours {
 
 export interface CapacitySettings {
   tenantId: string;
+  locationId: string;
   slotDurationMinutes: number;
   maxConcurrent: number;
   operatingHours: Record<DayName, DayHours | null>;
   updatedAt: string;
 }
 
-export const getCapacity = () => api.get<CapacitySettings>('/capacity');
-export const updateCapacity = (data: Partial<CapacitySettings>) => api.put<CapacitySettings>('/capacity', data);
+export const getCapacity = (locationId: string) =>
+  api.get<CapacitySettings>(`/capacity?locationId=${encodeURIComponent(locationId)}`);
+export const updateCapacity = (locationId: string, data: Partial<CapacitySettings>) =>
+  api.put<CapacitySettings>('/capacity', { ...data, locationId });

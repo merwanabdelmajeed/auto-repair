@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 
 import HomeScreen from '../screens/HomeScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
@@ -29,6 +30,7 @@ function NotificationBell({ navigation }: { navigation: any }) {
     <TouchableOpacity
       onPress={() => navigation.navigate('Notifications')}
       style={{ marginRight: 16, position: 'relative' }}
+      hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
       activeOpacity={0.7}
     >
       <Ionicons name="notifications-outline" size={24} color={colors.white} />
@@ -41,7 +43,7 @@ function NotificationBell({ navigation }: { navigation: any }) {
           paddingHorizontal: 3,
         }}>
           <Text style={{ color: colors.white, fontSize: 9, fontWeight: '700', lineHeight: 14 }}>
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount}
           </Text>
         </View>
       )}
@@ -100,7 +102,9 @@ function AppNavigator() {
 
 export default function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
-  const [authScreen, setAuthScreen] = useState<'Login' | 'Register'>('Login');
+  const [authScreen, setAuthScreen] = useState<'Login' | 'Register' | 'VerifyEmail'>('Login');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingPassword, setPendingPassword] = useState('');
 
   if (isLoading) {
     return (
@@ -111,8 +115,27 @@ export default function RootNavigator() {
   }
 
   if (!isAuthenticated) {
+    if (authScreen === 'VerifyEmail') {
+      return (
+        <VerifyEmailScreen
+          email={pendingEmail}
+          password={pendingPassword}
+          onVerified={() => setAuthScreen('Login')}
+          onNavigateToLogin={() => setAuthScreen('Login')}
+        />
+      );
+    }
     if (authScreen === 'Register') {
-      return <RegisterScreen onNavigateToLogin={() => setAuthScreen('Login')} />;
+      return (
+        <RegisterScreen
+          onNavigateToLogin={() => setAuthScreen('Login')}
+          onRegistered={(email, password) => {
+            setPendingEmail(email);
+            setPendingPassword(password);
+            setAuthScreen('VerifyEmail');
+          }}
+        />
+      );
     }
     return <LoginScreen onNavigateToRegister={() => setAuthScreen('Register')} />;
   }

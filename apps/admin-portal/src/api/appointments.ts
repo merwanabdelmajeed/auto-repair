@@ -21,7 +21,13 @@ export interface Appointment {
   updatedAt: string;
 }
 
-export const listAppointments = () => api.get<Appointment[]>('/appointments');
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export const listAppointments = (cursor?: string | null, limit = 25) =>
+  api.get<Page<Appointment>>(`/appointments?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
 export const updateAppointmentStatus = (appointmentId: string, status: AppointmentStatus) =>
   api.patch<{ appointmentId: string; status: AppointmentStatus }>(
     `/appointments/${appointmentId}/status`,

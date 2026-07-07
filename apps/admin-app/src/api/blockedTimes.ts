@@ -3,6 +3,7 @@ import { api } from './client';
 export interface BlockedTime {
   blockedTimeId: string;
   tenantId: string;
+  locationId: string;
   label: string;
   startDate: string;
   endDate: string;
@@ -15,7 +16,9 @@ export interface BlockedTimeInput {
   endDate: string;
 }
 
-export const listBlockedTimes = () => api.get<BlockedTime[]>('/blocked-times');
-export const createBlockedTime = (data: BlockedTimeInput) => api.post<BlockedTime>('/blocked-times', data);
+export const listBlockedTimes = (locationId: string) =>
+  api.get<BlockedTime[]>(`/blocked-times?locationId=${encodeURIComponent(locationId)}`);
+export const createBlockedTime = (locationId: string, data: BlockedTimeInput) =>
+  api.post<BlockedTime>('/blocked-times', { ...data, locationId });
 export const deleteBlockedTime = (blockedTimeId: string) =>
   api.delete<{ blockedTimeId: string }>(`/blocked-times/${blockedTimeId}`);

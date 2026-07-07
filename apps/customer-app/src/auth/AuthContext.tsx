@@ -31,8 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone?: string) => {
     await CognitoService.register(email, password, tenantId, firstName, lastName, phone);
-    const authUser = await CognitoService.login(email, password);
-    setUser(authUser);
   };
 
   const logout = async () => {

@@ -12,8 +12,10 @@ import { validatePromoCode, type PromoValidation } from '../api/promotions';
 import { listServices, type Service } from '../api/services';
 import { listVehicles, type Vehicle } from '../api/vehicles';
 import { getAvailability, type AvailabilityResult, type TimeSlot } from '../api/availability';
+import { listLocations, type Location } from '../api/locations';
+import { localDateStr, parseDateParts, fmt12h, fmtDate } from '../utils/bookingDate';
 
-type BookingStep = 'service' | 'datetime' | 'vehicle' | 'confirm';
+type BookingStep = 'location' | 'service' | 'datetime' | 'vehicle' | 'confirm';
 
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   pending: { bg: 'rgba(245,158,11,0.12)', text: '#D97706' },
@@ -42,13 +44,7 @@ function sortByPopularity(svcs: import('../api/services').Service[]) {
   return [...svcs].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
 }
 
-const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LOOKAHEAD_DAYS = 30;
-
-function localDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function buildDates(): string[] {
   const today = new Date();
@@ -57,26 +53,6 @@ function buildDates(): string[] {
     d.setDate(d.getDate() + i);
     return localDateStr(d);
   });
-}
-
-function parseDateParts(dateStr: string): { dayName: string; day: number; month: string; isToday: boolean } {
-  const d = new Date(dateStr + 'T12:00:00Z');
-  const today = new Date();
-  const isToday = dateStr === localDateStr(today);
-  return { dayName: DAY_SHORT[d.getUTCDay()]!, day: d.getUTCDate(), month: MONTH_SHORT[d.getUTCMonth()]!, isToday };
-}
-
-function fmt12h(time: string): string {
-  const [hStr, mStr] = time.split(':');
-  const h = parseInt(hStr ?? '0', 10);
-  const m = mStr ?? '00';
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${m} ${ampm}`;
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export default function AppointmentsScreen({ route, navigation }: any) {
@@ -88,7 +64,9 @@ export default function AppointmentsScreen({ route, navigation }: any) {
 
   // Booking flow
   const [showBooking, setShowBooking] = useState(false);
-  const [bookingStep, setBookingStep] = useState<BookingStep>('service');
+  const [bookingStep, setBookingStep] = useState<BookingStep>('location');
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -147,12 +125,12 @@ export default function AppointmentsScreen({ route, navigation }: any) {
     }
   }, [appointments, route?.params?.appointmentId]);
 
-  async function fetchAvailability(date: string) {
+  async function fetchAvailability(date: string, locationId: string) {
     setAvailabilityLoading(true);
     setSelectedTime('');
     setAvailability(null);
     try {
-      const result = await getAvailability(date);
+      const result = await getAvailability(date, locationId);
       setAvailability(result);
     } catch {
       setAvailability(null);
@@ -162,7 +140,8 @@ export default function AppointmentsScreen({ route, navigation }: any) {
   }
 
   async function openBooking() {
-    setBookingStep('service');
+    setBookingStep('location');
+    setSelectedLocation(null);
     setSelectedService(null);
     setSelectedVehicle(null);
     setSelectedDate(localDateStr(new Date()));
@@ -174,23 +153,28 @@ export default function AppointmentsScreen({ route, navigation }: any) {
     setPromoError('');
     setBookingError('');
     setShowBooking(true);
-    const [svcs, vehs] = await Promise.all([listServices(), listVehicles()]);
+    const [locs, svcs, vehs] = await Promise.all([listLocations(), listServices(), listVehicles()]);
+    setLocations(locs);
     setServices(sortByPopularity(svcs.filter(s => s.isActive)));
     setVehicles(vehs);
   }
 
   async function handleDateSelect(date: string) {
     setSelectedDate(date);
-    await fetchAvailability(date);
+    if (selectedLocation) await fetchAvailability(date, selectedLocation.locationId);
   }
 
   function enterDatetimeStep() {
     setBookingStep('datetime');
-    void fetchAvailability(selectedDate);
+    if (selectedLocation) void fetchAvailability(selectedDate, selectedLocation.locationId);
   }
 
   function nextStep() {
-    if (bookingStep === 'service') {
+    if (bookingStep === 'location') {
+      if (!selectedLocation) { setBookingError('Please select a location.'); return; }
+      setBookingError('');
+      setBookingStep('service');
+    } else if (bookingStep === 'service') {
       if (!selectedService) { setBookingError('Please select a service.'); return; }
       setBookingError('');
       enterDatetimeStep();
@@ -206,7 +190,8 @@ export default function AppointmentsScreen({ route, navigation }: any) {
   }
 
   function prevStep() {
-    if (bookingStep === 'datetime') setBookingStep('service');
+    if (bookingStep === 'service') setBookingStep('location');
+    else if (bookingStep === 'datetime') setBookingStep('service');
     else if (bookingStep === 'vehicle') setBookingStep('datetime');
     else if (bookingStep === 'confirm') setBookingStep('vehicle');
   }
@@ -229,11 +214,12 @@ export default function AppointmentsScreen({ route, navigation }: any) {
   }
 
   async function submitBooking() {
-    if (!selectedService || !selectedVehicle || !selectedDate || !selectedTime) return;
+    if (!selectedLocation || !selectedService || !selectedVehicle || !selectedDate || !selectedTime) return;
     setBookingLoading(true);
     setBookingError('');
     try {
       const appt = await createAppointment({
+        locationId: selectedLocation.locationId,
         serviceId: selectedService.serviceId,
         vehicleId: selectedVehicle.vehicleId,
         scheduledAt: `${selectedDate}T${selectedTime}:00`,
@@ -282,7 +268,7 @@ export default function AppointmentsScreen({ route, navigation }: any) {
       : b.scheduledAt.localeCompare(a.scheduledAt)
   );
 
-  const STEPS: BookingStep[] = ['service', 'datetime', 'vehicle', 'confirm'];
+  const STEPS: BookingStep[] = ['location', 'service', 'datetime', 'vehicle', 'confirm'];
   const stepIndex = STEPS.indexOf(bookingStep);
 
   function renderDateItem({ item: date }: { item: string }) {
@@ -410,7 +396,7 @@ export default function AppointmentsScreen({ route, navigation }: any) {
                         </Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => setDetailAppt(null)}>
+                    <TouchableOpacity testID="appt-detail-close" onPress={() => setDetailAppt(null)}>
                       <Ionicons name="close" size={24} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
@@ -446,16 +432,17 @@ export default function AppointmentsScreen({ route, navigation }: any) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={prevStep} disabled={bookingStep === 'service'} style={{ opacity: bookingStep === 'service' ? 0 : 1 }}>
+              <TouchableOpacity testID="appt-booking-back" onPress={prevStep} disabled={bookingStep === 'location'} style={{ opacity: bookingStep === 'location' ? 0 : 1 }}>
                 <Ionicons name="chevron-back" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
-                {bookingStep === 'service' ? 'Choose Service'
+                {bookingStep === 'location' ? 'Choose Location'
+                  : bookingStep === 'service' ? 'Choose Service'
                   : bookingStep === 'datetime' ? 'Choose Date & Time'
                   : bookingStep === 'vehicle' ? 'Choose Vehicle'
                   : 'Confirm Booking'}
               </Text>
-              <TouchableOpacity onPress={() => setShowBooking(false)}>
+              <TouchableOpacity testID="appt-booking-close" onPress={() => setShowBooking(false)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -473,6 +460,23 @@ export default function AppointmentsScreen({ route, navigation }: any) {
             ) : null}
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 0 }}>
+              {/* Step 0: Location */}
+              {bookingStep === 'location' && (
+                locations.length === 0 ? (
+                  <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
+                ) : locations.map(loc => (
+                  <TouchableOpacity key={loc.locationId} onPress={() => setSelectedLocation(loc)} style={[styles.optionRow, selectedLocation?.locationId === loc.locationId && styles.optionRowSelected]}>
+                    <View style={styles.optionInfo}>
+                      <Text style={styles.optionName}>{loc.name}</Text>
+                      <Text style={styles.optionSub}>{loc.address}</Text>
+                    </View>
+                    {selectedLocation?.locationId === loc.locationId && (
+                      <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+
               {/* Step 1: Service */}
               {bookingStep === 'service' && (
                 services.length === 0 ? (
@@ -586,9 +590,10 @@ export default function AppointmentsScreen({ route, navigation }: any) {
               )}
 
               {/* Step 4: Confirm */}
-              {bookingStep === 'confirm' && selectedService && selectedVehicle && (
+              {bookingStep === 'confirm' && selectedLocation && selectedService && selectedVehicle && (
                 <View style={{ paddingBottom: spacing.md }}>
                   {[
+                    { label: 'Location', value: selectedLocation.name },
                     { label: 'Service', value: selectedService.name },
                     { label: 'Duration', value: `${selectedService.durationMinutes} min` },
                     { label: 'Vehicle', value: `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}` },
@@ -655,6 +660,7 @@ export default function AppointmentsScreen({ route, navigation }: any) {
             </ScrollView>
 
             <TouchableOpacity
+              testID="appt-booking-submit"
               style={[styles.saveBtn, (bookingLoading || (bookingStep === 'vehicle' && vehicles.length === 0)) && styles.saveBtnDisabled]}
               onPress={() => bookingStep === 'confirm' ? void submitBooking() : nextStep()}
               disabled={bookingLoading || (bookingStep === 'vehicle' && vehicles.length === 0)}

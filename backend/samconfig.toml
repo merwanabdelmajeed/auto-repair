@@ -11,3 +11,33 @@ image_repositories = []
 
 [default.global.parameters]
 region = "us-east-1"
+
+# Named environment profiles for `sam deploy --config-env <name>`. Each deploys
+# a fully independent stack (its own tables/Cognito pool/functions/etc, per the
+# Environment-parameterized template) — nothing here deploys anything on its
+# own; these only take effect when explicitly invoked.
+[dev.deploy.parameters]
+stack_name = "autorepair-stack-dev"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+s3_prefix = "autorepair-stack-dev"
+resolve_s3 = true
+image_repositories = []
+parameter_overrides = "Environment=dev"
+
+[dev.global.parameters]
+region = "us-east-1"
+
+[staging.deploy.parameters]
+stack_name = "autorepair-stack-staging"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+s3_prefix = "autorepair-stack-staging"
+resolve_s3 = true
+image_repositories = []
+parameter_overrides = "Environment=staging"
+
+[staging.global.parameters]
+region = "us-east-1"

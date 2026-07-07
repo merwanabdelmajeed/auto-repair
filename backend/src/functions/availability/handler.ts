@@ -16,23 +16,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return badRequest('date query parameter is required (YYYY-MM-DD)');
     }
+    const locationId = event.queryStringParameters?.locationId;
+    if (!locationId) return badRequest('locationId query parameter is required');
 
     const [capacityResult, blockedResult, apptResult] = await Promise.all([
       db.send(new GetCommand({
         TableName: TABLE.CAPACITY,
-        Key: { PK: `TENANT#${tenantId}`, SK: 'CAPACITY#DEFAULT' },
+        Key: { PK: `TENANT#${tenantId}`, SK: `CAPACITY#${locationId}` },
       })),
       db.send(new QueryCommand({
         TableName: TABLE.BLOCKED_TIMES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#' },
+        FilterExpression: 'locationId = :locId',
+        ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#', ':locId': locationId },
       })),
       db.send(new QueryCommand({
         TableName: TABLE.APPOINTMENTS,
         IndexName: 'GSI2',
         KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :date)',
         ExpressionAttributeValues: {
-          ':pk': `TENANT#${tenantId}`,
+          ':pk': `LOCATION#${locationId}`,
           ':date': date,
         },
       })),
@@ -40,11 +43,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const capacity: CapacitySettings = capacityResult.Item ? {
       tenantId: capacityResult.Item.tenantId as string,
+      locationId: capacityResult.Item.locationId as string,
       slotDurationMinutes: capacityResult.Item.slotDurationMinutes as number,
       maxConcurrent: capacityResult.Item.maxConcurrent as number,
       operatingHours: capacityResult.Item.operatingHours as CapacitySettings['operatingHours'],
       updatedAt: capacityResult.Item.updatedAt as string,
-    } : { tenantId, ...DEFAULT_CAPACITY, updatedAt: new Date().toISOString() };
+    } : { tenantId, locationId, ...DEFAULT_CAPACITY, updatedAt: new Date().toISOString() };
 
     const blockedTimes = (blockedResult.Items ?? []).map(i => ({
       startDate: i.startDate as string,

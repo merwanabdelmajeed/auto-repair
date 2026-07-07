@@ -16,6 +16,9 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResult => ({
 export const ok = (data: unknown): APIGatewayProxyResult =>
   json(200, { success: true, data });
 
+export const paginated = (items: unknown[], nextCursor: string | null): APIGatewayProxyResult =>
+  json(200, { success: true, data: { items, nextCursor } });
+
 export const created = (data: unknown): APIGatewayProxyResult =>
   json(201, { success: true, data });
 

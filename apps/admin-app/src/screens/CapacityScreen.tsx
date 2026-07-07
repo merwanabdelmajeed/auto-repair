@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { getCapacity, updateCapacity, type CapacitySettings, type DayName, type DayHours } from '../api/capacity';
+import { listLocations, type Location } from '../api/locations';
 
 const ALL_DAYS: DayName[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_LABEL: Record<DayName, string> = {
@@ -40,6 +41,8 @@ function formatTimeInput(text: string, prev: string): string {
 }
 
 export default function CapacityScreen() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [settings, setSettings] = useState<CapacitySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,10 +61,11 @@ export default function CapacityScreen() {
     sunday: null,
   });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (locationId: string) => {
+    if (!locationId) { setLoading(false); return; }
     try {
       setLoading(true);
-      const data = await getCapacity();
+      const data = await getCapacity(locationId);
       setSettings(data);
       setSlotDuration(data.slotDurationMinutes);
       setMaxConcurrent(data.maxConcurrent);
@@ -73,7 +77,19 @@ export default function CapacityScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  const loadLocations = useCallback(async () => {
+    try {
+      const locs = await listLocations();
+      setLocations(locs);
+      setSelectedLocationId(prev => prev || (locs.find(l => l.isActive) ?? locs[0])?.locationId || '');
+    } catch {
+      Alert.alert('Error', 'Failed to load locations.');
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void loadLocations(); }, [loadLocations]));
+  useFocusEffect(useCallback(() => { void load(selectedLocationId); }, [load, selectedLocationId]));
 
   function toggleDay(day: DayName, isOpen: boolean) {
     setHours(prev => ({
@@ -115,7 +131,7 @@ export default function CapacityScreen() {
     }
     setSaving(true);
     try {
-      const updated = await updateCapacity({ slotDurationMinutes: slotDuration, maxConcurrent, operatingHours: hours });
+      const updated = await updateCapacity(selectedLocationId, { slotDurationMinutes: slotDuration, maxConcurrent, operatingHours: hours });
       setSettings(updated);
       Alert.alert('Saved', 'Capacity settings updated.');
     } catch {
@@ -136,6 +152,23 @@ export default function CapacityScreen() {
   return (
     <Layout>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {locations.length > 0 && (
+          <View style={[styles.chipRow, { marginBottom: spacing.md }]}>
+            {locations.map(loc => (
+              <TouchableOpacity
+                key={loc.locationId}
+                style={[styles.chip, selectedLocationId === loc.locationId && styles.chipSelected]}
+                onPress={() => setSelectedLocationId(loc.locationId)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.chipText, selectedLocationId === loc.locationId && styles.chipTextSelected]}>
+                  {loc.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Slot Duration */}
         <View style={styles.card}>

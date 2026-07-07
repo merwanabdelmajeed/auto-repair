@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listBlockedTimes, createBlockedTime, deleteBlockedTime, type BlockedTime } from '../api/blockedTimes';
+import { listLocations, type Location } from '../api/locations';
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -24,6 +25,8 @@ function fmtRange(startDate: string, endDate: string): string {
 }
 
 export default function BlockedTimesScreen() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,10 +38,22 @@ export default function BlockedTimesScreen() {
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  const load = useCallback(async (isRefresh = false) => {
+  const loadLocations = useCallback(async () => {
+    try {
+      const locs = await listLocations();
+      setLocations(locs);
+      setSelectedLocationId(prev => prev || (locs.find(l => l.isActive) ?? locs[0])?.locationId || '');
+    } catch {
+      Alert.alert('Error', 'Failed to load locations.');
+      setLoading(false);
+    }
+  }, []);
+
+  const load = useCallback(async (locationId: string, isRefresh = false) => {
+    if (!locationId) { setLoading(false); return; }
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const data = await listBlockedTimes();
+      const data = await listBlockedTimes(locationId);
       setBlockedTimes(data);
     } catch {
       Alert.alert('Error', 'Failed to load blocked times.');
@@ -48,7 +63,8 @@ export default function BlockedTimesScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => { void loadLocations(); }, [loadLocations]));
+  useFocusEffect(useCallback(() => { void load(selectedLocationId); }, [load, selectedLocationId]));
 
   function openModal() {
     const today = new Date();
@@ -88,7 +104,7 @@ export default function BlockedTimesScreen() {
     setSaving(true);
     setModalError('');
     try {
-      const created = await createBlockedTime({ label: label.trim(), startDate, endDate });
+      const created = await createBlockedTime(selectedLocationId, { label: label.trim(), startDate, endDate });
       setBlockedTimes(prev => [...prev, created].sort((a, b) => a.startDate.localeCompare(b.startDate)));
       setShowModal(false);
     } catch {
@@ -121,8 +137,25 @@ export default function BlockedTimesScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(selectedLocationId, true)} tintColor={colors.primary} />}
       >
+        {locations.length > 0 && (
+          <View style={[styles.chipRow, { marginBottom: spacing.md }]}>
+            {locations.map(loc => (
+              <TouchableOpacity
+                key={loc.locationId}
+                style={[styles.chip, selectedLocationId === loc.locationId && styles.chipSelected]}
+                onPress={() => setSelectedLocationId(loc.locationId)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.chipText, selectedLocationId === loc.locationId && styles.chipTextSelected]}>
+                  {loc.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
           <Text style={styles.infoText}>
@@ -239,6 +272,12 @@ const styles = StyleSheet.create({
 
   infoCard: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', backgroundColor: 'rgba(15,32,68,0.05)', borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.md, borderWidth: 1, borderColor: 'rgba(15,32,68,0.12)' },
   infoText: { flex: 1, ...typography.small, color: colors.textSecondary, lineHeight: 18 },
+
+  chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  chip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: borderRadius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.background },
+  chipSelected: { borderColor: colors.primary, backgroundColor: 'rgba(15,32,68,0.06)' },
+  chipText: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '600' },
+  chipTextSelected: { color: colors.primary },
 
   emptyState: { alignItems: 'center', paddingVertical: spacing.xxl, gap: spacing.sm },
   emptyTitle: { ...typography.h3, color: colors.textPrimary },

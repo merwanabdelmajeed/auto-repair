@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, FlatList, ScrollView, StyleSheet, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, RefreshControl, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,8 @@ import {
 } from '../api/appointments';
 import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
+import { VALID_NEXT } from '../utils/appointmentTransitions';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 type BookingsTab = AppointmentStatus | 'current' | 'past';
 
@@ -41,12 +43,6 @@ const STATUS_COLOR: Record<AppointmentStatus, { bg: string; text: string }> = {
   'in-progress': { bg: 'rgba(139,92,246,0.12)', text: '#7C3AED' },
   completed: { bg: 'rgba(34,197,94,0.12)', text: '#16A34A' },
   cancelled: { bg: 'rgba(148,163,184,0.12)', text: '#64748B' },
-};
-
-const VALID_NEXT: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
-  pending:       ['confirmed', 'cancelled'],
-  confirmed:     ['in-progress', 'cancelled'],
-  'in-progress': ['completed', 'cancelled'],
 };
 
 function statusLabel(s: AppointmentStatus) {
@@ -82,7 +78,11 @@ export default function BookingsScreen({ route, navigation }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [appts, customers, vehicles] = await Promise.all([listAppointments(), listCustomers(), listVehicles()]);
+      const [appts, customers, vehicles] = await Promise.all([
+        fetchAllPages(cursor => listAppointments(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)),
+        fetchAllPages(cursor => listVehicles(cursor)),
+      ]);
       setAppointments(appts);
       const cmap: Record<string, Customer> = {};
       customers.forEach(c => { cmap[c.userId] = c; });
@@ -271,13 +271,14 @@ export default function BookingsScreen({ route, navigation }: any) {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
-        <ScrollView
+        <FlatList
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={colors.secondary} />}
-        >
-          {filtered.length === 0 ? (
+          data={filtered}
+          keyExtractor={appt => appt.appointmentId}
+          ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>
                 <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
@@ -285,11 +286,12 @@ export default function BookingsScreen({ route, navigation }: any) {
               <Text style={styles.emptyTitle}>{activeTab === 'current' ? 'No Upcoming Appointments' : activeTab === 'past' ? 'No Past Appointments' : `No ${activeTab} appointments`}</Text>
               <Text style={styles.emptyDesc}>Appointments appear here when customers book through the app.</Text>
             </View>
-          ) : filtered.map(appt => {
+          }
+          renderItem={({ item: appt }) => {
             const sc = STATUS_COLOR[appt.status];
             const isUpdating = updating === appt.appointmentId;
             return (
-              <TouchableOpacity key={appt.appointmentId} style={styles.card} onPress={() => openDetail(appt)} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.card} onPress={() => openDetail(appt)} activeOpacity={0.85}>
                 <View style={styles.cardTop}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.serviceName}>{appt.serviceName}</Text>
@@ -335,8 +337,8 @@ export default function BookingsScreen({ route, navigation }: any) {
                 )}
               </TouchableOpacity>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       )}
 
       {/* Detail Modal */}

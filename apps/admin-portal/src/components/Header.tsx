@@ -22,7 +22,7 @@ function timeAgo(iso: string): string {
 }
 
 function NotificationBell() {
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ function NotificationBell() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '0 3px', color: 'white', fontSize: '10px', fontWeight: 700,
           }}>
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount}
           </span>
         )}
       </button>
@@ -72,8 +72,24 @@ function NotificationBell() {
             overflowY: 'auto', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)',
             borderRadius: '12px', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(0,0,0,0.12))', zIndex: 10,
           }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-divider)', fontWeight: 700, fontSize: '14px', color: 'var(--color-text-primary)' }}>
-              Notifications
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 16px', borderBottom: '1px solid var(--color-divider)',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-text-primary)' }}>
+                Notifications
+              </span>
+              {unreadCount > 0 && (
+                <button
+                  onClick={() => void markAllAsRead()}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)',
+                  }}
+                >
+                  Mark all as read
+                </button>
+              )}
             </div>
             {notifications.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px' }}>

@@ -13,4 +13,5 @@ export interface AppNotification {
 
 export const getNotifications = () => api.get<AppNotification[]>('/notifications');
 export const markRead = (notifId: string) => api.put<{ notifId: string }>(`/notifications/${notifId}/read`, {});
+export const markAllRead = () => api.put<{ updated: number }>('/notifications/read-all', {});
 export const registerPushToken = (token: string) => api.put<{ success: boolean }>('/users/push-token', { token });

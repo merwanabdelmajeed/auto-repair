@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { listBlockedTimes, createBlockedTime, deleteBlockedTime, type BlockedTime } from '../api/blockedTimes';
+import { listLocations, type Location } from '../api/locations';
 
 function todayStr(): string {
   const d = new Date();
@@ -13,6 +14,8 @@ function fmtRange(startDate: string, endDate: string): string {
 }
 
 export default function BlockedTimes() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -23,11 +26,26 @@ export default function BlockedTimes() {
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const locs = await listLocations();
+        setLocations(locs);
+        const active = locs.find(l => l.isActive) ?? locs[0];
+        if (active) setSelectedLocationId(active.locationId);
+        else setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => { if (selectedLocationId) void load(); }, [selectedLocationId]);
 
   async function load() {
     try {
-      const data = await listBlockedTimes();
+      setLoading(true);
+      const data = await listBlockedTimes(selectedLocationId);
       setBlockedTimes(data.sort((a, b) => a.startDate.localeCompare(b.startDate)));
     } catch {
       // silently fail
@@ -52,7 +70,7 @@ export default function BlockedTimes() {
     setSaving(true);
     setModalError('');
     try {
-      const created = await createBlockedTime({ label: label.trim(), startDate, endDate });
+      const created = await createBlockedTime(selectedLocationId, { label: label.trim(), startDate, endDate });
       setBlockedTimes(prev => [...prev, created].sort((a, b) => a.startDate.localeCompare(b.startDate)));
       setShowModal(false);
     } catch {
@@ -74,13 +92,33 @@ export default function BlockedTimes() {
 
   return (
     <div style={{ maxWidth: '800px' }}>
+      {locations.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          {locations.map(loc => (
+            <button
+              key={loc.locationId}
+              onClick={() => setSelectedLocationId(loc.locationId)}
+              style={{
+                padding: '8px 18px', borderRadius: '8px', border: `2px solid ${selectedLocationId === loc.locationId ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                backgroundColor: selectedLocationId === loc.locationId ? 'rgba(15,32,68,0.06)' : 'var(--color-background)',
+                color: selectedLocationId === loc.locationId ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                fontWeight: selectedLocationId === loc.locationId ? 700 : 500, fontSize: '14px', cursor: 'pointer',
+              }}
+            >
+              {loc.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
           Block dates to prevent customer bookings on holidays or closures.
         </div>
         <button
           onClick={openModal}
-          style={{ padding: '9px 20px', backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}
+          disabled={!selectedLocationId}
+          style={{ padding: '9px 20px', backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: selectedLocationId ? 'pointer' : 'not-allowed', opacity: selectedLocationId ? 1 : 0.6 }}
         >
           + Add Block
         </button>

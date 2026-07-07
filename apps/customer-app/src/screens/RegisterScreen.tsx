@@ -16,6 +16,7 @@ import { useAuth } from '../auth/AuthContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 type Props = {
   onNavigateToLogin: () => void;
+  onRegistered: (email: string, password: string) => void;
 };
 
 // For MVP, tenant ID is hardcoded. Replace with invitation-code flow in a later phase.
@@ -28,7 +29,7 @@ function formatPhone(value: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-export default function RegisterScreen({ onNavigateToLogin }: Props) {
+export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Props) {
   const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -56,7 +57,9 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
     setError('');
     setLoading(true);
     try {
-      await register(email.trim(), password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(), phone.trim() || undefined);
+      const trimmedEmail = email.trim();
+      await register(trimmedEmail, password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(), phone.trim() || undefined);
+      onRegistered(trimmedEmail, password);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Registration failed. Please try again.';
       setError(msg);
@@ -153,6 +156,7 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
               autoComplete="new-password"
             />
             <TouchableOpacity
+              testID="register-toggle-password"
               style={styles.eyeBtn}
               onPress={() => setShowPassword((v) => !v)}
             >
@@ -176,6 +180,7 @@ export default function RegisterScreen({ onNavigateToLogin }: Props) {
           />
 
           <TouchableOpacity
+            testID="register-submit-btn"
             style={[styles.btn, loading && styles.btnDisabled]}
             onPress={handleRegister}
             disabled={loading}

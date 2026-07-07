@@ -16,10 +16,6 @@ export const handler = async (event: PreSignUpTriggerEvent): Promise<PreSignUpTr
     throw new Error('Self-registration is not allowed for admin accounts.');
   }
 
-  // Auto-confirm and verify email for customer sign-ups (skip email verification flow for MVP)
-  event.response.autoConfirmUser = true;
-  event.response.autoVerifyEmail = true;
-
   // tenantId must be supplied by the customer app as a custom attribute during sign-up
   const tenantId = event.request.userAttributes['custom:tenantId'];
   if (!tenantId) {

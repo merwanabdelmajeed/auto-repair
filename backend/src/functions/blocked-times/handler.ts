@@ -17,10 +17,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     if (method === 'GET') {
       requireRole(claims, ...ADMIN_ROLES);
+      const locationId = event.queryStringParameters?.locationId;
+      if (!locationId) return badRequest('locationId query parameter is required');
       const items = await queryAll({
         TableName: TABLE.BLOCKED_TIMES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#' },
+        FilterExpression: 'locationId = :locId',
+        ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'BLOCKED#', ':locId': locationId },
         ScanIndexForward: true,
       });
       return ok(items.map(toBlockedTime));
@@ -29,8 +32,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'POST') {
       requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { label, startDate, endDate } = body;
+      const { locationId, label, startDate, endDate } = body;
 
+      if (!locationId) return badRequest('locationId is required');
       if (!label || !startDate || !endDate) return badRequest('label, startDate, and endDate are required');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate as string) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate as string)) {
         return badRequest('startDate and endDate must be YYYY-MM-DD');
@@ -44,6 +48,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         SK: `BLOCKED#${id}`,
         blockedTimeId: id,
         tenantId,
+        locationId,
         label,
         startDate,
         endDate,
@@ -82,6 +87,7 @@ function toBlockedTime(i: Record<string, unknown>) {
   return {
     blockedTimeId: i.blockedTimeId,
     tenantId: i.tenantId,
+    locationId: i.locationId,
     label: i.label,
     startDate: i.startDate,
     endDate: i.endDate,

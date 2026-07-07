@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
-import { updateProfile } from '../auth/CognitoService';
+import { updateProfile, sendPhoneVerificationCode, confirmPhoneVerification } from '../auth/CognitoService';
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 10);
@@ -24,6 +24,12 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const [showVerifyPhone, setShowVerifyPhone] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifySent, setVerifySent] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   const initials = user?.givenName && user?.familyName
     ? `${user.givenName[0]}${user.familyName[0]}`.toUpperCase()
@@ -49,13 +55,60 @@ export default function ProfileScreen() {
     setSaving(true);
     setError('');
     try {
-      await updateProfile(firstName.trim(), lastName.trim(), phone.trim());
-      updateUser({ givenName: firstName.trim(), familyName: lastName.trim(), phone: phone.trim() || undefined });
+      const trimmedPhone = phone.trim();
+      await updateProfile(firstName.trim(), lastName.trim(), trimmedPhone);
+      const phoneChanged = trimmedPhone !== (user?.phone ?? '');
+      updateUser({
+        givenName: firstName.trim(),
+        familyName: lastName.trim(),
+        phone: trimmedPhone || undefined,
+        ...(phoneChanged ? { phoneVerified: false } : {}),
+      });
       setShowEdit(false);
     } catch {
       setError('Failed to save. Please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openVerifyPhone() {
+    setVerifyCode('');
+    setVerifySent(false);
+    setVerifyError('');
+    setShowVerifyPhone(true);
+  }
+
+  async function handleSendCode() {
+    setVerifyError('');
+    setVerifying(true);
+    try {
+      await sendPhoneVerificationCode(user?.phone ?? '');
+      setVerifySent(true);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not send code. Please try again.';
+      setVerifyError(msg);
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (!verifyCode.trim()) {
+      setVerifyError('Enter the code sent to your phone.');
+      return;
+    }
+    setVerifyError('');
+    setVerifying(true);
+    try {
+      await confirmPhoneVerification(verifyCode.trim());
+      updateUser({ phoneVerified: true });
+      setShowVerifyPhone(false);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Verification failed. Please try again.';
+      setVerifyError(msg);
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -69,7 +122,6 @@ export default function ProfileScreen() {
   const fields = [
     { icon: 'person-outline' as const, label: 'Full Name', value: displayName || '—' },
     { icon: 'mail-outline' as const, label: 'Email Address', value: user?.email ?? '—' },
-    { icon: 'call-outline' as const, label: 'Phone Number', value: user?.phone || '—' },
   ];
 
   return (
@@ -92,8 +144,8 @@ export default function ProfileScreen() {
         {/* Profile Fields */}
         <Text style={styles.sectionTitle}>Profile Information</Text>
         <View style={styles.fieldsCard}>
-          {fields.map((field, i) => (
-            <View key={field.label} style={[styles.fieldRow, i === fields.length - 1 && styles.fieldRowLast]}>
+          {fields.map((field) => (
+            <View key={field.label} style={styles.fieldRow}>
               <View style={styles.fieldIcon}>
                 <Ionicons name={field.icon} size={18} color={colors.primary} />
               </View>
@@ -103,6 +155,27 @@ export default function ProfileScreen() {
               </View>
             </View>
           ))}
+          <View style={[styles.fieldRow, styles.fieldRowLast]}>
+            <View style={styles.fieldIcon}>
+              <Ionicons name="call-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Phone Number</Text>
+              <Text style={styles.fieldValue}>{user?.phone || '—'}</Text>
+            </View>
+            {user?.phone ? (
+              user.phoneVerified ? (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+                  <Text style={styles.verifiedBadgeText}>Verified</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.verifyBtn} onPress={openVerifyPhone} activeOpacity={0.85}>
+                  <Text style={styles.verifyBtnText}>Verify</Text>
+                </TouchableOpacity>
+              )
+            ) : null}
+          </View>
         </View>
 
         {/* Sign Out */}
@@ -119,7 +192,7 @@ export default function ProfileScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
-              <TouchableOpacity onPress={() => setShowEdit(false)}>
+              <TouchableOpacity testID="profile-edit-close" onPress={() => setShowEdit(false)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -174,6 +247,71 @@ export default function ProfileScreen() {
                 ? <ActivityIndicator color={colors.primary} />
                 : <Text style={styles.saveBtnText}>Save Changes</Text>}
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Verify Phone Modal */}
+      <Modal visible={showVerifyPhone} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Verify Phone Number</Text>
+              <TouchableOpacity onPress={() => setShowVerifyPhone(false)}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {verifyError ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{verifyError}</Text>
+              </View>
+            ) : null}
+
+            {!verifySent ? (
+              <>
+                <Text style={styles.emailNote}>
+                  We&apos;ll text a verification code to {user?.phone || 'your phone'}.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.saveBtn, verifying && styles.saveBtnDisabled]}
+                  onPress={() => void handleSendCode()}
+                  disabled={verifying}
+                  activeOpacity={0.85}
+                >
+                  {verifying
+                    ? <ActivityIndicator color={colors.primary} />
+                    : <Text style={styles.saveBtnText}>Send Code</Text>}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.inputLabel}>Verification Code</Text>
+                <TextInput
+                  style={styles.input}
+                  value={verifyCode}
+                  onChangeText={setVerifyCode}
+                  placeholder="123456"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+                <TouchableOpacity
+                  testID="profile-verify-phone-submit"
+                  style={[styles.saveBtn, verifying && styles.saveBtnDisabled]}
+                  onPress={() => void handleVerifyCode()}
+                  disabled={verifying}
+                  activeOpacity={0.85}
+                >
+                  {verifying
+                    ? <ActivityIndicator color={colors.primary} />
+                    : <Text style={styles.saveBtnText}>Verify</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.linkRow} onPress={() => void handleSendCode()} disabled={verifying}>
+                  <Text style={styles.linkText}>Resend code</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -249,6 +387,19 @@ const styles = StyleSheet.create({
   fieldContent: { flex: 1 },
   fieldLabel: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
   fieldValue: { ...typography.body, color: colors.textPrimary },
+  verifiedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(37,99,235,0.08)', borderRadius: borderRadius.md,
+    paddingVertical: 4, paddingHorizontal: 8,
+  },
+  verifiedBadgeText: { ...typography.small, color: colors.primary, fontWeight: '600' },
+  verifyBtn: {
+    backgroundColor: colors.secondary, borderRadius: borderRadius.md,
+    paddingVertical: 6, paddingHorizontal: 12,
+  },
+  verifyBtnText: { ...typography.small, color: colors.primary, fontWeight: '700' },
+  linkRow: { alignItems: 'center', marginTop: spacing.md },
+  linkText: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
 
   signOutBtn: {
     flexDirection: 'row',

@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F2044"
       },
-      "package": "com.autorepair.admin"
+      "package": "com.autorepair.admin",
+      "googleServicesFile": "./android/app/google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -30,6 +31,14 @@
     "scheme": "autorepair-admin",
     "plugins": [
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "owner": "mabdelmajeed",
+    "extra": {
+      "shopName": "Purrfect Auto Service #17",
+      "shopCity": "Lake Forest",
+      "eas": {
+        "projectId": "41cd79b8-7617-464d-b066-dfbb9ed07c59"
+      }
+    }
   }
 }

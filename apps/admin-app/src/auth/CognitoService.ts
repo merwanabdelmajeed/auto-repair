@@ -29,6 +29,22 @@ export class NewPasswordRequiredError extends Error {
   }
 }
 
+export class NotAuthorizedRoleError extends Error {
+  constructor() {
+    super('This account does not have admin access.');
+    this.name = 'NotAuthorizedRoleError';
+  }
+}
+
+// Cognito validates credentials at the User Pool level, not per app client, so a
+// customer's credentials authenticate successfully against this admin client
+// too — the API rejects their requests server-side, but without this check the
+// app would still let them into a signed-in (just broken) shell.
+const ADMIN_ROLES = ['SUPER_ADMIN', 'TENANT_OWNER', 'LOCATION_MANAGER'];
+function isAdminRole(role: string | undefined): boolean {
+  return !!role && ADMIN_ROLES.includes(role);
+}
+
 let _pendingUser: CognitoUser | null = null;
 
 function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
@@ -50,7 +66,16 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     const user = new CognitoUser({ Username: email, Pool: pool });
     const auth = new AuthenticationDetails({ Username: email, Password: password });
     user.authenticateUser(auth, {
-      onSuccess: (session) => { _pendingUser = null; resolve(sessionToUser(session, email)); },
+      onSuccess: (session) => {
+        _pendingUser = null;
+        const authUser = sessionToUser(session, email);
+        if (!isAdminRole(authUser.role)) {
+          user.signOut();
+          reject(new NotAuthorizedRoleError());
+          return;
+        }
+        resolve(authUser);
+      },
       onFailure: (err) => { _pendingUser = null; reject(err); },
       newPasswordRequired: () => { _pendingUser = user; reject(new NewPasswordRequiredError()); },
     });
@@ -65,7 +90,13 @@ export async function completeNewPassword(newPassword: string): Promise<AuthUser
       onSuccess: (session) => {
         _pendingUser = null;
         const payload = session.getIdToken().decodePayload();
-        resolve(sessionToUser(session, payload['email'] as string));
+        const authUser = sessionToUser(session, payload['email'] as string);
+        if (!isAdminRole(authUser.role)) {
+          user.signOut();
+          reject(new NotAuthorizedRoleError());
+          return;
+        }
+        resolve(authUser);
       },
       onFailure: (err) => { _pendingUser = null; reject(err); },
     });
@@ -83,12 +114,20 @@ export async function getSessionUser(): Promise<AuthUser | null> {
     user.getSession((err: Error | null, session: CognitoUserSession | null) => {
       if (err || !session || !session.isValid()) return resolve(null);
       const payload = session.getIdToken().decodePayload();
+      const role = payload['custom:role'] as string;
+      if (!isAdminRole(role)) {
+        // A previously-valid session whose role no longer qualifies (or a stale
+        // customer session from before this check existed) — sign out rather
+        // than restore it.
+        user.signOut();
+        return resolve(null);
+      }
       const rawLocationIds = (payload['custom:locationIds'] as string) ?? '';
       resolve({
         userId: payload['sub'] as string,
         email: payload['email'] as string,
         tenantId: payload['custom:tenantId'] as string,
-        role: payload['custom:role'] as string,
+        role,
         locationIds: rawLocationIds ? rawLocationIds.split(',').filter(Boolean) : [],
         givenName: (payload['given_name'] as string) ?? '',
         familyName: (payload['family_name'] as string) ?? '',

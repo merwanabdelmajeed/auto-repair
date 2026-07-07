@@ -10,6 +10,8 @@ import {
 import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import StatusPickerModal from '../components/StatusPickerModal';
+import { VALID_NEXT } from '../utils/appointmentTransitions';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -40,11 +42,6 @@ const STATUS_STYLE: Record<AppointmentStatus, { bg: string; color: string; borde
   cancelled:     { bg: 'rgba(148,163,184,0.1)', color: '#64748B', border: 'rgba(148,163,184,0.3)' },
 };
 
-const VALID_NEXT: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
-  pending:       ['confirmed', 'cancelled'],
-  confirmed:     ['in-progress', 'cancelled'],
-  'in-progress': ['completed', 'cancelled'],
-};
 
 function statusLabel(s: AppointmentStatus) {
   return s === 'in-progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1);
@@ -97,7 +94,11 @@ export default function Bookings() {
     try {
       setLoading(true);
       setError('');
-      const [data, customers, vehicles] = await Promise.all([listAppointments(), listCustomers(), listVehicles()]);
+      const [data, customers, vehicles] = await Promise.all([
+        fetchAllPages(cursor => listAppointments(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)),
+        fetchAllPages(cursor => listVehicles(cursor)),
+      ]);
       setAppointments(data);
       const map: Record<string, Customer> = {};
       customers.forEach(c => { map[c.userId] = c; });

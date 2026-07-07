@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
+import { db, TABLE, queryAll, queryPage } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
-import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
+import { ok, paginated, created, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
 
@@ -19,13 +19,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // GET /vehicles
     if (method === 'GET') {
       if (isAdmin) {
-        // Admins see all vehicles for the tenant
-        const items = await queryAll({
+        // Admins see all vehicles for the tenant, paginated
+        const cursor = event.queryStringParameters?.cursor ?? null;
+        const limit = Math.min(Number(event.queryStringParameters?.limit ?? 25) || 25, 100);
+        const { items, nextCursor } = await queryPage({
           TableName: TABLE.VEHICLES,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
           ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'VEHICLE#' },
+          limit,
+          cursor,
         });
-        return ok(items.map(toVehicle));
+        return paginated(items.map(toVehicle), nextCursor);
       } else {
         // Customers see their own vehicles via GSI1
         const items = await queryAll({

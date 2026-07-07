@@ -57,8 +57,9 @@ function NotifRow({ notif, onPress }: { notif: AppNotification; onPress: () => v
 }
 
 export default function NotificationsScreen({ navigation }: any) {
-  const { notifications, loading, markAsRead, refresh } = useNotifications();
+  const { notifications, loading, markAsRead, markAllAsRead, refresh } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -100,6 +101,13 @@ export default function NotificationsScreen({ navigation }: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.secondary} />}
         >
+          {unreadCount > 0 && (
+            <View style={styles.markAllRow}>
+              <TouchableOpacity onPress={() => void markAllAsRead()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {notifications.map((n) => (
             <NotifRow
               key={n.notifId}
@@ -117,6 +125,18 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   listContent: { paddingVertical: spacing.sm, paddingBottom: spacing.xxl },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  markAllRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  markAllText: {
+    ...typography.bodySmall,
+    color: colors.secondary,
+    fontWeight: '600',
+  },
 
   emptyContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   emptyIcon: {

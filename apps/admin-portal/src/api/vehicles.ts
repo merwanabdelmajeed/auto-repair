@@ -18,6 +18,12 @@ export interface UpdateVehicleInput {
   vin?: string | null;
 }
 
-export const listVehicles = () => api.get<Vehicle[]>('/vehicles');
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export const listVehicles = (cursor?: string | null, limit = 25) =>
+  api.get<Page<Vehicle>>(`/vehicles?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
 export const updateVehicle = (vehicleId: string, data: UpdateVehicleInput) =>
   api.put<Vehicle>(`/vehicles/${vehicleId}`, data);

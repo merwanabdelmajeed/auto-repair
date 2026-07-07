@@ -48,3 +48,9 @@ Thumbs.db
 
 # Vite
 dist/
+
+# Test coverage output
+coverage/
+
+# Claude Code local settings
+.claude/

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { listCustomers, type Customer } from '../api/customers';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -56,7 +57,10 @@ export default function Vehicles() {
     try {
       setLoading(true);
       setError('');
-      const [v, c] = await Promise.all([listVehicles(), listCustomers()]);
+      const [v, c] = await Promise.all([
+        fetchAllPages(cursor => listVehicles(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)),
+      ]);
       setVehicles(v);
       const map: Record<string, Customer> = {};
       c.forEach(cu => { map[cu.userId] = cu; });

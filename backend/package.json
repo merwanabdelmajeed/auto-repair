@@ -6,6 +6,7 @@
     "build": "tsc --noEmit && esbuild src/functions/**/*.ts --bundle --platform=node --target=node20 --outdir=dist --external:@aws-sdk/* --external:aws-lambda",
     "type-check": "tsc --noEmit",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
@@ -17,8 +18,12 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.14.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "esbuild": "^0.21.5",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.4.5"
   }
 }

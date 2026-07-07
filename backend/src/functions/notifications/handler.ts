@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -22,6 +22,26 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Limit: 50,
       }));
       return ok((result.Items ?? []).map(toNotification));
+    }
+
+    // PUT /notifications/read-all — scoped to the caller's own USER# partition,
+    // so an admin marking their notifications read never touches other admins'.
+    if (method === 'PUT' && !notifId && event.path.endsWith('/read-all')) {
+      const unread = await queryAll({
+        TableName: TABLE.NOTIFICATIONS,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+        FilterExpression: '#r = :false',
+        ExpressionAttributeNames: { '#r': 'read' },
+        ExpressionAttributeValues: { ':pk': `USER#${userId}`, ':prefix': 'NOTIF#', ':false': false },
+      });
+      await Promise.all(unread.map(item => db.send(new UpdateCommand({
+        TableName: TABLE.NOTIFICATIONS,
+        Key: { PK: item.PK as string, SK: item.SK as string },
+        UpdateExpression: 'SET #r = :true',
+        ExpressionAttributeNames: { '#r': 'read' },
+        ExpressionAttributeValues: { ':true': true },
+      }))));
+      return ok({ updated: unread.length });
     }
 
     // PUT /notifications/{notifId}/read

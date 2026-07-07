@@ -5,6 +5,8 @@ import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment
 import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import StatusPickerModal from '../components/StatusPickerModal';
+import { VALID_NEXT } from '../utils/appointmentTransitions';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -18,11 +20,6 @@ const STATUS_STYLE: Record<AppointmentStatus, { bg: string; color: string; borde
   cancelled:     { bg: 'rgba(148,163,184,0.1)', color: '#64748B', border: 'rgba(148,163,184,0.3)' },
 };
 
-const VALID_NEXT: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
-  pending:       ['confirmed', 'cancelled'],
-  confirmed:     ['in-progress', 'cancelled'],
-  'in-progress': ['completed', 'cancelled'],
-};
 
 function statusLabel(s: AppointmentStatus) {
   return s === 'in-progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1);
@@ -62,9 +59,9 @@ export default function Dashboard() {
     const today = todayLocalDate();
     Promise.all([
       getDashboardSummary().catch(() => null),
-      listAppointments().catch(() => [] as Appointment[]),
-      listCustomers().catch(() => [] as Customer[]),
-      listVehicles().catch(() => [] as Vehicle[]),
+      fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
+      fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
+      fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
     ]).then(([sum, appts, customers, vehicles]) => {
       setSummary(sum);
       setTodaysAppointments(

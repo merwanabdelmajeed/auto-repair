@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  View, Text, ScrollView, StyleSheet, TextInput,
+  View, Text, FlatList, ScrollView, StyleSheet, TextInput,
   ActivityIndicator, Alert, RefreshControl, TouchableOpacity, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { listCustomers, type Customer } from '../api/customers';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -38,7 +39,10 @@ export default function VehiclesScreen({ navigation, route }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [v, c] = await Promise.all([listVehicles(), listCustomers()]);
+      const [v, c] = await Promise.all([
+        fetchAllPages(cursor => listVehicles(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)),
+      ]);
       setVehicles(v);
       const map: Record<string, Customer> = {};
       c.forEach(cu => { map[cu.userId] = cu; });
@@ -122,27 +126,29 @@ export default function VehiclesScreen({ navigation, route }: any) {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
-        <ScrollView
+        <FlatList
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={colors.secondary} />}
-        >
-          {filterCustomer ? (
-            <View style={styles.filterBanner}>
-              <Ionicons name="person-circle-outline" size={16} color={colors.primary} />
-              <Text style={styles.filterText}>
-                Vehicles for <Text style={styles.filterName}>{displayName(filterCustomer)}</Text>
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Vehicles', { customerId: undefined })}>
-                <Text style={styles.filterClear}>Show all</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={styles.count}>{filtered.length} vehicle{filtered.length !== 1 ? 's' : ''}</Text>
-          )}
-
-          {filtered.length === 0 ? (
+          data={filtered}
+          keyExtractor={v => v.vehicleId}
+          ListHeaderComponent={
+            filterCustomer ? (
+              <View style={styles.filterBanner}>
+                <Ionicons name="person-circle-outline" size={16} color={colors.primary} />
+                <Text style={styles.filterText}>
+                  Vehicles for <Text style={styles.filterName}>{displayName(filterCustomer)}</Text>
+                </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Vehicles', { customerId: undefined })}>
+                  <Text style={styles.filterClear}>Show all</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.count}>{filtered.length} vehicle{filtered.length !== 1 ? 's' : ''}</Text>
+            )
+          }
+          ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}><Ionicons name="car-outline" size={48} color={colors.textMuted} /></View>
               <Text style={styles.emptyTitle}>{search ? 'No matches found' : 'No Vehicles'}</Text>
@@ -150,10 +156,11 @@ export default function VehiclesScreen({ navigation, route }: any) {
                 {search ? 'Try a different search term.' : filterCustomer ? 'This customer has no registered vehicles.' : 'Vehicles appear here when customers add them through the customer app.'}
               </Text>
             </View>
-          ) : filtered.map(v => {
+          }
+          renderItem={({ item: v }) => {
             const owner = customerMap[v.customerId];
             return (
-              <TouchableOpacity key={v.vehicleId} style={styles.card} onPress={() => openDetail(v)} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.card} onPress={() => openDetail(v)} activeOpacity={0.85}>
                 <View style={styles.cardIcon}>
                   <Ionicons name="car" size={26} color={colors.primary} />
                 </View>
@@ -176,8 +183,8 @@ export default function VehiclesScreen({ navigation, route }: any) {
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </TouchableOpacity>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       )}
 
       {/* Vehicle Detail Modal */}

@@ -47,17 +47,43 @@ export async function queryCount(params: QueryCommandInput): Promise<number> {
   return count;
 }
 
+export interface Page {
+  items: Record<string, unknown>[];
+  nextCursor: string | null;
+}
+
+// Single-page query for client-facing cursor pagination (unlike queryAll,
+// which exists specifically to page through everything server-side). The
+// cursor is just DynamoDB's own LastEvaluatedKey, base64-encoded so it's an
+// opaque string to clients rather than exposing internal key structure.
+export async function queryPage(params: QueryCommandInput & { limit?: number; cursor?: string | null }): Promise<Page> {
+  const { limit, cursor, ...rest } = params;
+  const exclusiveStartKey = cursor ? (JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8')) as Record<string, unknown>) : undefined;
+  const result = await db.send(new QueryCommand({ ...rest, Limit: limit ?? 25, ExclusiveStartKey: exclusiveStartKey }));
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey), 'utf-8').toString('base64')
+    : null;
+  return { items: result.Items ?? [], nextCursor };
+}
+
+// Table names are environment-suffixed to match template.yaml's per-environment
+// resource naming (empty suffix for prod, so today's live table names are
+// unaffected). ENVIRONMENT is set on every Lambda via the SAM template's
+// Globals.Function.Environment.Variables block.
+const ENV_SUFFIX: Record<string, string> = { dev: '-dev', staging: '-staging', prod: '' };
+const suffix = ENV_SUFFIX[process.env.ENVIRONMENT ?? 'prod'] ?? '';
+
 export const TABLE = {
-  TENANTS: 'autorepair-tenants',
-  LOCATIONS: 'autorepair-locations',
-  USERS: 'autorepair-users',
-  VEHICLES: 'autorepair-vehicles',
-  APPOINTMENTS: 'autorepair-appointments',
-  SERVICES: 'autorepair-services',
-  PROMOTIONS: 'autorepair-promotions',
-  CAMPAIGNS: 'autorepair-campaigns',
-  CAPACITY: 'autorepair-capacity',
-  BLOCKED_TIMES: 'autorepair-blocked-times',
-  NOTIFICATIONS: 'autorepair-notifications',
-  ANALYTICS: 'autorepair-analytics',
+  TENANTS: `autorepair-tenants${suffix}`,
+  LOCATIONS: `autorepair-locations${suffix}`,
+  USERS: `autorepair-users${suffix}`,
+  VEHICLES: `autorepair-vehicles${suffix}`,
+  APPOINTMENTS: `autorepair-appointments${suffix}`,
+  SERVICES: `autorepair-services${suffix}`,
+  PROMOTIONS: `autorepair-promotions${suffix}`,
+  CAMPAIGNS: `autorepair-campaigns${suffix}`,
+  CAPACITY: `autorepair-capacity${suffix}`,
+  BLOCKED_TIMES: `autorepair-blocked-times${suffix}`,
+  NOTIFICATIONS: `autorepair-notifications${suffix}`,
+  ANALYTICS: `autorepair-analytics${suffix}`,
 } as const;

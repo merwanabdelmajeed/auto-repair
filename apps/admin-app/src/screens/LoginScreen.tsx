@@ -129,6 +129,7 @@ export default function LoginScreen() {
                   autoComplete="current-password"
                 />
                 <TouchableOpacity
+                  testID="login-toggle-password"
                   style={styles.eyeBtn}
                   onPress={() => setShowPassword((v) => !v)}
                 >

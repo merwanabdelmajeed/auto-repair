@@ -6,6 +6,7 @@ import { colors } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import DrawerContent from '../components/DrawerContent';
 import { NotificationsProvider, useNotifications } from '../contexts/NotificationsContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Ionicons } from '@expo/vector-icons';
 
 import LoginScreen from '../screens/LoginScreen';
@@ -30,6 +31,7 @@ function NotificationBell({ navigation }: { navigation: any }) {
     <TouchableOpacity
       onPress={() => navigation.navigate('Notifications')}
       style={{ marginRight: 16, position: 'relative' }}
+      hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
       activeOpacity={0.7}
     >
       <Ionicons name="notifications-outline" size={24} color={colors.white} />
@@ -42,7 +44,7 @@ function NotificationBell({ navigation }: { navigation: any }) {
           paddingHorizontal: 3,
         }}>
           <Text style={{ color: colors.white, fontSize: 9, fontWeight: '700', lineHeight: 14 }}>
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount}
           </Text>
         </View>
       )}
@@ -51,6 +53,8 @@ function NotificationBell({ navigation }: { navigation: any }) {
 }
 
 function AppNavigator() {
+  usePushNotifications();
+
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"

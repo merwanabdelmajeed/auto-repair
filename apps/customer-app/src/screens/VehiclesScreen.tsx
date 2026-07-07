@@ -447,7 +447,7 @@ export default function VehiclesScreen() {
                     <Text style={styles.vehicleColor}>{vehicle.color}</Text>
                     {vehicle.vin ? <Text style={styles.vehicleVin}>VIN: {vehicle.vin}</Text> : null}
                   </View>
-                  <TouchableOpacity onPress={() => confirmDelete(vehicle)} style={styles.deleteBtn}>
+                  <TouchableOpacity testID={`vehicle-delete-${vehicle.vehicleId}`} onPress={() => confirmDelete(vehicle)} style={styles.deleteBtn}>
                     <Ionicons name="trash-outline" size={20} color={colors.error} />
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -468,7 +468,7 @@ export default function VehiclesScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Vehicle</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
+              <TouchableOpacity testID="vehicle-add-close" onPress={() => setShowModal(false)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -523,6 +523,7 @@ export default function VehiclesScreen() {
                       autoCapitalize="characters"
                     />
                     <TouchableOpacity
+                      testID="vehicle-plate-lookup-btn"
                       style={[styles.lookupBtn, (!form.licensePlate.trim() || !plateState || plateLooking) && styles.lookupBtnDisabled]}
                       onPress={() => void handlePlateLookup()}
                       disabled={!form.licensePlate.trim() || !plateState || plateLooking}
@@ -713,6 +714,7 @@ export default function VehiclesScreen() {
               )}
 
               <TouchableOpacity
+                testID="vehicle-save-btn"
                 style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
                 onPress={() => void handleAdd()}
                 disabled={saving}
@@ -739,7 +741,7 @@ export default function VehiclesScreen() {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setHistoryVehicle(null)}>
+              <TouchableOpacity testID="vehicle-history-close" onPress={() => setHistoryVehicle(null)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>

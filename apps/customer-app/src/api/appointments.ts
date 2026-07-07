@@ -2,6 +2,7 @@ import { api } from './client';
 
 export interface Appointment {
   appointmentId: string;
+  locationId: string;
   vehicleId: string;
   serviceId: string;
   scheduledAt: string;
@@ -16,6 +17,7 @@ export interface Appointment {
 }
 
 export interface CreateAppointmentInput {
+  locationId: string;
   vehicleId: string;
   serviceId: string;
   scheduledAt: string;

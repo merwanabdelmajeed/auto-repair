@@ -15,6 +15,7 @@ export default function Header({ title, rightElement }: HeaderProps) {
   return (
     <View style={styles.container}>
       <TouchableOpacity
+        testID="header-menu-btn"
         onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         style={styles.menuBtn}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

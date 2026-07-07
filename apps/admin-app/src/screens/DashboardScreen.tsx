@@ -13,12 +13,8 @@ import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
 import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
-
-const VALID_NEXT: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
-  pending:       ['confirmed', 'cancelled'],
-  confirmed:     ['in-progress', 'cancelled'],
-  'in-progress': ['completed', 'cancelled'],
-};
+import { VALID_NEXT } from '../utils/appointmentTransitions';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function statusLabel(s: AppointmentStatus) {
   return s === 'in-progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1);
@@ -69,9 +65,9 @@ export default function DashboardScreen({ navigation }: any) {
     try {
       const [sum, appts, customers, vehicles] = await Promise.all([
         getDashboardSummary().catch(() => null as DashboardSummary | null),
-        listAppointments().catch(() => [] as Appointment[]),
-        listCustomers().catch(() => [] as Customer[]),
-        listVehicles().catch(() => [] as Vehicle[]),
+        fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
+        fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
+        fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
       ]);
       setSummary(sum);
       setTodaysAppointments(

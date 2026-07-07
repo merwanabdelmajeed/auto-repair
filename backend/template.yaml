@@ -2,6 +2,22 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: AutoRepair SaaS Platform - Phase 2 Core Business Features
 
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment. Determines the suffix appended to every environment-scoped resource name (empty for prod, so the currently-deployed prod stack is unaffected by this parameterization).
+
+Mappings:
+  EnvironmentMap:
+    dev:
+      Suffix: '-dev'
+    staging:
+      Suffix: '-staging'
+    prod:
+      Suffix: ''
+
 Globals:
   Function:
     Runtime: nodejs20.x
@@ -9,6 +25,7 @@ Globals:
     Environment:
       Variables:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+        ENVIRONMENT: !Ref Environment
 
 # ─────────────────────────────────────────────────────────────
 # RESOURCES
@@ -19,7 +36,9 @@ Resources:
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: autorepair-lambda-execution-role
+      RoleName: !Sub
+        - 'autorepair-lambda-execution-role${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -30,7 +49,9 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: autorepair-lambda-policy
+        - PolicyName: !Sub
+            - 'autorepair-lambda-policy${Suffix}'
+            - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -46,6 +67,8 @@ Resources:
                   - dynamodb:BatchWriteItem
                   - dynamodb:TransactWriteItems
                 Resource:
+                  # Wildcard already covers any environment suffix appended
+                  # after the "autorepair-" prefix — no change needed here.
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/autorepair-*'
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/autorepair-*/index/*'
               - Effect: Allow
@@ -54,11 +77,18 @@ Resources:
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::autorepair-uploads-${AWS::AccountId}/*'
-                  - !Sub 'arn:aws:s3:::autorepair-assets-${AWS::AccountId}/*'
+                  - !Sub
+                    - 'arn:aws:s3:::autorepair-uploads${Suffix}-${AWS::AccountId}/*'
+                    - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+                  - !Sub
+                    - 'arn:aws:s3:::autorepair-assets${Suffix}-${AWS::AccountId}/*'
+                    - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
+                # Intentionally NOT environment-suffixed — the CarAPI token/secret
+                # are external third-party credentials shared across environments
+                # on purpose; re-registering one per environment isn't warranted.
                 Resource:
                   - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-token'
                   - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-secret'
@@ -77,14 +107,62 @@ Resources:
                 # -> PreSignUpFunction -> LambdaExecutionRole, since the User
                 # Pool's LambdaConfig points at a function that uses this role).
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminDisableUser
+                  - cognito-idp:AdminEnableUser
+                  - cognito-idp:AdminDeleteUser
+                # Same circular-dependency reason as the ListUsers grant above —
+                # can't scope to !GetAtt UserPool.Arn.
+                Resource: '*'
 
   # ── COGNITO ───────────────────────────────────────────────
+  # Lets Cognito publish SMS messages via SNS for phone-number verification.
+  # Uses the AWS default/shared SMS sender, capped at 100 messages/day account-wide —
+  # fine for testing and demos. Scaling past that requires registering a dedicated
+  # origination identity (10DLC/toll-free) with SNS, which is a deliberately separate,
+  # not-yet-done step (carrier approval can take days).
+  CognitoSmsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub
+        - 'autorepair-cognito-sms-role${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cognito-idp.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'sts:ExternalId': autorepair-cognito-sms
+      Policies:
+        - PolicyName: !Sub
+            - 'autorepair-cognito-sms-policy${Suffix}'
+            - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: '*'
+
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: autorepair-users-pool
+      UserPoolName: !Sub
+        - 'autorepair-users-pool${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
+      SmsConfiguration:
+        SnsCallerArn: !GetAtt CognitoSmsRole.Arn
+        ExternalId: autorepair-cognito-sms
+        SnsRegion: !Ref AWS::Region
       Schema:
         - Name: email
           AttributeDataType: String
@@ -129,7 +207,9 @@ Resources:
   UserPoolClientCustomer:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: customer-mobile
+      ClientName: !Sub
+        - 'customer-mobile${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       ExplicitAuthFlows:
@@ -151,17 +231,22 @@ Resources:
         - custom:role
         - custom:userType
         - custom:phone
+        - phone_number
+        - phone_number_verified
       WriteAttributes:
         - email
         - given_name
         - family_name
         - custom:tenantId
         - custom:phone
+        - phone_number
 
   UserPoolClientAdmin:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: admin-mobile
+      ClientName: !Sub
+        - 'admin-mobile${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       ExplicitAuthFlows:
@@ -186,7 +271,9 @@ Resources:
   UserPoolClientPortal:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: admin-portal
+      ClientName: !Sub
+        - 'admin-portal${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       ExplicitAuthFlows:
@@ -257,7 +344,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-tenants
+      TableName: !Sub
+        - 'autorepair-tenants${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -276,7 +365,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-locations
+      TableName: !Sub
+        - 'autorepair-locations${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -308,7 +399,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-users
+      TableName: !Sub
+        - 'autorepair-users${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -340,7 +433,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-vehicles
+      TableName: !Sub
+        - 'autorepair-vehicles${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -372,7 +467,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-appointments
+      TableName: !Sub
+        - 'autorepair-appointments${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -416,7 +513,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-services
+      TableName: !Sub
+        - 'autorepair-services${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -448,7 +547,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-promotions
+      TableName: !Sub
+        - 'autorepair-promotions${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -480,7 +581,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-campaigns
+      TableName: !Sub
+        - 'autorepair-campaigns${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -512,7 +615,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-capacity
+      TableName: !Sub
+        - 'autorepair-capacity${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -531,7 +636,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-blocked-times
+      TableName: !Sub
+        - 'autorepair-blocked-times${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -550,7 +657,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-notifications
+      TableName: !Sub
+        - 'autorepair-notifications${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -582,7 +691,9 @@ Resources:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: autorepair-analytics
+      TableName: !Sub
+        - 'autorepair-analytics${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -614,7 +725,9 @@ Resources:
   UploadsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'autorepair-uploads-${AWS::AccountId}'
+      BucketName: !Sub
+        - 'autorepair-uploads${Suffix}-${AWS::AccountId}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -632,7 +745,9 @@ Resources:
   AssetsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'autorepair-assets-${AWS::AccountId}'
+      BucketName: !Sub
+        - 'autorepair-assets${Suffix}-${AWS::AccountId}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -649,7 +764,9 @@ Resources:
   AutoRepairApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: autorepair-api
+      Name: !Sub
+        - 'autorepair-api${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       StageName: prod
       EndpointConfiguration:
         Type: REGIONAL
@@ -675,7 +792,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/auth/preSignUp/handler.ts]
     Properties:
-      FunctionName: autorepair-pre-signup
+      FunctionName: !Sub
+        - 'autorepair-pre-signup${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -692,7 +811,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/health/handler.ts]
     Properties:
-      FunctionName: autorepair-health
+      FunctionName: !Sub
+        - 'autorepair-health${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -718,7 +839,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/auth/postConfirmation/handler.ts]
     Properties:
-      FunctionName: autorepair-post-confirmation
+      FunctionName: !Sub
+        - 'autorepair-post-confirmation${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -735,7 +858,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/services/handler.ts]
     Properties:
-      FunctionName: autorepair-services
+      FunctionName: !Sub
+        - 'autorepair-services${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -777,7 +902,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/vehicles/handler.ts]
     Properties:
-      FunctionName: autorepair-vehicles
+      FunctionName: !Sub
+        - 'autorepair-vehicles${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -819,7 +946,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/vehicles/plateHandler.ts]
     Properties:
-      FunctionName: autorepair-plate-lookup
+      FunctionName: !Sub
+        - 'autorepair-plate-lookup${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: plateHandler.handler
       CodeUri: ./
       MemorySize: 128
@@ -847,7 +976,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/appointments/handler.ts]
     Properties:
-      FunctionName: autorepair-appointments
+      FunctionName: !Sub
+        - 'autorepair-appointments${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -886,7 +1017,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/customers/handler.ts]
     Properties:
-      FunctionName: autorepair-customers
+      FunctionName: !Sub
+        - 'autorepair-customers${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -900,6 +1033,129 @@ Resources:
             Path: /customers
             Method: GET
 
+  LocationsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/locations/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-locations${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        LocationsGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /locations
+            Method: GET
+        LocationsPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /locations
+            Method: POST
+        LocationPut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /locations/{locationId}
+            Method: PUT
+        LocationDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /locations/{locationId}
+            Method: DELETE
+
+  TenantsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/tenants/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-tenants${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        TenantGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /tenants/me
+            Method: GET
+        TenantPut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /tenants/me
+            Method: PUT
+
+  AdminUsersFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/admin-users/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-admin-users${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPool
+      Events:
+        AdminUsersGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /admin-users
+            Method: GET
+        AdminUsersPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /admin-users
+            Method: POST
+        AdminUserPatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /admin-users/{userId}
+            Method: PATCH
+        AdminUserDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /admin-users/{userId}
+            Method: DELETE
+
   CapacityFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -910,7 +1166,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/capacity/handler.ts]
     Properties:
-      FunctionName: autorepair-capacity
+      FunctionName: !Sub
+        - 'autorepair-capacity${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -940,7 +1198,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/blocked-times/handler.ts]
     Properties:
-      FunctionName: autorepair-blocked-times
+      FunctionName: !Sub
+        - 'autorepair-blocked-times${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -976,7 +1236,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/availability/handler.ts]
     Properties:
-      FunctionName: autorepair-availability
+      FunctionName: !Sub
+        - 'autorepair-availability${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -1000,7 +1262,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/dashboard/handler.ts]
     Properties:
-      FunctionName: autorepair-dashboard
+      FunctionName: !Sub
+        - 'autorepair-dashboard${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -1024,7 +1288,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/promotions/handler.ts]
     Properties:
-      FunctionName: autorepair-promotions
+      FunctionName: !Sub
+        - 'autorepair-promotions${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -1081,7 +1347,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/users/pushToken/handler.ts]
     Properties:
-      FunctionName: autorepair-push-token
+      FunctionName: !Sub
+        - 'autorepair-push-token${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -1105,7 +1373,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/notifications/handler.ts]
     Properties:
-      FunctionName: autorepair-notifications
+      FunctionName: !Sub
+        - 'autorepair-notifications${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -1124,6 +1394,12 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /notifications/{notifId}/read
             Method: PUT
+        NotificationsReadAll:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /notifications/read-all
+            Method: PUT
 
   NotificationReminderFunction:
     Type: AWS::Serverless::Function
@@ -1135,7 +1411,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/notifications/reminder/handler.ts]
     Properties:
-      FunctionName: autorepair-notification-reminder
+      FunctionName: !Sub
+        - 'autorepair-notification-reminder${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 128
@@ -1146,7 +1424,9 @@ Resources:
           Type: Schedule
           Properties:
             Schedule: rate(1 hour)
-            Name: autorepair-reminder-schedule
+            Name: !Sub
+              - 'autorepair-reminder-schedule${Suffix}'
+              - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
             Description: Send 24h and 2h appointment reminders
             Enabled: true
 
@@ -1163,7 +1443,9 @@ Resources:
         Sourcemap: false
         EntryPoints: [src/functions/analytics/handler.ts]
     Properties:
-      FunctionName: autorepair-analytics
+      FunctionName: !Sub
+        - 'autorepair-analytics${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       Handler: handler.handler
       CodeUri: ./
       MemorySize: 256
@@ -1183,7 +1465,9 @@ Resources:
   AlarmNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: autorepair-alarms
+      TopicName: !Sub
+        - 'autorepair-alarms${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       DisplayName: AutoRepair Backend Alarms
 
   AlarmNotificationSubscription:
@@ -1196,7 +1480,9 @@ Resources:
   PreSignUpFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-pre-signup-errors
+      AlarmName: !Sub
+        - 'autorepair-pre-signup-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PreSignUpFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1215,7 +1501,9 @@ Resources:
   HealthFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-health-errors
+      AlarmName: !Sub
+        - 'autorepair-health-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when HealthFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1234,7 +1522,9 @@ Resources:
   PostConfirmationFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-post-confirmation-errors
+      AlarmName: !Sub
+        - 'autorepair-post-confirmation-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PostConfirmationFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1253,7 +1543,9 @@ Resources:
   ServicesFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-services-errors
+      AlarmName: !Sub
+        - 'autorepair-services-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when ServicesFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1269,10 +1561,75 @@ Resources:
       AlarmActions:
         - !Ref AlarmNotificationTopic
 
+  LocationsFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub
+        - 'autorepair-locations-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      AlarmDescription: Alerts when LocationsFunction throws any error within a 5-minute window
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LocationsFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmNotificationTopic
+
+  TenantsFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub
+        - 'autorepair-tenants-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      AlarmDescription: Alerts when TenantsFunction throws any error within a 5-minute window
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref TenantsFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmNotificationTopic
+
+  AdminUsersFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub
+        - 'autorepair-admin-users-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      AlarmDescription: Alerts when AdminUsersFunction throws any error within a 5-minute window
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AdminUsersFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmNotificationTopic
+
   VehiclesFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-vehicles-errors
+      AlarmName: !Sub
+        - 'autorepair-vehicles-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when VehiclesFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1291,7 +1648,9 @@ Resources:
   PlateLookupFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-plate-lookup-errors
+      AlarmName: !Sub
+        - 'autorepair-plate-lookup-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PlateLookupFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1310,7 +1669,9 @@ Resources:
   AppointmentsFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-appointments-errors
+      AlarmName: !Sub
+        - 'autorepair-appointments-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when AppointmentsFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1329,7 +1690,9 @@ Resources:
   CustomersFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-customers-errors
+      AlarmName: !Sub
+        - 'autorepair-customers-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when CustomersFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1348,7 +1711,9 @@ Resources:
   CapacityFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-capacity-errors
+      AlarmName: !Sub
+        - 'autorepair-capacity-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when CapacityFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1367,7 +1732,9 @@ Resources:
   BlockedTimesFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-blocked-times-errors
+      AlarmName: !Sub
+        - 'autorepair-blocked-times-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when BlockedTimesFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1386,7 +1753,9 @@ Resources:
   AvailabilityFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-availability-errors
+      AlarmName: !Sub
+        - 'autorepair-availability-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when AvailabilityFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1405,7 +1774,9 @@ Resources:
   DashboardFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-dashboard-errors
+      AlarmName: !Sub
+        - 'autorepair-dashboard-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when DashboardFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1424,7 +1795,9 @@ Resources:
   PromotionsFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-promotions-errors
+      AlarmName: !Sub
+        - 'autorepair-promotions-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PromotionsFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1443,7 +1816,9 @@ Resources:
   PushTokenFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-push-token-errors
+      AlarmName: !Sub
+        - 'autorepair-push-token-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PushTokenFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1462,7 +1837,9 @@ Resources:
   NotificationsFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-notifications-errors
+      AlarmName: !Sub
+        - 'autorepair-notifications-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when NotificationsFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1481,7 +1858,9 @@ Resources:
   NotificationReminderFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-notification-reminder-errors
+      AlarmName: !Sub
+        - 'autorepair-notification-reminder-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when NotificationReminderFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1500,7 +1879,9 @@ Resources:
   AnalyticsFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-analytics-errors
+      AlarmName: !Sub
+        - 'autorepair-analytics-errors${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when AnalyticsFunction throws any error within a 5-minute window
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1519,7 +1900,9 @@ Resources:
   VehiclesFunctionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-vehicles-p99-latency
+      AlarmName: !Sub
+        - 'autorepair-vehicles-p99-latency${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when VehiclesFunction p99 latency exceeds 5s over two consecutive 5-minute windows
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1538,7 +1921,9 @@ Resources:
   PlateLookupFunctionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-plate-lookup-p99-latency
+      AlarmName: !Sub
+        - 'autorepair-plate-lookup-p99-latency${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when PlateLookupFunction p99 latency exceeds 5s over two consecutive 5-minute windows
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1557,7 +1942,9 @@ Resources:
   AppointmentsFunctionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-appointments-p99-latency
+      AlarmName: !Sub
+        - 'autorepair-appointments-p99-latency${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when AppointmentsFunction p99 latency exceeds 5s over two consecutive 5-minute windows
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1576,7 +1963,9 @@ Resources:
   CapacityFunctionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-capacity-p99-latency
+      AlarmName: !Sub
+        - 'autorepair-capacity-p99-latency${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when CapacityFunction p99 latency exceeds 5s over two consecutive 5-minute windows
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1595,7 +1984,9 @@ Resources:
   AvailabilityFunctionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: autorepair-availability-p99-latency
+      AlarmName: !Sub
+        - 'autorepair-availability-p99-latency${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
       AlarmDescription: Alerts when AvailabilityFunction p99 latency exceeds 5s over two consecutive 5-minute windows
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1618,28 +2009,38 @@ Outputs:
     Description: Cognito User Pool ID
     Value: !Ref UserPool
     Export:
-      Name: autorepair-UserPoolId
+      Name: !Sub
+        - 'autorepair-UserPoolId${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
 
   CustomerMobileClientId:
     Description: Cognito App Client ID for customer mobile apps
     Value: !Ref UserPoolClientCustomer
     Export:
-      Name: autorepair-CustomerMobileClientId
+      Name: !Sub
+        - 'autorepair-CustomerMobileClientId${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
 
   AdminMobileClientId:
     Description: Cognito App Client ID for admin mobile app
     Value: !Ref UserPoolClientAdmin
     Export:
-      Name: autorepair-AdminMobileClientId
+      Name: !Sub
+        - 'autorepair-AdminMobileClientId${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
 
   AdminPortalClientId:
     Description: Cognito App Client ID for admin web portal
     Value: !Ref UserPoolClientPortal
     Export:
-      Name: autorepair-AdminPortalClientId
+      Name: !Sub
+        - 'autorepair-AdminPortalClientId${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
 
   ApiBaseUrl:
     Description: API Gateway base URL
     Value: !Sub 'https://${AutoRepairApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
     Export:
-      Name: autorepair-ApiBaseUrl
+      Name: !Sub
+        - 'autorepair-ApiBaseUrl${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]

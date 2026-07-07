@@ -20,6 +20,15 @@ export interface AuthUser {
   givenName?: string;
   familyName?: string;
   phone?: string;
+  phoneVerified?: boolean;
+}
+
+// Phone verification targets the standard `phone_number` attribute, which Cognito
+// requires in E.164 format. The app only collects US numbers (10 digits), matching
+// the existing display-formatting logic used at registration and in the profile screen.
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return `+1${digits}`;
 }
 
 function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
@@ -33,6 +42,7 @@ function sessionToUser(session: CognitoUserSession, email: string): AuthUser {
     givenName: payload['given_name'] as string | undefined,
     familyName: payload['family_name'] as string | undefined,
     phone: payload['custom:phone'] as string | undefined,
+    phoneVerified: payload['phone_number_verified'] as boolean | undefined,
   };
 }
 
@@ -50,9 +60,32 @@ export async function register(
       new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
       new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
       new CognitoUserAttribute({ Name: 'custom:tenantId', Value: tenantId }),
-      ...(phone ? [new CognitoUserAttribute({ Name: 'custom:phone', Value: phone })] : []),
+      ...(phone ? [
+        new CognitoUserAttribute({ Name: 'custom:phone', Value: phone }),
+        new CognitoUserAttribute({ Name: 'phone_number', Value: toE164(phone) }),
+      ] : []),
     ];
     pool.signUp(email, password, attributes, [], (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+export async function confirmRegistration(email: string, code: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = new CognitoUser({ Username: email, Pool: pool });
+    user.confirmRegistration(code, true, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+export async function resendConfirmationCode(email: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = new CognitoUser({ Username: email, Pool: pool });
+    user.resendConfirmationCode((err) => {
       if (err) return reject(err);
       resolve();
     });
@@ -90,6 +123,7 @@ export async function getSessionUser(): Promise<AuthUser | null> {
         givenName: payload['given_name'] as string | undefined,
         familyName: payload['family_name'] as string | undefined,
         phone: payload['custom:phone'] as string | undefined,
+        phoneVerified: payload['phone_number_verified'] as boolean | undefined,
       });
     });
   });
@@ -116,10 +150,48 @@ export async function updateProfile(firstName: string, lastName: string, phone: 
         new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
         new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
         new CognitoUserAttribute({ Name: 'custom:phone', Value: phone }),
+        ...(phone ? [new CognitoUserAttribute({ Name: 'phone_number', Value: toE164(phone) })] : []),
       ];
       user.updateAttributes(attrs, (updateErr) => {
         if (updateErr) return reject(updateErr);
         resolve();
+      });
+    });
+  });
+}
+
+export async function sendPhoneVerificationCode(phone: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = pool.getCurrentUser();
+    if (!user) return reject(new Error('Not authenticated'));
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session?.isValid()) return reject(new Error('Session invalid'));
+      // Re-sync the standard `phone_number` attribute from the displayed phone
+      // before requesting a code. Accounts created (or last edited) before this
+      // attribute existed only ever had `custom:phone` set, so `phone_number`
+      // can be empty even though the profile screen shows a phone number and a
+      // "Verify" button — Cognito then rejects the code request with "User does
+      // not have a valid registered phone number."
+      user.updateAttributes([new CognitoUserAttribute({ Name: 'phone_number', Value: toE164(phone) })], (updateErr) => {
+        if (updateErr) return reject(updateErr);
+        user.getAttributeVerificationCode('phone_number', {
+          onSuccess: () => resolve(),
+          onFailure: reject,
+        });
+      });
+    });
+  });
+}
+
+export async function confirmPhoneVerification(code: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = pool.getCurrentUser();
+    if (!user) return reject(new Error('Not authenticated'));
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session?.isValid()) return reject(new Error('Session invalid'));
+      user.verifyAttribute('phone_number', code, {
+        onSuccess: () => resolve(),
+        onFailure: reject,
       });
     });
   });

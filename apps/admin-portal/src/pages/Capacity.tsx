@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCapacity, updateCapacity, type CapacitySettings, type DayName, type DayHours } from '../api/capacity';
+import { listLocations, type Location } from '../api/locations';
 
 const ALL_DAYS: DayName[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_LABEL: Record<DayName, string> = {
@@ -13,6 +14,8 @@ function fmtSlot(min: number): string {
 }
 
 export default function Capacity() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [settings, setSettings] = useState<CapacitySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,7 +37,24 @@ export default function Capacity() {
   useEffect(() => {
     void (async () => {
       try {
-        const data = await getCapacity();
+        const locs = await listLocations();
+        setLocations(locs);
+        const active = locs.find(l => l.isActive) ?? locs[0];
+        if (active) setSelectedLocationId(active.locationId);
+        else setLoading(false);
+      } catch {
+        setError('Failed to load locations.');
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedLocationId) return;
+    void (async () => {
+      try {
+        setLoading(true);
+        const data = await getCapacity(selectedLocationId);
         setSettings(data);
         setSlotDuration(data.slotDurationMinutes);
         setMaxConcurrent(data.maxConcurrent);
@@ -45,7 +65,7 @@ export default function Capacity() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [selectedLocationId]);
 
   function toggleDay(day: DayName, isOpen: boolean) {
     setHours(prev => ({ ...prev, [day]: isOpen ? { open: '07:00', close: '17:00', lastAppointment: '17:00' } : null }));
@@ -78,7 +98,7 @@ export default function Capacity() {
     setSaving(true);
     setSaved(false);
     try {
-      const updated = await updateCapacity({ slotDurationMinutes: slotDuration, maxConcurrent, operatingHours: hours });
+      const updated = await updateCapacity(selectedLocationId, { slotDurationMinutes: slotDuration, maxConcurrent, operatingHours: hours });
       setSettings(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -89,12 +109,33 @@ export default function Capacity() {
     }
   }
 
-  if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>;
-  }
-
   return (
     <div style={{ maxWidth: '720px' }}>
+      {locations.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          {locations.map(loc => (
+            <button
+              key={loc.locationId}
+              onClick={() => setSelectedLocationId(loc.locationId)}
+              style={{
+                padding: '8px 18px', borderRadius: '8px', border: `2px solid ${selectedLocationId === loc.locationId ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                backgroundColor: selectedLocationId === loc.locationId ? 'rgba(15,32,68,0.06)' : 'var(--color-background)',
+                color: selectedLocationId === loc.locationId ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                fontWeight: selectedLocationId === loc.locationId ? 700 : 500, fontSize: '14px', cursor: 'pointer',
+              }}
+            >
+              {loc.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
+      ) : !selectedLocationId ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>No locations yet — add one in Settings first.</div>
+      ) : (
+      <>
       {error && (
         <div style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', color: 'var(--color-error)', fontSize: '14px' }}>
           {error}
@@ -223,6 +264,8 @@ export default function Capacity() {
           </span>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -13,5 +13,5 @@ export interface AvailabilityResult {
   slots: TimeSlot[];
 }
 
-export const getAvailability = (date: string) =>
-  api.get<AvailabilityResult>(`/availability?date=${date}`);
+export const getAvailability = (date: string, locationId: string) =>
+  api.get<AvailabilityResult>(`/availability?date=${date}&locationId=${encodeURIComponent(locationId)}`);

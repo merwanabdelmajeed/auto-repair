@@ -2,7 +2,7 @@ import type { CapacitySettings, AvailabilityResult, TimeSlot } from '../types/in
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
-export const DEFAULT_CAPACITY: Omit<CapacitySettings, 'tenantId' | 'updatedAt'> = {
+export const DEFAULT_CAPACITY: Omit<CapacitySettings, 'tenantId' | 'locationId' | 'updatedAt'> = {
   slotDurationMinutes: 30,
   maxConcurrent: 2,
   operatingHours: {

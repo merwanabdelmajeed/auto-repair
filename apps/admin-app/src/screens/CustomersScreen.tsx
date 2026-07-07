@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  View, Text, ScrollView, StyleSheet, TextInput,
+  View, Text, FlatList, ScrollView, StyleSheet, TextInput,
   ActivityIndicator, Alert, RefreshControl, TouchableOpacity, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, type Vehicle } from '../api/vehicles';
+import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -37,7 +38,10 @@ export default function CustomersScreen({ navigation, route }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [c, v] = await Promise.all([listCustomers(), listVehicles()]);
+      const [c, v] = await Promise.all([
+        fetchAllPages(cursor => listCustomers(cursor)),
+        fetchAllPages(cursor => listVehicles(cursor)),
+      ]);
       setCustomers(c);
       const map: Record<string, Vehicle[]> = {};
       v.forEach(veh => {
@@ -87,32 +91,34 @@ export default function CustomersScreen({ navigation, route }: any) {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
-        <ScrollView
+        <FlatList
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={colors.secondary} />}
-        >
-          {customerIdFilter ? (
-            <TouchableOpacity style={styles.filterBanner} onPress={() => navigation.navigate('Customers', { customerId: undefined })}>
-              <Ionicons name="arrow-back" size={16} color={colors.primary} />
-              <Text style={styles.filterClear}>Back to all customers</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.statsRow}>
-              {[
-                { label: 'Total', value: customers.length },
-                { label: 'Showing', value: filtered.length },
-              ].map(s => (
-                <View key={s.label} style={styles.statCard}>
-                  <Text style={styles.statValue}>{s.value}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {filtered.length === 0 ? (
+          data={filtered}
+          keyExtractor={c => c.userId}
+          ListHeaderComponent={
+            customerIdFilter ? (
+              <TouchableOpacity style={styles.filterBanner} onPress={() => navigation.navigate('Customers', { customerId: undefined })}>
+                <Ionicons name="arrow-back" size={16} color={colors.primary} />
+                <Text style={styles.filterClear}>Back to all customers</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.statsRow}>
+                {[
+                  { label: 'Total', value: customers.length },
+                  { label: 'Showing', value: filtered.length },
+                ].map(s => (
+                  <View key={s.label} style={styles.statCard}>
+                    <Text style={styles.statValue}>{s.value}</Text>
+                    <Text style={styles.statLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )
+          }
+          ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}><Ionicons name="people-outline" size={48} color={colors.textMuted} /></View>
               <Text style={styles.emptyTitle}>{search ? 'No matches found' : 'No Customers Yet'}</Text>
@@ -120,8 +126,9 @@ export default function CustomersScreen({ navigation, route }: any) {
                 {search ? 'Try a different search term.' : 'Customers appear here when they register through the customer app.'}
               </Text>
             </View>
-          ) : filtered.map(c => (
-            <TouchableOpacity key={c.userId} style={styles.card} onPress={() => setSelectedCustomer(c)} activeOpacity={0.85}>
+          }
+          renderItem={({ item: c }) => (
+            <TouchableOpacity style={styles.card} onPress={() => setSelectedCustomer(c)} activeOpacity={0.85}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{initials(c)}</Text>
               </View>
@@ -135,8 +142,8 @@ export default function CustomersScreen({ navigation, route }: any) {
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
 
       {/* Customer Detail Modal */}
