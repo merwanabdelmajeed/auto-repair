@@ -6,8 +6,12 @@ import {
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
 
+// @ts-ignore's below: see the identical note in ../api/client.ts. Do not wrap
+// these in a cast/alias: that breaks Expo's Babel EXPO_PUBLIC_* inlining.
 const pool = new CognitoUserPool({
+  // @ts-ignore
   UserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
+  // @ts-ignore
   ClientId: process.env.EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID,
 });
 

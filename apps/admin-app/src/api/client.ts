@@ -1,5 +1,10 @@
 import { getIdToken } from '../auth/CognitoService';
 
+// @ts-ignore -- EXPO_PUBLIC_* augmentation in types/env.d.ts doesn't merge on
+// every machine (environment-specific tsc quirk, not fully root-caused); using
+// @ts-ignore (not @ts-expect-error) since it's a no-op where the error doesn't
+// occur. Do NOT wrap this in a cast/alias — that breaks Expo's Babel plugin's
+// static process.env.FOO inlining and silently ships `undefined` at runtime.
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? '';
 
 export class ApiError extends Error {
