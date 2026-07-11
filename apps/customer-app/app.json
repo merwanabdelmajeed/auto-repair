@@ -34,7 +34,7 @@
     },
     "newArchEnabled": false,
     "scheme": "autorepair-customer",
-    "plugins": ["expo-notifications"],
+    "plugins": ["expo-notifications", "./plugins/withFmtConstevalFix"],
     "extra": {
       "shopName": "Purrfect Auto Service",
       "eas": {
