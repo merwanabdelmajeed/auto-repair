@@ -24,6 +24,7 @@ export const handler = async (event: PostConfirmationTriggerEvent): Promise<Post
       firstName: attrs['given_name'] ?? '',
       lastName: attrs['family_name'] ?? '',
       ...(attrs['custom:phone'] ? { phone: attrs['custom:phone'] } : {}),
+      ...(attrs['custom:smsConsent'] === 'true' ? { smsConsent: true, smsConsentAt: now } : {}),
       role: 'CUSTOMER',
       userType: 'CUSTOMER',
       status: 'ACTIVE',

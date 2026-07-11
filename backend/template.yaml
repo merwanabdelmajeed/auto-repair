@@ -188,6 +188,20 @@ Resources:
           AttributeDataType: String
           Required: false
           Mutable: true
+        # smsConsent is intentionally NOT declared here. It was added to the
+        # LIVE pool out-of-band via `aws cognito-idp add-custom-attributes`
+        # (2026-07-11) rather than through this template, specifically to
+        # avoid re-triggering the same "Updates are not allowed for property"
+        # rejection that forced a full pool replacement (see UsernameAttributes
+        # history above) — that failure mode is undocumented/untested for
+        # Schema additions specifically, and the blast radius of guessing wrong
+        # again (another full account wipe) isn't worth it. If this stack is
+        # ever rebuilt from scratch, add
+        #   - Name: smsConsent
+        #     AttributeDataType: String
+        #     Required: false
+        #     Mutable: true
+        # here to match the live pool.
       Policies:
         PasswordPolicy:
           MinimumLength: 8

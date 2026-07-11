@@ -40,6 +40,8 @@ export async function register(
   tenantId: string,
   firstName: string,
   lastName: string,
+  phone?: string,
+  smsConsent?: boolean,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const attributes = [
@@ -47,6 +49,8 @@ export async function register(
       new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
       new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
       new CognitoUserAttribute({ Name: 'custom:tenantId', Value: tenantId }),
+      ...(phone ? [new CognitoUserAttribute({ Name: 'custom:phone', Value: phone })] : []),
+      ...(phone && smsConsent ? [new CognitoUserAttribute({ Name: 'custom:smsConsent', Value: 'true' })] : []),
     ];
     pool.signUp(email, password, attributes, [], (err) => {
       if (err) return reject(err);
