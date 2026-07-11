@@ -51,6 +51,9 @@
       "android": {
         "buildType": "app-bundle"
       },
+      "ios": {
+        "image": "latest"
+      },
       "env": {
         "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
         "EXPO_PUBLIC_COGNITO_CUSTOMER_CLIENT_ID": "1r1pa5nvf4ob4bdfva8j1gha0h",

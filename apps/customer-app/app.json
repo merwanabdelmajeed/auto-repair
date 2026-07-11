@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.autorepair.customer",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "LSApplicationQueriesSchemes": ["maps"],
         "ITSAppUsesNonExemptEncryption": false
