@@ -1,10 +1,9 @@
-// NOTE: this augmentation is the textbook-correct way to type EXPO_PUBLIC_*
-// vars, but doesn't actually merge with process.env's resolved type in this
-// project's current dependency versions (traced to @expo/metro-config's own
-// unrelated internal `env` export shadowing it somehow — not fully root-caused
-// given the effort already spent). Left in place as documentation of intent;
-// the actual fix is inline `as` casts at each process.env.EXPO_PUBLIC_* usage
-// site (see CognitoService.ts / client.ts in this app and admin-app).
+// Access these as plain process.env.EXPO_PUBLIC_* (no cast/alias). Expo's
+// Babel plugin only inlines that exact static dot-access shape at build time;
+// wrapping it in a cast or aliasing process.env to a variable defeats the
+// pattern match and silently leaves the access as `undefined` at runtime
+// (confirmed by inspecting the compiled bundle — see git history on this file
+// and on CognitoService.ts / client.ts for the incident this caused).
 declare global {
   namespace NodeJS {
     interface ProcessEnv {

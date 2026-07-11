@@ -1,6 +1,6 @@
 import { getIdToken } from '../auth/CognitoService';
 
-const BASE_URL = (process.env as { EXPO_PUBLIC_API_BASE_URL?: string }).EXPO_PUBLIC_API_BASE_URL ?? '';
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? '';
 
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
