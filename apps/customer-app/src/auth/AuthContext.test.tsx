@@ -21,7 +21,7 @@ function Probe() {
       <Text testID="login" onPress={() => void login('a@shop.com', 'pw')}>login</Text>
       <Text testID="register" onPress={() => void register('a@shop.com', 'pw', 't1', 'Jane', 'Doe')}>register</Text>
       <Text testID="logout" onPress={() => void logout()}>logout</Text>
-      <Text testID="update" onPress={() => updateUser({ phone: '5551234567' })}>update</Text>
+      <Text testID="update" onPress={() => updateUser({ givenName: 'Jane' })}>update</Text>
     </>
   );
 }
@@ -72,7 +72,7 @@ describe('AuthProvider', () => {
 
     await act(async () => fireEvent.press(screen.getByTestId('register')));
 
-    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe', undefined);
+    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe');
     expect(screen.getByTestId('authed').props.children).toBe('false');
   });
 

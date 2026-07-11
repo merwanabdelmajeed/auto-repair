@@ -13,8 +13,6 @@ jest.mock('amazon-cognito-identity-js', () => {
     getSession: jest.fn(),
     signOut: jest.fn(),
     updateAttributes: jest.fn(),
-    getAttributeVerificationCode: jest.fn(),
-    verifyAttribute: jest.fn(),
   };
   mockPool = { getCurrentUser: jest.fn(), signUp: jest.fn() };
   return {
@@ -35,7 +33,6 @@ function fakeSession(payloadOverrides: Record<string, unknown> = {}) {
   const payload = {
     sub: 'u1', email: 'session@shop.com',
     'custom:tenantId': 't1', 'custom:role': 'CUSTOMER', given_name: 'Jane', family_name: 'Doe',
-    'custom:phone': '5551234567', phone_number_verified: false,
     ...payloadOverrides,
   };
   return {
@@ -46,26 +43,19 @@ function fakeSession(payloadOverrides: Record<string, unknown> = {}) {
 }
 
 describe('register', () => {
-  it('signs up with the required attributes, converting phone to E.164 when provided', async () => {
-    mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
-
-    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '5551234567');
-
-    expect(mockPool.signUp).toHaveBeenCalled();
-    const attrs = mockPool.signUp.mock.calls[0][2];
-    expect(attrs).toEqual(expect.arrayContaining([
-      { Name: 'custom:phone', Value: '5551234567' },
-      { Name: 'phone_number', Value: '+15551234567' },
-    ]));
-  });
-
-  it('omits phone attributes when no phone is provided', async () => {
+  it('signs up with the required attributes', async () => {
     mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
 
     await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe');
 
+    expect(mockPool.signUp).toHaveBeenCalled();
     const attrs = mockPool.signUp.mock.calls[0][2];
-    expect(attrs.some((a: { Name: string }) => a.Name === 'phone_number')).toBe(false);
+    expect(attrs).toEqual(expect.arrayContaining([
+      { Name: 'email', Value: 'a@shop.com' },
+      { Name: 'given_name', Value: 'Jane' },
+      { Name: 'family_name', Value: 'Doe' },
+      { Name: 'custom:tenantId', Value: 't1' },
+    ]));
   });
 
   it('rejects when Cognito signUp fails', async () => {
@@ -109,7 +99,7 @@ describe('login', () => {
 
     expect(user).toEqual({
       userId: 'u1', email: 'a@shop.com', tenantId: 't1', role: 'CUSTOMER',
-      givenName: 'Jane', familyName: 'Doe', phone: '5551234567', phoneVerified: false,
+      givenName: 'Jane', familyName: 'Doe',
     });
   });
 
@@ -172,23 +162,26 @@ describe('getAccessToken / getIdToken', () => {
 describe('updateProfile', () => {
   it('rejects when there is no current user', async () => {
     mockPool.getCurrentUser.mockReturnValue(null);
-    await expect(CognitoService.updateProfile('J', 'D', '5551234567')).rejects.toThrow('Not authenticated');
+    await expect(CognitoService.updateProfile('J', 'D')).rejects.toThrow('Not authenticated');
   });
 
   it('rejects when the session is invalid', async () => {
     mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
     mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(new Error('x'), null));
-    await expect(CognitoService.updateProfile('J', 'D', '5551234567')).rejects.toThrow('Session invalid');
+    await expect(CognitoService.updateProfile('J', 'D')).rejects.toThrow('Session invalid');
   });
 
-  it('updates attributes including phone_number for a valid session', async () => {
+  it('updates given_name/family_name for a valid session', async () => {
     mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
     mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
     mockUserInstance.updateAttributes.mockImplementation((_attrs: unknown, cb: (e: Error | null) => void) => cb(null));
 
-    await expect(CognitoService.updateProfile('Jane', 'Doe', '5551234567')).resolves.toBeUndefined();
+    await expect(CognitoService.updateProfile('Jane', 'Doe')).resolves.toBeUndefined();
     const attrs = mockUserInstance.updateAttributes.mock.calls[0][0];
-    expect(attrs).toEqual(expect.arrayContaining([{ Name: 'phone_number', Value: '+15551234567' }]));
+    expect(attrs).toEqual([
+      { Name: 'given_name', Value: 'Jane' },
+      { Name: 'family_name', Value: 'Doe' },
+    ]);
   });
 
   it('rejects when the Cognito update call fails', async () => {
@@ -196,66 +189,6 @@ describe('updateProfile', () => {
     mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
     mockUserInstance.updateAttributes.mockImplementation((_attrs: unknown, cb: (e: Error | null) => void) => cb(new Error('boom')));
 
-    await expect(CognitoService.updateProfile('Jane', 'Doe', '5551234567')).rejects.toThrow('boom');
-  });
-});
-
-describe('sendPhoneVerificationCode', () => {
-  it('rejects when there is no current user', async () => {
-    mockPool.getCurrentUser.mockReturnValue(null);
-    await expect(CognitoService.sendPhoneVerificationCode('5551234567')).rejects.toThrow('Not authenticated');
-  });
-
-  it('re-syncs the phone_number attribute before requesting a code, then resolves on success', async () => {
-    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
-    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
-    mockUserInstance.updateAttributes.mockImplementation((_attrs: unknown, cb: (e: Error | null) => void) => cb(null));
-    mockUserInstance.getAttributeVerificationCode.mockImplementation((_attr: string, cb: { onSuccess: () => void }) => cb.onSuccess());
-
-    await expect(CognitoService.sendPhoneVerificationCode('5551234567')).resolves.toBeUndefined();
-
-    const attrs = mockUserInstance.updateAttributes.mock.calls[0][0];
-    expect(attrs).toEqual([{ Name: 'phone_number', Value: '+15551234567' }]);
-  });
-
-  it('rejects when re-syncing the phone_number attribute fails, without requesting a code', async () => {
-    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
-    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
-    mockUserInstance.updateAttributes.mockImplementation((_attrs: unknown, cb: (e: Error | null) => void) => cb(new Error('invalid phone')));
-
-    await expect(CognitoService.sendPhoneVerificationCode('5551234567')).rejects.toThrow('invalid phone');
-    expect(mockUserInstance.getAttributeVerificationCode).not.toHaveBeenCalled();
-  });
-
-  it('rejects on failure', async () => {
-    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
-    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
-    mockUserInstance.updateAttributes.mockImplementation((_attrs: unknown, cb: (e: Error | null) => void) => cb(null));
-    mockUserInstance.getAttributeVerificationCode.mockImplementation((_attr: string, cb: { onFailure: (e: Error) => void }) => cb.onFailure(new Error('sms failed')));
-
-    await expect(CognitoService.sendPhoneVerificationCode('5551234567')).rejects.toThrow('sms failed');
-  });
-});
-
-describe('confirmPhoneVerification', () => {
-  it('rejects when there is no current user', async () => {
-    mockPool.getCurrentUser.mockReturnValue(null);
-    await expect(CognitoService.confirmPhoneVerification('123456')).rejects.toThrow('Not authenticated');
-  });
-
-  it('resolves on success', async () => {
-    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
-    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
-    mockUserInstance.verifyAttribute.mockImplementation((_attr: string, _code: string, cb: { onSuccess: () => void }) => cb.onSuccess());
-
-    await expect(CognitoService.confirmPhoneVerification('123456')).resolves.toBeUndefined();
-  });
-
-  it('rejects on failure', async () => {
-    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
-    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
-    mockUserInstance.verifyAttribute.mockImplementation((_attr: string, _code: string, cb: { onFailure: (e: Error) => void }) => cb.onFailure(new Error('wrong code')));
-
-    await expect(CognitoService.confirmPhoneVerification('000000')).rejects.toThrow('wrong code');
+    await expect(CognitoService.updateProfile('Jane', 'Doe')).rejects.toThrow('boom');
   });
 });

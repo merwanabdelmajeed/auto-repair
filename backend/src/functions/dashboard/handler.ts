@@ -17,7 +17,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       queryCount({
         TableName: TABLE.USERS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'USER#' },
+        // Admin/location-manager users have real USER# records too (Phase 9
+        // invite flow) — without this filter they'd inflate the customer count.
+        FilterExpression: '#role = :customer',
+        ExpressionAttributeNames: { '#role': 'role' },
+        ExpressionAttributeValues: { ':pk': pk, ':skPrefix': 'USER#', ':customer': 'CUSTOMER' },
       }),
       queryCount({
         TableName: TABLE.VEHICLES,

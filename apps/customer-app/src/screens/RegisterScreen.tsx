@@ -22,19 +22,11 @@ type Props = {
 // For MVP, tenant ID is hardcoded. Replace with invitation-code flow in a later phase.
 const DEFAULT_TENANT_ID = 'demo-tenant';
 
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
 export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Props) {
   const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -58,7 +50,7 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
     setLoading(true);
     try {
       const trimmedEmail = email.trim();
-      await register(trimmedEmail, password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(), phone.trim() || undefined);
+      await register(trimmedEmail, password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim());
       onRegistered(trimmedEmail, password);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Registration failed. Please try again.';
@@ -131,17 +123,6 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
-          />
-
-          <Text style={styles.label}>Phone <Text style={{ color: colors.textMuted, fontWeight: '400' }}>(optional)</Text></Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={(text) => setPhone(formatPhone(text))}
-            placeholder="(555) 123-4567"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-            autoComplete="tel"
           />
 
           <Text style={styles.label}>Password</Text>

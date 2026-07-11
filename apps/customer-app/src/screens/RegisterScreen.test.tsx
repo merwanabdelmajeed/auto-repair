@@ -44,35 +44,15 @@ describe('RegisterScreen', () => {
     expect(screen.getByText('Password must be at least 8 characters.')).toBeTruthy();
   });
 
-  it('formats the phone number as the user types', () => {
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    const phoneInput = screen.getByPlaceholderText('(555) 123-4567');
-
-    fireEvent.changeText(phoneInput, '5551234567');
-
-    expect(screen.getByDisplayValue('(555) 123-4567')).toBeTruthy();
-  });
-
-  it('registers with trimmed names/email and no phone when left blank', async () => {
+  it('registers with trimmed names/email', async () => {
     mockRegister.mockResolvedValue(undefined);
     render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
     fillRequiredFields({ first: '  Jane  ', last: '  Doe  ', email: '  jane@shop.com  ' });
 
     fireEvent.press(screen.getByTestId('register-submit-btn'));
 
-    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith('jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe', undefined));
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith('jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe'));
     expect(mockOnRegistered).toHaveBeenCalledWith('jane@shop.com', 'password1');
-  });
-
-  it('registers with the formatted phone number when provided', async () => {
-    mockRegister.mockResolvedValue(undefined);
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    fillRequiredFields();
-    fireEvent.changeText(screen.getByPlaceholderText('(555) 123-4567'), '5551234567');
-
-    fireEvent.press(screen.getByTestId('register-submit-btn'));
-
-    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith('jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe', '(555) 123-4567'));
   });
 
   it('shows the Cognito error message on failure', async () => {

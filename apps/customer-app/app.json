@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AutoRepair Pro",
+    "name": "Purrfect Auto Service #17",
     "slug": "autorepair-customer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,8 +14,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.autorepair.customer",
+      "buildNumber": "1",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["maps"]
+        "LSApplicationQueriesSchemes": ["maps"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,6 +34,7 @@
     },
     "newArchEnabled": false,
     "scheme": "autorepair-customer",
+    "plugins": ["expo-notifications"],
     "extra": {
       "shopName": "Purrfect Auto Service",
       "eas": {

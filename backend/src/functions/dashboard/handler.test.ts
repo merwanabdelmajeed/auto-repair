@@ -58,6 +58,20 @@ describe('GET /dashboard', () => {
     });
   });
 
+  it('filters the customer count query to role=CUSTOMER, excluding admin/location-manager USER# records', async () => {
+    ddbMock.on(QueryCommand, { TableName: TABLE.USERS }).resolves({ Count: 0 });
+    ddbMock.on(QueryCommand, { TableName: TABLE.VEHICLES }).resolves({ Count: 0 });
+    ddbMock.on(QueryCommand, { TableName: TABLE.APPOINTMENTS }).resolves({ Items: [] });
+
+    await handler(fakeEvent());
+
+    const usersCall = ddbMock.commandCalls(QueryCommand)
+      .map(c => c.args[0].input)
+      .find(input => input.TableName === TABLE.USERS);
+    expect(usersCall?.FilterExpression).toBe('#role = :customer');
+    expect(usersCall?.ExpressionAttributeValues).toMatchObject({ ':customer': 'CUSTOMER' });
+  });
+
   it('falls back to the server UTC date when localDate is missing or malformed', async () => {
     ddbMock.on(QueryCommand, { TableName: TABLE.USERS }).resolves({ Count: 0 });
     ddbMock.on(QueryCommand, { TableName: TABLE.VEHICLES }).resolves({ Count: 0 });

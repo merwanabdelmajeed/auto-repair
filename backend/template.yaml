@@ -781,6 +781,58 @@ Resources:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
 
+  # ── WAF (rate limiting) ───────────────────────────────────
+  # Per-IP rate limit on the whole API, independent of and in addition to
+  # API Gateway's own account/stage-level throttling — this specifically
+  # protects against one abusive client (a script hammering /availability,
+  # spamming /appointments, etc.) rather than absorbing burst capacity that
+  # legitimate traffic from other clients would still need. Does NOT cover
+  # Cognito's own SignUp/OTP APIs — those are called directly from the apps,
+  # never through this API Gateway, and rely on Cognito's own built-in quotas.
+  ApiWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub
+        - 'autorepair-api-waf${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub
+          - 'autorepair-api-waf${Suffix}'
+          - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Rules:
+        - Name: RateLimitPerIp
+          Priority: 0
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              # Requests per rolling 5-minute window, per source IP (AWS WAF's
+              # fixed evaluation window — not independently configurable).
+              # ~2000/5min (~6.7 req/s sustained) is generous for legitimate
+              # shared-IP traffic (several admin/customer users behind one
+              # office/school NAT) while still catching scripted abuse.
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub
+              - 'autorepair-rate-limit${Suffix}'
+              - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+
+  ApiWebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      # AutoRepairApi.StageName is a literal 'prod' above (not environment-
+      # suffixed), so the stage segment here matches that literally.
+      ResourceArn: !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis/${AutoRepairApi}/stages/prod'
+      WebACLArn: !GetAtt ApiWebAcl.Arn
+
   # ── LAMBDA FUNCTIONS ──────────────────────────────────────
   PreSignUpFunction:
     Type: AWS::Serverless::Function

@@ -85,7 +85,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 - **Trim intelligence** — trim variants extracted from NHTSA model-name entries (e.g. "GLS 450 4MATIC"); cached per make+year+model; `trimsFetched` state drives dropdown vs. free-text toggle
 - **License plate optional** — backend and customer app updated; admin portal handles null gracefully
 - **Trim in vehicle summary** — `vehicleSummary` in appointments includes trim (e.g. "2021 Mercedes GLS 450 4MATIC"); admin vehicles table shows trim in name column
-- **Phone number** — collected at customer registration (optional); stored as `custom:phone` Cognito attribute + DynamoDB; displayed in admin app customer cards and admin portal customer table; included in search
+- ~~Phone number collected at customer registration~~ — removed 2026-07-09 from the customer-app UI, see Phase 11 below. Admin app/portal customer cards and search still show/filter on phone for any pre-existing data, but no new customer will have one going forward
 - **Vehicle inline edit in booking detail** — Bookings and Dashboard detail panels (admin app + portal) show an expandable vehicle section with Plate, Color, VIN, and Added date; Plate and VIN are editable inline via `PUT /vehicles/{vehicleId}`; admin app values are selectable (press-and-hold to copy)
 - **Promotions detail view** — admin portal: clicking a row opens a right-side detail panel with status toggle, Edit, and Delete; Edit button removed from table Actions column; admin app: tapping a card opens a bottom sheet with the same actions
 - **Dashboard bookings table** — admin portal today's bookings section converted from card layout to a full table matching the Bookings page exactly (same 7 columns, same hover and selected-row styles)
@@ -132,6 +132,8 @@ Delivered:
 - **Location management UI** (admin portal Settings only) — full CRUD for locations (name/address/phone); deactivating a location is a soft-delete (`isActive: false`) since appointments/capacity/blocked-times reference it, and the last remaining active location can't be deactivated. Services intentionally stay tenant-wide, not per-location, to keep the booking flow simple — every location offers the same catalog
 - **Multi-location booking** — customer picks a location as the first step of the booking flow, before service/date/time; capacity settings, blocked times, and the atomic slot-booking counter are now all scoped per-location (previously one shared counter per tenant), so two locations can independently book the same time slot without conflicting. Capacity and Blocked Times screens in both the admin app and admin portal gained a location selector
 - **Tenant profile** — a real `Tenant` DynamoDB record + `GET/PUT /tenants/me`, wired to a working Business Profile form (name/address/phone/contact email) in admin portal Settings. Deliberately scoped to just this settings page — the `shop.config.json` build-time branding shown in headers/login screens across all 3 apps is untouched; unifying that into one live, per-tenant source is Phase 12's job
+- **Admin login role gate (security fix)** — a customer account could log into admin-portal/admin-app: both apps only checked that Cognito auth succeeded, never that the account actually held an admin role. Fixed by rejecting non-admin roles (only `SUPER_ADMIN`/`TENANT_OWNER`/`LOCATION_MANAGER` allowed) at login, at the forced-password-change step, and on session restore, signing the account back out immediately if the check fails
+- **Admin user delete** — tenant owners/super-admins can permanently remove a location manager or co-owner from admin portal Settings (`AdminDeleteUser` + DynamoDB record delete), gated to the same owner-only roles as invite; a user can't delete their own account. Found and fixed two real bugs while building this: the existing PATCH (role/location/status) endpoint checked the caller's own role but never verified the *target* user belonged to the caller's tenant — a cross-tenant authorization gap — and the deactivate/reactivate PATCH always sent both `#role`/`#status` into `ExpressionAttributeNames` even when only one was being updated, which DynamoDB rejects outright; this surfaced to admins as a false "Failed to update user" even though the underlying Cognito enable/disable call had already succeeded
 
 ### Phase 10 — Unit Testing (Frontend & Backend) (Complete)
 
@@ -152,14 +154,15 @@ Delivered:
 - **Pagination — cursor-based API + paginated UI** — `customers`, `vehicles` (admin branch), and `appointments` (admin branch) now return `{ items, nextCursor }` instead of a flat array, backed by a shared `queryPage()` helper (`shared/utils/dynamodb.ts`) that base64-encodes DynamoDB's `LastEvaluatedKey` as an opaque client cursor (`?cursor=`/`?limit=`, capped at 100, default 25). `services` and `promotions` were deliberately excluded — their GET endpoints are shared unbranched with `customer-app`'s booking flow, which expects a flat array, and paginating them would have broken it. Client-side, a `fetchAllPages()` helper (both `admin-app` and `admin-portal`) loops through all pages so screens keep their existing full-dataset search/cross-reference/date-filter behavior unchanged — this was a deliberate design adjustment from true infinite-scroll, since e.g. the Dashboard's "today's bookings" filter needs to see every appointment (the appointments table's sort key is a random UUID, not chronological, so any single page could miss today's bookings). `admin-app`'s three list screens (Customers, Vehicles, Bookings) also switched from `ScrollView`+`.map()` to `FlatList` for virtualized rendering; `admin-portal`'s table-based pages needed no rendering change, just the `fetchAllPages` wiring
 - **Multi-environment — template capability** — `template.yaml` gained an `Environment` parameter (`dev`/`staging`/`prod`, default `prod`) and an `EnvironmentMap` mapping to a name suffix, applied to every environment-scoped resource name (12 DynamoDB tables, Cognito pool/clients, S3 buckets, Lambda function names, CloudWatch alarms, IAM role/policy names, SNS topic, EventBridge schedule, and CloudFormation exports). `prod`'s suffix is empty specifically so redeploying the live stack with this template produces zero resource renames/replacements. `samconfig.toml` gained `[dev]`/`[staging]` profiles (distinct `stack_name`s, `Environment` parameter override) so `sam deploy --config-env dev` *could* stand up an independent stack — **no new stack has been deployed**, this is template/config capability only, per the roadmap decision above
 - **Email verification (Cognito OTP)** — customer registration no longer auto-confirms; the `PreSignUp` trigger's `autoConfirmUser`/`autoVerifyEmail` overrides were removed (Cognito's `AutoVerifiedAttributes: [email]` was already set), so Cognito sends its own 6-digit code on signup. `customer-app` gained a `VerifyEmailScreen` (code entry + resend) wired into `RootNavigator`'s auth flow between Register and Login; `AuthContext.register()` no longer auto-logs-in immediately after signup (the account isn't confirmed yet) — login now happens right after successful code verification instead. Admin invites (`AdminCreateUser`) are unaffected, still land straight in `FORCE_CHANGE_PASSWORD`. Deployed and manually verified live: registration → OTP email → code entry → login, plus confirmed admin invites are unaffected
-- **Phone verification (test/demo tier)** — decoupled from account sign-up on purpose, so it can't regress the email-OTP flow above: it's a "Verify" step in `customer-app`'s Profile screen instead. `template.yaml` gained a `CognitoSmsRole` IAM role + `SmsConfiguration` on the `UserPool` so Cognito can publish SMS via SNS (using AWS's default/shared sender — no dedicated origination identity yet), and the standard `phone_number` attribute was added to the customer app client's read/write attributes (the `UserPool`'s `Schema` block was deliberately left untouched to avoid any risk of replacement on the live pool). `CognitoService.ts` writes `phone_number` (E.164, converted from the existing 10-digit US display format) alongside the existing `custom:phone` at registration and profile edits, and gained `sendPhoneVerificationCode()`/`confirmPhoneVerification()` wrapping Cognito's `getAttributeVerificationCode`/`verifyAttribute` APIs. Profile screen shows a "Verify"/"Verified" badge next to the phone field. **This runs on Cognito's default shared SMS sender, capped at 100 messages/day account-wide — fine for internal testing and customer demos, not for public launch volume.**
-- **Test coverage threshold — all 4 packages now enforced at 70%** — the target decided in Phase 10 is no longer just a number on paper. Every package now sets an explicit coverage `include`/`collectCoverageFrom` glob (so the reported percentage reflects the whole codebase, not just whatever files the existing tests happened to import) plus a `70%` threshold on statements/branches/functions/lines — `test:coverage` now **fails the command** if coverage regresses below that, not just reports it. Backend went from 4 tested handlers to 19 (81.03% stmts / 73.1% branches / 85.71% funcs / 84% lines, 198 tests / 25 suites); only the dead/undeployed `functions/campaigns` and the CarAPI-dependent `functions/vehicles/plateHandler.ts` remain untested. `admin-portal` went from ~7% true coverage to 83.07% stmts / 75.25% branches / 75.83% funcs / 86.49% lines (224 tests / 22 suites) by adding tests for the entire API layer, `CognitoService`/`AuthContext`, both previously-untested components, and all 12 page components. `customer-app` and `admin-app` both revisited Phase 10's pure-logic-only scope decision and moved to full RTL component-mounting tests (`@testing-library/react-native`, pinned to `^13.3.3` — the installed `^14.0.1` silently resolves to a version requiring React 19/RN 0.78): `customer-app` went from 1.25% to 88.96% stmts / 84.01% branches / 88.95% funcs / 92.7% lines (203 tests / 21 suites), covering the API layer, auth/notifications contexts, all components, `RootNavigator`, and all 10 screens; `admin-app` went from 0.07% to 93.97% stmts / 82.4% branches / 91.31% funcs / 95.66% lines (272 tests / 26 suites), covering the same surface area plus its 13 screens including the two largest, `DashboardScreen.tsx`/`BookingsScreen.tsx` (~550-570 lines each of appointment-detail modals, inline vehicle editing, and status-transition flows)
+- ~~Phone verification (test/demo tier)~~ — originally a "Verify" step in `customer-app`'s Profile screen using Cognito's `getAttributeVerificationCode`/`verifyAttribute` APIs. Never actually worked in this AWS account (see the phone-primary rollback note below — no SMS origination path exists at all), so on 2026-07-09 the phone field and its Verify/Verified UI were removed entirely from `customer-app` (Register and Profile screens), rather than leave a visibly broken button in front of real customers. `CognitoService.ts`'s `sendPhoneVerificationCode()`/`confirmPhoneVerification()` and the `phone`/`phoneVerified` fields on `AuthUser` were deleted along with it. `template.yaml`'s `CognitoSmsRole`/`SmsConfiguration` and the `phone_number` Cognito attribute are unaffected (still provisioned, just unused by any current UI) — cheap to re-wire a Verify step later if SMS sending gets fixed
+- **Phone-primary signup — attempted, then rolled back (2026-07-08/09)** — briefly replaced customer-app's email+password signup with phone+password (SMS OTP verifying the phone at signup, closing the gap where the Profile-screen phone verification above could be silently skipped). Reverted before shipping: the AWS account has no working SMS origination path at all (confirmed via the SNS/End User Messaging SMS APIs — zero phone numbers, sender IDs, or pools provisioned; the sandbox destination-number verification itself failed with `No origination entities available to send`), and getting one provisioned requires an AWS Support case with no guaranteed turnaround. Customer signup is back to email + password / email OTP as described above; revisit phone-primary once SMS sending is confirmed working end-to-end in this account
+- **Test coverage threshold — all 4 packages now enforced at 70%** — the target decided in Phase 10 is no longer just a number on paper. Every package now sets an explicit coverage `include`/`collectCoverageFrom` glob (so the reported percentage reflects the whole codebase, not just whatever files the existing tests happened to import) plus a `70%` threshold on statements/branches/functions/lines — `test:coverage` now **fails the command** if coverage regresses below that, not just reports it.
+- **Rate limiting (AWS WAF)** — a regional `AWS::WAFv2::WebACL` associated with the API Gateway `prod` stage, with a rate-based rule blocking any single source IP once it exceeds 2000 requests in a rolling 5-minute window (WAF's fixed evaluation window; not independently configurable). Generous enough not to throttle several legitimate users sharing one office/school NAT, while still catching scripted abuse against the REST API (booking spam, availability scraping, etc.). **Does not cover Cognito's own SignUp/OTP APIs** — those are called directly from the apps, never through this API Gateway, so they rely on Cognito's own built-in account-level quotas instead. No IAM/Lambda changes needed; pure CloudFormation resource plus one association.
 
 Still pending:
 
-- **Rate limiting** — AWS WAF on API Gateway; per-tenant request throttling
 - **Custom domain + CDN** — CloudFront distribution for admin portal; custom domain via Route 53 + ACM
-- **SMS carrier registration for phone verification at production scale (separate, one-time, do early — approval can take days):** the demo-tier phone verification above works today but is capped at 100 SMS/day account-wide via Cognito's default shared sender. Sending OTP SMS to US phone numbers at real volume requires registering a dedicated sending identity with carriers — either a toll-free number ("toll-free verification") or a 10DLC long code ("campaign" registration in AWS End User Messaging/SNS terminology; not a marketing campaign, just carrier compliance for transactional messages). Without it, carriers increasingly filter unregistered SMS as spam past low volume. Required before public launch, not before demoing to a prospective customer.
+- **SMS carrier registration (separate, one-time, do early — approval can take days):** this account currently has no working SMS send path at all — confirmed via the End User Messaging SMS APIs (zero phone numbers/sender IDs/pools provisioned) and an AWS Support case is pending. Phone verification/phone-primary signup are both parked until this is resolved (see above). Once fixed, real SMS volume still requires registering a dedicated sending identity with carriers — either a toll-free number ("toll-free verification") or a 10DLC long code ("campaign" registration in AWS End User Messaging/SNS terminology; not a marketing campaign, just carrier compliance for transactional messages) — since carriers increasingly filter unregistered SMS as spam past low volume.
 
 ### Phase 12 — Tenant Onboarding & White-Label App Distribution (Pending)
 
@@ -266,10 +269,10 @@ All 4 packages set an explicit `collectCoverageFrom`/`coverage.include` glob cov
 
 | Package | Statements | Branches | Functions | Lines | Threshold enforced? |
 | --- | --- | --- | --- | --- | --- |
-| `backend` | 81.03% | 73.10% | 85.71% | 84.00% | ✅ 70% |
-| `apps/admin-portal` | 83.07% | 75.25% | 75.83% | 86.49% | ✅ 70% |
-| `apps/customer-app` | 88.96% | 84.01% | 88.95% | 92.70% | ✅ 70% |
-| `apps/admin-app` | 93.97% | 82.40% | 91.31% | 95.66% | ✅ 70% |
+| `backend` | 83.69% | 76.68% | 85.71% | 86.14% | ✅ 70% |
+| `apps/admin-portal` | 83.30% | 74.69% | 76.03% | 86.67% | ✅ 70% |
+| `apps/customer-app` | 89.45% | 84.39% | 88.88% | 92.85% | ✅ 70% |
+| `apps/admin-app` | 94.05% | 81.53% | 91.34% | 95.73% | ✅ 70% |
 
 New code should keep these gates green — see "Contributing" below for what that means in practice.
 
@@ -304,11 +307,11 @@ npx expo run:ios       # iOS simulator (Mac only) — always runs on port 8081
 
 | Screen           | Description                                                                                                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Login / Register | Email + password auth; first name, last name, phone (optional) on registration                                                                                            |
+| Login / Register | Email + password auth; first name, last name on registration                                                                                                              |
 | Home             | Shop-branded header; welcome banner; Quick Actions; shop location card (today's operating hours, copy address, navigate via native maps app); active promotions preview   |
 | Appointments     | Upcoming / past tabs, date strip + slot picker booking modal, cancel, sort toggle                                                                                         |
 | Vehicles         | Add / delete vehicles; license plate → VIN auto-fill (CarAPI + NHTSA) or manual VIN entry; NHTSA-driven year → make → model → trim cascade; tap for service history modal |
-| Profile          | View name, email, phone; edit first name, last name, phone via modal; sign out                                                                                            |
+| Profile          | View name, email; edit first name, last name via modal; sign out                                                                                                         |
 | Settings         | App info (terms, privacy, help, version); sign out                                                                                                                        |
 
 > Home, Appointments, Vehicles, Promotions, and Notifications all support pull-to-refresh, so changes made elsewhere (e.g. an admin updating today's hours) show up without navigating away and back.
@@ -394,6 +397,7 @@ Open `http://localhost:5173` in your browser.
 | Capacity      | Slot duration, max concurrent, per-day operating hours                                                                                           |
 | Blocked Times | Block date ranges from accepting bookings                                                                                                        |
 | Notifications | Dropdown from the header bell — new-booking and customer-cancellation alerts, unread badge, click-through to the relevant booking                |
+| Settings      | Business Profile (name/address/phone/contact email); Role & Access — invite/list/activate/deactivate/**delete** admin users (owner-only, can't touch own account); Locations — full CRUD with soft-deactivate |
 
 ### Environment variables (`apps/admin-portal/.env`)
 
@@ -416,6 +420,36 @@ sam build
 sam deploy          # first time: sam deploy --guided
 ```
 
+### Bootstrapping the First Admin Account
+
+There's no seed script yet (Phase 12's onboarding tool will add one). The admin-user invite flow (`POST /admin-users`) requires an already-authenticated tenant owner to call it, so the very first tenant-owner account on a fresh deploy — or after any deploy that replaces the Cognito User Pool, e.g. a `UsernameAttributes` change — has to be created by hand, mirroring what that endpoint does internally:
+
+```bash
+# 1. Create the Cognito user (temp password emailed automatically, same as a normal invite)
+aws cognito-idp admin-create-user \
+  --user-pool-id <UserPoolId>          `# from the stack outputs` \
+  --username <owner-email> \
+  --user-attributes Name=email,Value=<owner-email> Name=email_verified,Value=true \
+    Name=given_name,Value=<First> Name=family_name,Value=<Last> \
+    Name=custom:tenantId,Value=<tenantId> Name=custom:role,Value=TENANT_OWNER \
+    Name=custom:userType,Value=ADMIN Name=custom:locationIds,Value= \
+  --desired-delivery-mediums EMAIL \
+  --region us-east-1
+# Note the returned "sub" — that's the Cognito userId used as the DynamoDB sort key below.
+
+# 2. Write the matching DynamoDB USER# record
+aws dynamodb put-item --table-name autorepair-users --region us-east-1 --item '{
+  "PK": {"S": "TENANT#<tenantId>"}, "SK": {"S": "USER#<sub>"},
+  "GSI1PK": {"S": "TENANT#<tenantId>"}, "GSI1SK": {"S": "EMAIL#<owner-email>"},
+  "userId": {"S": "<sub>"}, "tenantId": {"S": "<tenantId>"},
+  "email": {"S": "<owner-email>"}, "firstName": {"S": "<First>"}, "lastName": {"S": "<Last>"},
+  "role": {"S": "TENANT_OWNER"}, "userType": {"S": "ADMIN"}, "locationIds": {"L": []},
+  "status": {"S": "ACTIVE"}, "createdAt": {"S": "<ISO timestamp>"}, "updatedAt": {"S": "<ISO timestamp>"}
+}'
+```
+
+Log into admin-portal/admin-app with the temp password — you'll land on the existing new-password-challenge screen, same as any invited admin.
+
 ### AWS Resources (deployed to us-east-1)
 
 | Resource          | Details                                                                          |
@@ -424,7 +458,7 @@ sam deploy          # first time: sam deploy --guided
 | DynamoDB          | 12 tables, on-demand billing, PK/SK pattern with GSIs                            |
 | S3                | 2 buckets (uploads + assets), versioning enabled                                 |
 | API Gateway       | REST API, regional endpoint, `/prod` stage, Cognito authorizer                   |
-| Lambda            | 17 functions — see table below                                                   |
+| Lambda            | 20 functions — see table below                                                   |
 
 ### Lambda Functions
 
@@ -447,6 +481,9 @@ sam deploy          # first time: sam deploy --guided
 | `autorepair-notifications`         | GET /notifications, PUT /notifications/{notifId}/read, PUT /notifications/read-all | In-app notification list + mark-one/mark-all-as-read |
 | `autorepair-notification-reminder` | Scheduled (hourly)                                     | Sends 24h and 2h appointment reminders (push + in-app)      |
 | `autorepair-analytics`             | GET /analytics                                         | KPI aggregation for admin Statistics screens                |
+| `autorepair-locations`             | GET/POST/PUT/DELETE /locations                         | Multi-location CRUD; soft-deactivate with last-active-location guard |
+| `autorepair-tenants`               | GET/PUT /tenants/me                                    | Tenant business-profile record (name/address/phone/contact email) |
+| `autorepair-admin-users`           | GET/POST/PATCH/DELETE /admin-users                     | Admin invite (`AdminCreateUser`), list, role/location/status update, and permanent delete — all gated to tenant owner / super admin |
 
 ### Third-Party Integrations
 

@@ -1,11 +1,12 @@
 import React from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
+import { PRIVACY_POLICY_URL } from '../constants';
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
@@ -41,11 +42,17 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           {[
             { icon: 'document-text-outline' as const, label: 'Terms of Service' },
-            { icon: 'shield-outline' as const, label: 'Privacy Policy' },
+            { icon: 'shield-outline' as const, label: 'Privacy Policy', onPress: () => void Linking.openURL(PRIVACY_POLICY_URL) },
             { icon: 'help-circle-outline' as const, label: 'Help & Support' },
             { icon: 'information-circle-outline' as const, label: 'App Version', value: '1.0.0' },
           ].map((item, i, arr) => (
-            <View key={item.label} style={[styles.row, i === arr.length - 1 && styles.rowLast]}>
+            <TouchableOpacity
+              key={item.label}
+              style={[styles.row, i === arr.length - 1 && styles.rowLast]}
+              onPress={item.onPress}
+              disabled={!item.onPress}
+              activeOpacity={item.onPress ? 0.6 : 1}
+            >
               <View style={styles.rowIcon}>
                 <Ionicons name={item.icon} size={20} color={colors.primary} />
               </View>
@@ -54,7 +61,7 @@ export default function SettingsScreen() {
                 {item.value ? <Text style={styles.rowValue}>{item.value}</Text> : null}
                 {!item.value && <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 
