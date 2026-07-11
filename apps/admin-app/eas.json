@@ -12,6 +12,11 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
+        "EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID": "69pg5nnk13lfnnjjept6n7fo8k",
+        "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
       }
     },
     "preview": {
@@ -21,6 +26,11 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
+        "EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID": "69pg5nnk13lfnnjjept6n7fo8k",
+        "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
       }
     },
     "preview-device": {
@@ -30,11 +40,24 @@
       },
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
+        "EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID": "69pg5nnk13lfnnjjept6n7fo8k",
+        "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
+        "EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID": "69pg5nnk13lfnnjjept6n7fo8k",
+        "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
       }
     }
   },
