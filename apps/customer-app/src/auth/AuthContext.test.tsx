@@ -72,7 +72,7 @@ describe('AuthProvider', () => {
 
     await act(async () => fireEvent.press(screen.getByTestId('register')));
 
-    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe');
+    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe', undefined, undefined);
     expect(screen.getByTestId('authed').props.children).toBe('false');
   });
 

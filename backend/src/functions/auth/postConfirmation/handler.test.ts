@@ -75,6 +75,38 @@ describe('PostConfirmation trigger', () => {
     expect(call?.Item).toMatchObject({ phone: '+15551234567' });
   });
 
+  it('records smsConsent + a timestamp only when custom:smsConsent is exactly "true"', async () => {
+    ddbMock.on(PutCommand).resolves({});
+
+    await handler(fakeEvent({
+      request: {
+        userAttributes: {
+          sub: 'user-3', email: 'y@shop.com', 'custom:tenantId': 't1', 'custom:smsConsent': 'true',
+        },
+      } as never,
+    }));
+
+    const call = ddbMock.commandCalls(PutCommand)[0]?.args[0].input;
+    expect(call?.Item).toMatchObject({ smsConsent: true });
+    expect((call?.Item as Record<string, unknown>)?.smsConsentAt).toEqual(expect.any(String));
+  });
+
+  it('does not record smsConsent when custom:smsConsent is absent or "false"', async () => {
+    ddbMock.on(PutCommand).resolves({});
+
+    await handler(fakeEvent({
+      request: {
+        userAttributes: {
+          sub: 'user-4', email: 'z@shop.com', 'custom:tenantId': 't1', 'custom:smsConsent': 'false',
+        },
+      } as never,
+    }));
+
+    const call = ddbMock.commandCalls(PutCommand)[0]?.args[0].input;
+    expect(call?.Item).not.toHaveProperty('smsConsent');
+    expect(call?.Item).not.toHaveProperty('smsConsentAt');
+  });
+
   it('swallows a conditional-check failure when the user record already exists', async () => {
     ddbMock.on(PutCommand).rejects(new Error('ConditionalCheckFailedException'));
 
