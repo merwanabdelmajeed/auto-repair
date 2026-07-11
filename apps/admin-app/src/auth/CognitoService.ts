@@ -6,10 +6,9 @@ import {
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
 
-const _env = process.env as unknown as Record<string, string>;
 const pool = new CognitoUserPool({
-  UserPoolId: _env['EXPO_PUBLIC_COGNITO_USER_POOL_ID'],
-  ClientId: _env['EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID'],
+  UserPoolId: (process.env as unknown as { EXPO_PUBLIC_COGNITO_USER_POOL_ID: string }).EXPO_PUBLIC_COGNITO_USER_POOL_ID,
+  ClientId: (process.env as unknown as { EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID: string }).EXPO_PUBLIC_COGNITO_ADMIN_CLIENT_ID,
 });
 
 export interface AuthUser {

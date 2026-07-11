@@ -5,6 +5,7 @@ export interface Vehicle {
   customerId: string;
   make: string;
   model: string;
+  trim?: string;
   year: number;
   licensePlate: string;
   color: string;
