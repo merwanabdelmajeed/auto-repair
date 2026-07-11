@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F2044"
+      "backgroundColor": "#F59E0B"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,7 +22,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F2044"
+        "backgroundColor": "#F59E0B"
       },
       "package": "com.autorepair.admin",
       "googleServicesFile": "./android/app/google-services.json"
@@ -30,6 +30,10 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#0F2044"
     },
     "newArchEnabled": false,
     "scheme": "autorepair-admin",
