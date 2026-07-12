@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AutoRepair Admin",
+    "name": "Purrfect Auto Admin",
     "slug": "autorepair-admin",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.autorepair.admin",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
