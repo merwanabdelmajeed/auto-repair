@@ -27,6 +27,10 @@ build/
 .env.local
 .env.*.local
 
+# Credentials
+google-service-account.json
+*-service-account.json
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
