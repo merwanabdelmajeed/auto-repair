@@ -135,7 +135,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         flexShrink: 0,
       }}>
         <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', textAlign: 'center' }}>
-          Phase 0 · v1.0.0
+          v1.0.0
         </div>
       </div>
     </aside>

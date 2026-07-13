@@ -75,7 +75,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
       <View style={styles.footer}>
         <View style={styles.divider} />
-        <Text style={styles.versionText}>Admin · Phase 0 · v1.0.0</Text>
+        <Text style={styles.versionText}>Admin · v1.0.0</Text>
       </View>
     </DrawerContentScrollView>
   );
