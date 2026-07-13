@@ -96,6 +96,17 @@ describe('SettingsScreen', () => {
     expect(mockLogout).toHaveBeenCalled();
   });
 
+  it('does not show the old non-functional Location/Booking/Notifications placeholder rows', () => {
+    render(<SettingsScreen />);
+    expect(screen.queryByText('Business Information')).toBeNull();
+    expect(screen.queryByText('Manage Locations')).toBeNull();
+    expect(screen.queryByText('Business Hours')).toBeNull();
+    expect(screen.queryByText('Accept Online Bookings')).toBeNull();
+    expect(screen.queryByText('Booking Alerts')).toBeNull();
+    expect(screen.queryByText('Email Summaries')).toBeNull();
+    expect(screen.queryByText(/Phase 4/)).toBeNull();
+  });
+
   it('does not log out when the alert is cancelled', () => {
     jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
       const cancel = buttons?.find(b => b.text === 'Cancel');

@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Switch, Modal, TextInput, ActivityIndicator, Alert,
+  Modal, TextInput, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
-import { SHOP_NAME } from '../constants';
 
 export default function SettingsScreen() {
   const { user, logout, updateUser } = useAuth();
@@ -54,33 +53,18 @@ export default function SettingsScreen() {
     ? `${user.givenName} ${user.familyName}`
     : user?.email ?? '';
 
+  // Location management (business info, hours, multi-location) and per-admin
+  // notification/booking preferences all already exist as real, working
+  // features in admin-portal (web) — see Phase 9 in README.md. They were
+  // never built out here in the mobile app, so this list is deliberately
+  // scoped to what's actually functional on mobile today rather than
+  // duplicating dead links/no-op toggles that only look like real settings.
   const SETTINGS = [
-    {
-      title: 'Location',
-      items: [
-        { type: 'link' as const, icon: 'business-outline' as const, label: 'Business Information', value: SHOP_NAME },
-        { type: 'link' as const, icon: 'location-outline' as const, label: 'Manage Locations', value: '1 location' },
-        { type: 'link' as const, icon: 'time-outline' as const, label: 'Business Hours', value: 'Configure' },
-      ],
-    },
-    {
-      title: 'Booking',
-      items: [
-        { type: 'toggle' as const, icon: 'calendar-outline' as const, label: 'Accept Online Bookings', value: true },
-      ],
-    },
-    {
-      title: 'Notifications',
-      items: [
-        { type: 'toggle' as const, icon: 'notifications-outline' as const, label: 'Booking Alerts', value: true },
-        { type: 'toggle' as const, icon: 'mail-outline' as const, label: 'Email Summaries', value: false },
-      ],
-    },
     {
       title: 'Account',
       items: [
-        { type: 'action' as const, icon: 'person-outline' as const, label: 'Admin Profile', value: displayName, onPress: openProfile },
-        { type: 'action' as const, icon: 'log-out-outline' as const, label: 'Sign Out', value: '', onPress: handleSignOut, danger: true },
+        { icon: 'person-outline' as const, label: 'Admin Profile', value: displayName, onPress: openProfile, danger: false },
+        { icon: 'log-out-outline' as const, label: 'Sign Out', value: '', onPress: handleSignOut, danger: true },
       ],
     },
   ];
@@ -110,33 +94,24 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   key={item.label}
                   style={[styles.row, i === section.items.length - 1 && styles.rowLast]}
-                  onPress={item.type === 'action' ? item.onPress : undefined}
-                  activeOpacity={item.type === 'action' ? 0.7 : 1}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.rowIcon}>
-                    <Ionicons name={item.icon} size={18} color={'danger' in item && item.danger ? colors.error : colors.primary} />
+                    <Ionicons name={item.icon} size={18} color={item.danger ? colors.error : colors.primary} />
                   </View>
-                  <Text style={[styles.rowLabel, 'danger' in item && item.danger && styles.rowLabelDanger]}>{item.label}</Text>
-                  {item.type === 'toggle' ? (
-                    <Switch
-                      value={item.value as boolean}
-                      thumbColor={colors.white}
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                      onValueChange={() => {}}
-                    />
-                  ) : (
-                    <View style={styles.rowRight}>
-                      {item.value ? <Text style={styles.rowValue} numberOfLines={1}>{item.value}</Text> : null}
-                      <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-                    </View>
-                  )}
+                  <Text style={[styles.rowLabel, item.danger && styles.rowLabelDanger]}>{item.label}</Text>
+                  <View style={styles.rowRight}>
+                    {item.value ? <Text style={styles.rowValue} numberOfLines={1}>{item.value}</Text> : null}
+                    <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
         ))}
 
-        <Text style={styles.version}>AutoRepair Admin · Phase 4 · v1.0.0</Text>
+        <Text style={styles.version}>Purrfect Auto Admin · v1.0.0</Text>
       </ScrollView>
 
       {/* Profile Modal */}

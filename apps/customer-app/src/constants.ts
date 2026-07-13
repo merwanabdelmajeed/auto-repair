@@ -11,3 +11,9 @@ export const SHOP_ADDRESS =
 
 export const PRIVACY_POLICY_URL =
   'https://autorepair-public-docs-998632950185.s3.us-east-1.amazonaws.com/privacy-policy.html';
+
+export const TERMS_OF_SERVICE_URL =
+  'https://autorepair-public-docs-998632950185.s3.us-east-1.amazonaws.com/terms.html';
+
+export const SUPPORT_URL =
+  'https://autorepair-public-docs-998632950185.s3.us-east-1.amazonaws.com/support.html';

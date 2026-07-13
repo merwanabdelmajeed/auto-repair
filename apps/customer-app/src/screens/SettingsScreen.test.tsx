@@ -3,7 +3,7 @@ import { Alert, Linking } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import SettingsScreen from './SettingsScreen';
 import { useAuth } from '../auth/AuthContext';
-import { PRIVACY_POLICY_URL } from '../constants';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../constants';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 
@@ -62,12 +62,29 @@ describe('SettingsScreen', () => {
     expect(openURLSpy).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
   });
 
-  it('does not respond to taps on non-actionable rows', () => {
+  it('opens the terms of service URL when tapped', () => {
     const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 
     render(<SettingsScreen />);
     fireEvent.press(screen.getByText('Terms of Service'));
+
+    expect(openURLSpy).toHaveBeenCalledWith(TERMS_OF_SERVICE_URL);
+  });
+
+  it('opens the support URL when tapped', () => {
+    const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+
+    render(<SettingsScreen />);
     fireEvent.press(screen.getByText('Help & Support'));
+
+    expect(openURLSpy).toHaveBeenCalledWith(SUPPORT_URL);
+  });
+
+  it('does not respond to taps on the non-actionable App Version row', () => {
+    const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByText('App Version'));
 
     expect(openURLSpy).not.toHaveBeenCalled();
   });

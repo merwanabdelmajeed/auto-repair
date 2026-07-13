@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
-import { PRIVACY_POLICY_URL } from '../constants';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../constants';
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
@@ -41,9 +41,9 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
           {[
-            { icon: 'document-text-outline' as const, label: 'Terms of Service' },
+            { icon: 'document-text-outline' as const, label: 'Terms of Service', onPress: () => void Linking.openURL(TERMS_OF_SERVICE_URL) },
             { icon: 'shield-outline' as const, label: 'Privacy Policy', onPress: () => void Linking.openURL(PRIVACY_POLICY_URL) },
-            { icon: 'help-circle-outline' as const, label: 'Help & Support' },
+            { icon: 'help-circle-outline' as const, label: 'Help & Support', onPress: () => void Linking.openURL(SUPPORT_URL) },
             { icon: 'information-circle-outline' as const, label: 'App Version', value: '1.0.0' },
           ].map((item, i, arr) => (
             <TouchableOpacity
