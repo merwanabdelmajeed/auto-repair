@@ -7,6 +7,11 @@ import { listAppointments } from '../api/appointments';
 
 jest.mock('../api/vehicles', () => ({ listVehicles: jest.fn(), createVehicle: jest.fn(), deleteVehicle: jest.fn(), lookupPlate: jest.fn() }));
 jest.mock('../api/appointments', () => ({ listAppointments: jest.fn() }));
+jest.mock('@react-navigation/native', () => {
+  const actual = jest.requireActual('@react-navigation/native');
+  const React = require('react');
+  return { ...actual, useFocusEffect: (effect: () => void) => React.useEffect(effect, []) };
+});
 
 function vehicle(overrides: Record<string, unknown> = {}) {
   return { vehicleId: 'v1', make: 'Honda', model: 'Civic', trim: null, year: 2020, licensePlate: 'ABC123', color: 'blue', vin: null, ...overrides };

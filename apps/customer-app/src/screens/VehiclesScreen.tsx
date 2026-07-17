@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
@@ -144,7 +145,12 @@ export default function VehiclesScreen() {
     }
   }
 
-  useEffect(() => { void load(); }, [load]);
+  // Plain useEffect only fires on mount — since guest browsing keeps the
+  // Drawer (and this screen) permanently mounted across logout/login
+  // cycles, that would leave a previous account's vehicles on screen after
+  // switching accounts. useFocusEffect refetches every time this tab is
+  // actually visited instead.
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
   useEffect(() => { if (showModal) void fetchMakes(); }, [showModal]);
 
   // ── Year ──────────────────────────────────────────────────────────────────
