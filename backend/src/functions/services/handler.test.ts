@@ -30,14 +30,31 @@ function fakeEvent(overrides: Partial<APIGatewayProxyEvent> & { claims?: Record<
   } as unknown as APIGatewayProxyEvent;
 }
 
+function fakeBearerHeader(tenantId: string): string {
+  const payload = Buffer.from(JSON.stringify({ 'custom:tenantId': tenantId })).toString('base64');
+  return `Bearer header.${payload}.signature`;
+}
+
 describe('GET /services', () => {
-  it('is readable by any authenticated role, including customers', async () => {
+  // This route has Auth: Authorizer NONE (template.yaml) — API Gateway never
+  // populates requestContext.authorizer.claims here, even for authenticated
+  // callers with a real token. The handler reads tenantId straight off the
+  // bearer token's payload instead (see tenantIdFromUnverifiedBearerToken).
+  it('is readable by an authenticated caller via their bearer token, no query param needed', async () => {
     ddbMock.on(QueryCommand).resolves({
       Items: [{ serviceId: 's1', name: 'Oil Change', description: '', durationMinutes: 30, isActive: true, createdAt: 'c', updatedAt: 'u' }],
     });
-    const result = await handler(fakeEvent({ claims: { 'custom:role': UserRole.CUSTOMER } }));
+    const result = await handler({
+      httpMethod: 'GET',
+      pathParameters: null,
+      requestContext: {},
+      queryStringParameters: null,
+      headers: { Authorization: fakeBearerHeader('t1') },
+    } as unknown as APIGatewayProxyEvent);
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).data).toHaveLength(1);
+    const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':pk': 'TENANT#t1' });
   });
 
   it('is readable by a guest (no JWT) via a ?tenantId= query param', async () => {
@@ -68,9 +85,29 @@ describe('GET /services', () => {
     expect(result.statusCode).toBe(400);
   });
 
-  it('ignores a guest ?tenantId= when a real session is present, using the JWT tenant instead', async () => {
+  it('prefers the bearer token tenant over a mismatched ?tenantId= query param', async () => {
     ddbMock.on(QueryCommand).resolves({ Items: [] });
-    await handler(fakeEvent({ queryStringParameters: { tenantId: 'someone-elses-tenant' } }));
+    await handler({
+      httpMethod: 'GET',
+      pathParameters: null,
+      requestContext: {},
+      queryStringParameters: { tenantId: 'someone-elses-tenant' },
+      headers: { Authorization: fakeBearerHeader('t1') },
+    } as unknown as APIGatewayProxyEvent);
+
+    const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':pk': 'TENANT#t1' });
+  });
+
+  it('falls back to the query param when the bearer token has no usable payload', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    await handler({
+      httpMethod: 'GET',
+      pathParameters: null,
+      requestContext: {},
+      queryStringParameters: { tenantId: 't1' },
+      headers: { Authorization: 'Bearer not-a-real-jwt' },
+    } as unknown as APIGatewayProxyEvent);
 
     const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
     expect(call?.ExpressionAttributeValues).toMatchObject({ ':pk': 'TENANT#t1' });

@@ -8,20 +8,40 @@ import { UserRole } from '../../shared/types/index.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
 
+// GET /services has Auth: Authorizer NONE (see template.yaml), so API Gateway
+// never runs the Cognito authorizer on this route and event.requestContext.
+// authorizer.claims is never populated — even for admin-portal/admin-app
+// callers sending a real, valid token. This route's data (a tenant's service
+// catalog) is meant to be publicly readable anyway — it's reachable via
+// ?tenantId= with zero auth by design — so decoding (without re-verifying)
+// a bearer token's payload to pull tenantId doesn't expose anything that
+// isn't already exposed by the guest path.
+function tenantIdFromUnverifiedBearerToken(event: APIGatewayProxyEvent): string | undefined {
+  const header = event.headers?.Authorization ?? event.headers?.authorization;
+  if (!header) return undefined;
+  const token = header.replace(/^Bearer\s+/i, '');
+  const payload = token.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    return (JSON.parse(json) as Record<string, string>)['custom:tenantId'];
+  } catch {
+    return undefined;
+  }
+}
+
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     const method = event.httpMethod;
     const serviceId = event.pathParameters?.serviceId;
 
-    // GET /services — public (no Cognito authorizer on this route; see
-    // template.yaml). Lets customer-app show the service catalog before
-    // someone creates an account. Uses the JWT's tenantId when a real
-    // session is present, otherwise falls back to ?tenantId= so a guest
-    // browsing the app still sees the right tenant's services.
+    // GET /services — public. Lets customer-app show the service catalog
+    // before someone creates an account. Prefers the caller's own tenantId
+    // (from a bearer token, if any) so authenticated admin/customer clients
+    // don't have to pass ?tenantId= themselves; falls back to the query
+    // param for guest browsing.
     if (method === 'GET') {
-      const tenantId = event.requestContext?.authorizer?.claims
-        ? extractTenantClaims(event).tenantId
-        : event.queryStringParameters?.tenantId;
+      const tenantId = tenantIdFromUnverifiedBearerToken(event) ?? event.queryStringParameters?.tenantId;
       if (!tenantId) return badRequest('tenantId is required');
 
       const items = await queryAll({
