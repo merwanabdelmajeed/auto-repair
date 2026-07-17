@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { createHash } from 'node:crypto';
 import { db, TABLE, queryPage, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, paginated, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
@@ -21,7 +22,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'DELETE') {
       const claims = extractTenantClaims(event);
       requireRole(claims, UserRole.CUSTOMER);
-      const { tenantId, userId } = claims;
+      const { tenantId, userId, email } = claims;
 
       const [vehicles, appointments, notifications] = await Promise.all([
         queryAll({
@@ -43,15 +44,28 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         }),
       ]);
 
+      const now = new Date().toISOString();
+      // One-way hash only — never store the plaintext email past this point.
+      const emailHash = email ? createHash('sha256').update(email.trim().toLowerCase()).digest('hex') : null;
+
       await Promise.all([
-        ...vehicles.map(v => db.send(new DeleteCommand({
+        // Vehicles and appointments are kept (not hard-deleted): the shop's
+        // own service/financial history has legitimate business value, and
+        // Apple's guideline requires the *account* to be gone, not every
+        // record that ever referenced it. Each is stripped of everything
+        // that identifies the specific customer instead.
+        ...vehicles.map(v => db.send(new UpdateCommand({
           TableName: TABLE.VEHICLES,
           Key: { PK: v.PK as string, SK: v.SK as string },
+          UpdateExpression: 'REMOVE GSI1PK, GSI1SK, customerId',
         }))),
-        ...appointments.map(a => db.send(new DeleteCommand({
+        ...appointments.map(a => db.send(new UpdateCommand({
           TableName: TABLE.APPOINTMENTS,
           Key: { PK: a.PK as string, SK: a.SK as string },
+          UpdateExpression: 'REMOVE GSI1PK, GSI1SK, customerId, customerEmail SET customerName = :deleted',
+          ExpressionAttributeValues: { ':deleted': 'Deleted Customer' },
         }))),
+        // Notifications are pure UI content with no retention value.
         ...notifications.map(n => db.send(new DeleteCommand({
           TableName: TABLE.NOTIFICATIONS,
           Key: { PK: n.PK as string, SK: n.SK as string },
@@ -59,6 +73,23 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         db.send(new DeleteCommand({
           TableName: TABLE.USERS,
           Key: { PK: `TENANT#${tenantId}`, SK: `USER#${userId}` },
+        })),
+        // Compact audit trail of the deletion event itself — proves when and
+        // how an account was deleted without retaining anything that
+        // identifies who it was (email is hashed, one-way).
+        db.send(new PutCommand({
+          TableName: TABLE.USERS,
+          Item: {
+            PK: `TENANT#${tenantId}`,
+            SK: `DELETION#${now}#${userId}`,
+            tenantId,
+            deletedUserId: userId,
+            emailHash,
+            method: 'self-service',
+            vehicleCount: vehicles.length,
+            appointmentCount: appointments.length,
+            deletedAt: now,
+          },
         })),
       ]);
 
