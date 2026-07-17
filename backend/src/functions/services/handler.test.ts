@@ -39,6 +39,42 @@ describe('GET /services', () => {
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).data).toHaveLength(1);
   });
+
+  it('is readable by a guest (no JWT) via a ?tenantId= query param', async () => {
+    ddbMock.on(QueryCommand).resolves({
+      Items: [{ serviceId: 's1', name: 'Oil Change', description: '', durationMinutes: 30, isActive: true, createdAt: 'c', updatedAt: 'u' }],
+    });
+    const result = await handler({
+      httpMethod: 'GET',
+      pathParameters: null,
+      requestContext: {},
+      queryStringParameters: { tenantId: 't1' },
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).data).toHaveLength(1);
+    const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':pk': 'TENANT#t1' });
+  });
+
+  it('rejects a guest request with no ?tenantId= at all', async () => {
+    const result = await handler({
+      httpMethod: 'GET',
+      pathParameters: null,
+      requestContext: {},
+      queryStringParameters: null,
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(result.statusCode).toBe(400);
+  });
+
+  it('ignores a guest ?tenantId= when a real session is present, using the JWT tenant instead', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    await handler(fakeEvent({ queryStringParameters: { tenantId: 'someone-elses-tenant' } }));
+
+    const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':pk': 'TENANT#t1' });
+  });
 });
 
 describe('POST /services', () => {

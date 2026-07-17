@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SHOP_NAME, PRIVACY_POLICY_URL } from '../constants';
+import { SHOP_NAME, PRIVACY_POLICY_URL, DEFAULT_TENANT_ID } from '../constants';
 import {
   View,
   Text,
@@ -19,9 +19,6 @@ type Props = {
   onNavigateToLogin: () => void;
   onRegistered: (email: string, password: string) => void;
 };
-
-// For MVP, tenant ID is hardcoded. Replace with invitation-code flow in a later phase.
-const DEFAULT_TENANT_ID = 'demo-tenant';
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 10);

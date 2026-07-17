@@ -84,7 +84,7 @@ describe('promotions api', () => {
 describe('services api', () => {
   it('listServices', () => {
     services.listServices();
-    expect(api.get).toHaveBeenCalledWith('/services');
+    expect(api.get).toHaveBeenCalledWith('/services?tenantId=demo-tenant');
   });
 });
 

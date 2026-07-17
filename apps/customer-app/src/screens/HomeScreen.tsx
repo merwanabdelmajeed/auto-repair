@@ -17,6 +17,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listPromotions, type PublicPromotion } from '../api/promotions';
 import { getCapacity, type DayHours } from '../api/capacity';
+import { listServices, type Service } from '../api/services';
 import { useAuth } from '../auth/AuthContext';
 import { SHOP_ADDRESS } from '../constants';
 
@@ -58,9 +59,11 @@ async function openNavigation(address: string) {
 }
 
 export default function HomeScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, isAuthenticated, requireAuth } = useAuth();
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
   const [addressCopied, setAddressCopied] = useState(false);
   const [todayHours, setTodayHours] = useState<DayHours | null | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,11 +79,20 @@ export default function HomeScreen({ navigation }: any) {
   }
 
   const loadPromotions = useCallback(() => {
+    if (!isAuthenticated) { setLoadingPromos(false); return Promise.resolve(); }
     setLoadingPromos(true);
     return listPromotions()
       .then(data => setPromotions(data.slice(0, 3)))
       .catch(() => {})
       .finally(() => setLoadingPromos(false));
+  }, [isAuthenticated]);
+
+  const loadServices = useCallback(() => {
+    setLoadingServices(true);
+    return listServices()
+      .then(data => setServices(data.filter(s => s.isActive).slice(0, 5)))
+      .catch(() => {})
+      .finally(() => setLoadingServices(false));
   }, []);
 
   const loadCapacity = useCallback(() => {
@@ -93,11 +105,12 @@ export default function HomeScreen({ navigation }: any) {
   }, []);
 
   useFocusEffect(useCallback(() => { void loadPromotions(); }, [loadPromotions]));
+  useFocusEffect(useCallback(() => { void loadServices(); }, [loadServices]));
   useFocusEffect(useCallback(() => { void loadCapacity(); }, [loadCapacity]));
 
   async function onRefresh() {
     setRefreshing(true);
-    await Promise.all([loadPromotions(), loadCapacity()]);
+    await Promise.all([loadPromotions(), loadServices(), loadCapacity()]);
     setRefreshing(false);
   }
 
@@ -113,13 +126,13 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.banner}>
           <View style={styles.bannerInner}>
             <View style={styles.bannerText}>
-              <Text style={styles.bannerGreeting}>Welcome back,</Text>
-              <Text style={styles.bannerTitle}>{displayName}</Text>
+              <Text style={styles.bannerGreeting}>{isAuthenticated ? 'Welcome back,' : 'Welcome,'}</Text>
+              <Text style={styles.bannerTitle}>{isAuthenticated ? displayName : 'Guest'}</Text>
             </View>
           </View>
           <TouchableOpacity
             style={styles.bookBtn}
-            onPress={() => navigation.navigate('Appointments')}
+            onPress={() => requireAuth(() => navigation.navigate('Appointments'))}
             activeOpacity={0.85}
           >
             <Ionicons name="calendar" size={18} color={colors.primary} />
@@ -134,7 +147,7 @@ export default function HomeScreen({ navigation }: any) {
             <TouchableOpacity
               key={action.screen}
               style={styles.quickAction}
-              onPress={() => navigation.navigate(action.screen)}
+              onPress={() => requireAuth(() => navigation.navigate(action.screen))}
               activeOpacity={0.75}
             >
               <View style={styles.quickActionIcon}>
@@ -144,6 +157,27 @@ export default function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Services — visible without an account */}
+        <Text style={styles.sectionTitle}>Our Services</Text>
+        {loadingServices ? (
+          <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
+        ) : services.length === 0 ? (
+          <View style={styles.emptyPromos}>
+            <Text style={styles.emptyPromosText}>No services listed right now.</Text>
+          </View>
+        ) : services.map((service) => (
+          <View key={service.serviceId} style={styles.serviceCard}>
+            <View style={styles.serviceIconBox}>
+              <Ionicons name="construct-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.serviceContent}>
+              <Text style={styles.serviceName}>{service.name}</Text>
+              {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
+            </View>
+            <Text style={styles.serviceDuration}>{service.durationMinutes} min</Text>
+          </View>
+        ))}
 
         {/* Location */}
         {SHOP_ADDRESS ? (
@@ -184,15 +218,26 @@ export default function HomeScreen({ navigation }: any) {
           </>
         ) : null}
 
-        {/* Active Promotions */}
+        {/* Active Promotions — account-based, hidden from guests */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Promotions</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Promotions')}>
-            <Text style={styles.seeAll}>See all</Text>
-          </TouchableOpacity>
+          {isAuthenticated && (
+            <TouchableOpacity onPress={() => navigation.navigate('Promotions')}>
+              <Text style={styles.seeAll}>See all</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {loadingPromos ? (
+        {!isAuthenticated ? (
+          <TouchableOpacity
+            testID="home-login-to-view-promotions"
+            style={styles.emptyPromos}
+            onPress={() => requireAuth(() => {})}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.loginPromptText}>Login to view promotions</Text>
+          </TouchableOpacity>
+        ) : loadingPromos ? (
           <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
         ) : promotions.length === 0 ? (
           <View style={styles.emptyPromos}>
@@ -362,6 +407,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
+  loginPromptText: {
+    ...typography.bodySmall,
+    color: colors.primaryLight,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  serviceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    ...shadows.sm,
+  },
+  serviceIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  serviceContent: { flex: 1 },
+  serviceName: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
+  serviceDesc: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
+  serviceDuration: { ...typography.small, color: colors.textMuted },
 
   promoCard: {
     backgroundColor: colors.surface,

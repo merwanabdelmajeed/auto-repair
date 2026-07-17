@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import HomeScreen from './HomeScreen';
 import { useAuth } from '../auth/AuthContext';
 import { listPromotions } from '../api/promotions';
+import { listServices } from '../api/services';
 import { getCapacity } from '../api/capacity';
 
 jest.mock('expo-constants', () => ({
@@ -18,12 +19,26 @@ jest.mock('@react-navigation/native', () => {
 });
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../api/promotions', () => ({ listPromotions: jest.fn() }));
+jest.mock('../api/services', () => ({ listServices: jest.fn() }));
 jest.mock('../api/capacity', () => ({ getCapacity: jest.fn() }));
 
 const mockNavigate = jest.fn();
+const mockRequireAuth = jest.fn((action: () => void) => action());
+
+function mockAuthed(user: Record<string, unknown> = { email: 'jane@shop.com' }) {
+  (useAuth as jest.Mock).mockReturnValue({ user, isAuthenticated: true, requireAuth: mockRequireAuth });
+}
+
+function mockGuest() {
+  (useAuth as jest.Mock).mockReturnValue({ user: null, isAuthenticated: false, requireAuth: mockRequireAuth });
+}
 
 function promo(overrides: Record<string, unknown> = {}) {
   return { promoId: 'p1', code: 'SAVE10', description: '10% off', type: 'percent', value: 10, expiresAt: null, ...overrides };
+}
+
+function service(overrides: Record<string, unknown> = {}) {
+  return { serviceId: 's1', name: 'Oil Change', description: 'Full synthetic', durationMinutes: 30, isActive: true, ...overrides };
 }
 
 function capacitySettings(todayHours: Record<string, unknown> | null) {
@@ -40,45 +55,103 @@ function renderScreen() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRequireAuth.mockImplementation((action: () => void) => action());
   (listPromotions as jest.Mock).mockResolvedValue([]);
+  (listServices as jest.Mock).mockResolvedValue([]);
   (getCapacity as jest.Mock).mockResolvedValue(capacitySettings(null));
 });
 
 describe('HomeScreen — welcome banner', () => {
   it('greets by given/family name when available', async () => {
-    (useAuth as jest.Mock).mockReturnValue({ user: { givenName: 'Jane', familyName: 'Doe', email: 'jane@shop.com' } });
+    mockAuthed({ givenName: 'Jane', familyName: 'Doe', email: 'jane@shop.com' });
     renderScreen();
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
+    expect(screen.getByText('Welcome back,')).toBeTruthy();
   });
 
   it('falls back to email when name is unavailable', async () => {
-    (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' } });
+    mockAuthed({ email: 'jane@shop.com' });
     renderScreen();
     await waitFor(() => expect(screen.getByText('jane@shop.com')).toBeTruthy());
   });
 
-  it('navigates to Appointments via Book Appointment', async () => {
-    (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' } });
+  it('greets guests as "Guest" without requiring a session', async () => {
+    mockGuest();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Guest')).toBeTruthy());
+    expect(screen.getByText('Welcome,')).toBeTruthy();
+  });
+
+  it('navigates to Appointments via Book Appointment when authenticated', async () => {
+    mockAuthed();
     renderScreen();
     fireEvent.press(screen.getByText('Book Appointment'));
+    expect(mockRequireAuth).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('Appointments');
+  });
+
+  it('gates Book Appointment behind sign-in for guests', async () => {
+    mockGuest();
+    mockRequireAuth.mockImplementation(() => {});
+    renderScreen();
+    fireEvent.press(screen.getByText('Book Appointment'));
+    expect(mockRequireAuth).toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 
 describe('HomeScreen — quick actions', () => {
-  beforeEach(() => (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' } }));
-
-  it('navigates to each quick action screen', () => {
+  it('navigates to each quick action screen when authenticated', () => {
+    mockAuthed();
     renderScreen();
     fireEvent.press(screen.getByText('My Vehicles'));
     expect(mockNavigate).toHaveBeenCalledWith('Vehicles');
     fireEvent.press(screen.getByText('Notifications'));
     expect(mockNavigate).toHaveBeenCalledWith('Notifications');
   });
+
+  it('gates quick actions behind sign-in for guests', () => {
+    mockGuest();
+    mockRequireAuth.mockImplementation(() => {});
+    renderScreen();
+    fireEvent.press(screen.getByText('My Vehicles'));
+    expect(mockRequireAuth).toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeScreen — our services (visible without an account)', () => {
+  it('shows the empty state when there are no services', async () => {
+    mockGuest();
+    (listServices as jest.Mock).mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('No services listed right now.')).toBeTruthy());
+  });
+
+  it('lists active services for a guest, with no login required', async () => {
+    mockGuest();
+    (listServices as jest.Mock).mockResolvedValue([
+      service({ serviceId: 's1', name: 'Oil Change', durationMinutes: 30 }),
+      service({ serviceId: 's2', name: 'Tire Rotation', description: '', durationMinutes: 20, isActive: false }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    expect(screen.getByText('30 min')).toBeTruthy();
+    // Inactive services are filtered out
+    expect(screen.queryByText('Tire Rotation')).toBeNull();
+  });
+
+  it('also shows services when authenticated', async () => {
+    mockAuthed();
+    (listServices as jest.Mock).mockResolvedValue([service()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+  });
 });
 
 describe('HomeScreen — location card', () => {
-  beforeEach(() => (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' } }));
+  beforeEach(() => mockAuthed());
 
   it('shows open hours for today', async () => {
     (getCapacity as jest.Mock).mockResolvedValue(capacitySettings({ open: '07:00', close: '17:30' }));
@@ -147,16 +220,16 @@ describe('HomeScreen — location card', () => {
   });
 });
 
-describe('HomeScreen — promotions', () => {
-  beforeEach(() => (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' } }));
-
+describe('HomeScreen — promotions (account-based)', () => {
   it('shows the empty state when there are no active promotions', async () => {
+    mockAuthed();
     (listPromotions as jest.Mock).mockResolvedValue([]);
     renderScreen();
     await waitFor(() => expect(screen.getByText('No active promotions right now.')).toBeTruthy());
   });
 
   it('renders up to 3 promo cards with percent/fixed badges and expiry', async () => {
+    mockAuthed();
     (listPromotions as jest.Mock).mockResolvedValue([
       promo({ promoId: 'p1', code: 'SAVE10', type: 'percent', value: 10, expiresAt: '2026-12-31T00:00:00.000Z' }),
       promo({ promoId: 'p2', code: 'FLAT15', type: 'fixed', value: 15, expiresAt: null }),
@@ -171,6 +244,7 @@ describe('HomeScreen — promotions', () => {
   });
 
   it('navigates to Promotions when "See all" or a promo card is pressed', async () => {
+    mockAuthed();
     (listPromotions as jest.Mock).mockResolvedValue([promo()]);
     renderScreen();
     await waitFor(() => screen.getByText('SAVE10'));
@@ -181,5 +255,18 @@ describe('HomeScreen — promotions', () => {
     mockNavigate.mockClear();
     fireEvent.press(screen.getByText('SAVE10'));
     expect(mockNavigate).toHaveBeenCalledWith('Promotions');
+  });
+
+  it('hides promotions and "See all" for guests, prompting sign-in instead', async () => {
+    mockGuest();
+    mockRequireAuth.mockImplementation(() => {});
+    renderScreen();
+
+    expect(screen.getByText('Login to view promotions')).toBeTruthy();
+    expect(screen.queryByText('See all')).toBeNull();
+    expect(listPromotions).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('Login to view promotions'));
+    expect(mockRequireAuth).toHaveBeenCalled();
   });
 });

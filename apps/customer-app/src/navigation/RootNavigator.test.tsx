@@ -10,6 +10,18 @@ function renderNav() {
   return render(<NavigationContainer><RootNavigator /></NavigationContainer>);
 }
 
+const mockHideAuthPrompt = jest.fn();
+
+function mockAuth(overrides: Record<string, unknown> = {}) {
+  (useAuth as jest.Mock).mockReturnValue({
+    isAuthenticated: false,
+    isLoading: false,
+    authPromptVisible: false,
+    hideAuthPrompt: mockHideAuthPrompt,
+    ...overrides,
+  });
+}
+
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../api/notifications', () => ({
   getNotifications: jest.fn().mockResolvedValue([]),
@@ -51,19 +63,36 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('RootNavigator', () => {
   it('shows a loading spinner while auth is resolving', () => {
-    (useAuth as jest.Mock).mockReturnValue({ isAuthenticated: false, isLoading: true });
+    mockAuth({ isLoading: true });
     renderNav();
     expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
   });
 
-  it('shows Login by default when unauthenticated', () => {
-    (useAuth as jest.Mock).mockReturnValue({ isAuthenticated: false, isLoading: false });
+  it('shows the Home/Drawer app by default, even when unauthenticated (guest browsing)', () => {
+    mockAuth({ isAuthenticated: false });
     renderNav();
+    expect(screen.getByText('HomeScreen')).toBeTruthy();
+    expect(screen.queryByText('LoginScreen')).toBeNull();
+  });
+
+  it('shows the Login overlay on top of Home when authPromptVisible is true', () => {
+    mockAuth({ isAuthenticated: false, authPromptVisible: true });
+    renderNav();
+    expect(screen.getByText('HomeScreen')).toBeTruthy();
     expect(screen.getByText('LoginScreen')).toBeTruthy();
   });
 
-  it('walks Login -> Register -> VerifyEmail -> back to Login', () => {
-    (useAuth as jest.Mock).mockReturnValue({ isAuthenticated: false, isLoading: false });
+  it('closes the overlay via the close button, calling hideAuthPrompt', () => {
+    mockAuth({ isAuthenticated: false, authPromptVisible: true });
+    renderNav();
+
+    fireEvent.press(screen.getByTestId('auth-overlay-close'));
+
+    expect(mockHideAuthPrompt).toHaveBeenCalled();
+  });
+
+  it('walks Login -> Register -> VerifyEmail -> back to Login within the overlay', () => {
+    mockAuth({ isAuthenticated: false, authPromptVisible: true });
     renderNav();
 
     fireEvent.press(screen.getByText('LoginScreen'));
@@ -77,14 +106,14 @@ describe('RootNavigator', () => {
   });
 
   it('renders the drawer app (Home + notification bell) when authenticated', async () => {
-    (useAuth as jest.Mock).mockReturnValue({ isAuthenticated: true, isLoading: false });
+    mockAuth({ isAuthenticated: true });
     renderNav();
     await waitFor(() => expect(getNotifications).toHaveBeenCalled());
     expect(screen.getByText('HomeScreen')).toBeTruthy();
   });
 
   it('shows an unread badge on the notification bell once notifications load', async () => {
-    (useAuth as jest.Mock).mockReturnValue({ isAuthenticated: true, isLoading: false });
+    mockAuth({ isAuthenticated: true });
     (getNotifications as jest.Mock).mockResolvedValue([
       { notifId: 'n1', type: 'promotion_new', title: 'T', body: 'B', read: false, createdAt: 'c', appointmentId: null, promoId: null },
     ]);

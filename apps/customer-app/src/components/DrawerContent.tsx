@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../theme';
+import { useAuth } from '../auth/AuthContext';
 
 type DrawerItem = {
   name: string;
@@ -23,6 +24,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { navigation, state } = props;
+  const { requireAuth } = useAuth();
   const activeRouteName = state.routes[state.index]?.name;
 
   return (
@@ -50,7 +52,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             <TouchableOpacity
               key={item.name}
               style={[styles.navItem, isActive && styles.navItemActive]}
-              onPress={() => navigation.navigate(item.name)}
+              onPress={() => {
+                if (item.name === 'Home') { navigation.navigate(item.name); return; }
+                requireAuth(() => navigation.navigate(item.name));
+              }}
               activeOpacity={0.7}
             >
               <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>

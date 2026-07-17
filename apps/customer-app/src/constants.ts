@@ -17,3 +17,8 @@ export const TERMS_OF_SERVICE_URL =
 
 export const SUPPORT_URL =
   'https://autorepair-public-docs-998632950185.s3.us-east-1.amazonaws.com/support.html';
+
+// For MVP, tenant ID is hardcoded — single-tenant deployment, no invitation-code
+// flow yet (Phase 12). Used both at registration and for guest browsing, since
+// unauthenticated requests have no JWT to derive it from.
+export const DEFAULT_TENANT_ID = 'demo-tenant';

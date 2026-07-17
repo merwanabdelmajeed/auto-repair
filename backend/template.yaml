@@ -841,6 +841,12 @@ Resources:
 
   ApiWebAclAssociation:
     Type: AWS::WAFv2::WebACLAssociation
+    # SAM's implicitly-created Stage resource is not otherwise referenced here
+    # (ResourceArn below is a hand-built ARN, not a !Ref/!GetAtt), so on a
+    # brand-new stack CloudFormation has no natural ordering signal and can
+    # attempt this association before the stage exists ("resource doesn't
+    # exist" from WAF). Depending on it explicitly forces the right order.
+    DependsOn: AutoRepairApiprodStage
     Properties:
       # AutoRepairApi.StageName is a literal 'prod' above (not environment-
       # suffixed), so the stage segment here matches that literally.
@@ -939,6 +945,13 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /services
             Method: GET
+            # Unauthenticated GET so customer-app can let people browse the
+            # service catalog before creating an account (App Store 5.1.1(v)
+            # requires this for anything not genuinely account-based). The
+            # handler falls back to a ?tenantId= query param when there's no
+            # JWT; POST/PUT/DELETE below are unaffected, still admin-only.
+            Auth:
+              Authorizer: NONE
         ServicesPost:
           Type: Api
           Properties:
@@ -1091,6 +1104,9 @@ Resources:
       MemorySize: 256
       Timeout: 10
       Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPool
       Events:
         CustomersGet:
           Type: Api
@@ -1098,6 +1114,12 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /customers
             Method: GET
+        CustomersDeleteMe:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /customers/me
+            Method: DELETE
 
   LocationsFunction:
     Type: AWS::Serverless::Function

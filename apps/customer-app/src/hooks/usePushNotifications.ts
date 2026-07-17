@@ -11,8 +11,9 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export function usePushNotifications() {
+export function usePushNotifications(enabled: boolean) {
   useEffect(() => {
+    if (!enabled) return;
     void (async () => {
       try {
         const { status: existing } = await Notifications.getPermissionsAsync();
@@ -35,5 +36,5 @@ export function usePushNotifications() {
         console.warn('[Push] Failed to register push token:', err);
       }
     })();
-  }, []);
+  }, [enabled]);
 }

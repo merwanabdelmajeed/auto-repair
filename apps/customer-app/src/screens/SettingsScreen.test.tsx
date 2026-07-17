@@ -1,11 +1,13 @@
 import React from 'react';
 import { Alert, Linking } from 'react-native';
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import SettingsScreen from './SettingsScreen';
 import { useAuth } from '../auth/AuthContext';
+import { deleteAccount } from '../api/account';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../constants';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('../api/account', () => ({ deleteAccount: jest.fn() }));
 
 const mockLogout = jest.fn();
 
@@ -87,5 +89,54 @@ describe('SettingsScreen', () => {
     fireEvent.press(screen.getByText('App Version'));
 
     expect(openURLSpy).not.toHaveBeenCalled();
+  });
+
+  it('deletes the account and signs out when confirmed', async () => {
+    (deleteAccount as jest.Mock).mockResolvedValue({ deleted: true });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
+      const confirm = buttons?.find(b => b.text === 'Delete Account');
+      confirm?.onPress?.();
+    });
+
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByTestId('settings-delete-account'));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Delete Account',
+      expect.stringContaining('permanently delete'),
+      expect.any(Array),
+    );
+    await waitFor(() => expect(deleteAccount).toHaveBeenCalled());
+    await waitFor(() => expect(mockLogout).toHaveBeenCalled());
+  });
+
+  it('does not delete the account when the confirmation is cancelled', () => {
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
+      const cancel = buttons?.find(b => b.text === 'Cancel');
+      cancel?.onPress?.();
+    });
+
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByTestId('settings-delete-account'));
+
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('shows an error and stays signed in when deletion fails', async () => {
+    (deleteAccount as jest.Mock).mockRejectedValue(new Error('boom'));
+    jest.spyOn(Alert, 'alert').mockImplementation((title, _msg, buttons) => {
+      if (title === 'Delete Account') {
+        buttons?.find(b => b.text === 'Delete Account')?.onPress?.();
+      }
+    });
+
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByTestId('settings-delete-account'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+      'Failed to Delete Account',
+      expect.any(String),
+    ));
+    expect(mockLogout).not.toHaveBeenCalled();
   });
 });

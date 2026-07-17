@@ -10,13 +10,20 @@ const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCAT
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = extractTenantClaims(event);
-    const { tenantId } = claims;
     const method = event.httpMethod;
     const serviceId = event.pathParameters?.serviceId;
 
-    // GET /services — all authenticated users
+    // GET /services — public (no Cognito authorizer on this route; see
+    // template.yaml). Lets customer-app show the service catalog before
+    // someone creates an account. Uses the JWT's tenantId when a real
+    // session is present, otherwise falls back to ?tenantId= so a guest
+    // browsing the app still sees the right tenant's services.
     if (method === 'GET') {
+      const tenantId = event.requestContext?.authorizer?.claims
+        ? extractTenantClaims(event).tenantId
+        : event.queryStringParameters?.tenantId;
+      if (!tenantId) return badRequest('tenantId is required');
+
       const items = await queryAll({
         TableName: TABLE.SERVICES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
@@ -34,6 +41,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }));
       return ok(services);
     }
+
+    // Everything below requires a real authenticated admin.
+    const claims = extractTenantClaims(event);
+    const { tenantId } = claims;
 
     // POST /services — admin only
     if (method === 'POST') {

@@ -21,7 +21,7 @@ describe('usePushNotifications', () => {
     (Notifications.getExpoPushTokenAsync as jest.Mock).mockResolvedValue({ data: 'expo-tok-1' });
     (registerPushToken as jest.Mock).mockResolvedValue({ success: true });
 
-    renderHook(() => usePushNotifications());
+    renderHook(() => usePushNotifications(true));
 
     await waitFor(() => expect(registerPushToken).toHaveBeenCalledWith('expo-tok-1'));
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
@@ -33,7 +33,7 @@ describe('usePushNotifications', () => {
     (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
     (Notifications.getExpoPushTokenAsync as jest.Mock).mockResolvedValue({ data: 'expo-tok-2' });
 
-    renderHook(() => usePushNotifications());
+    renderHook(() => usePushNotifications(true));
 
     await waitFor(() => expect(registerPushToken).toHaveBeenCalledWith('expo-tok-2'));
   });
@@ -42,7 +42,7 @@ describe('usePushNotifications', () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'undetermined' });
     (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
 
-    renderHook(() => usePushNotifications());
+    renderHook(() => usePushNotifications(true));
 
     await waitFor(() => expect(Notifications.requestPermissionsAsync).toHaveBeenCalled());
     expect(registerPushToken).not.toHaveBeenCalled();
@@ -53,16 +53,24 @@ describe('usePushNotifications', () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
     (Notifications.getExpoPushTokenAsync as jest.Mock).mockResolvedValue({ data: 'expo-tok-3' });
 
-    renderHook(() => usePushNotifications());
+    renderHook(() => usePushNotifications(true));
 
     await waitFor(() => expect(Notifications.getExpoPushTokenAsync).toHaveBeenCalledWith(undefined));
+  });
+
+  it('does nothing when disabled (guest browsing, not signed in)', async () => {
+    renderHook(() => usePushNotifications(false));
+
+    await Promise.resolve();
+    expect(Notifications.getPermissionsAsync).not.toHaveBeenCalled();
+    expect(registerPushToken).not.toHaveBeenCalled();
   });
 
   it('swallows errors (e.g. no FCM on an emulator) without throwing', async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockRejectedValue(new Error('no FCM'));
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-    renderHook(() => usePushNotifications());
+    renderHook(() => usePushNotifications(true));
 
     await waitFor(() => expect(warnSpy).toHaveBeenCalled());
     warnSpy.mockRestore();

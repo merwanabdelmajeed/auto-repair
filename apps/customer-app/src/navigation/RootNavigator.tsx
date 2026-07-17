@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SHOP_NAME, SHOP_CITY } from '../constants';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { CustomerDrawerParamList } from './types';
 import { colors } from '../theme';
@@ -26,9 +26,10 @@ const Drawer = createDrawerNavigator<CustomerDrawerParamList>();
 
 function NotificationBell({ navigation }: { navigation: any }) {
   const { unreadCount } = useNotifications();
+  const { requireAuth } = useAuth();
   return (
     <TouchableOpacity
-      onPress={() => navigation.navigate('Notifications')}
+      onPress={() => requireAuth(() => navigation.navigate('Notifications'))}
       style={{ marginRight: 16, position: 'relative' }}
       hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
       activeOpacity={0.7}
@@ -52,7 +53,8 @@ function NotificationBell({ navigation }: { navigation: any }) {
 }
 
 function AppNavigator() {
-  usePushNotifications();
+  const { isAuthenticated } = useAuth();
+  usePushNotifications(isAuthenticated);
 
   return (
     <Drawer.Navigator
@@ -101,10 +103,16 @@ function AppNavigator() {
 }
 
 export default function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading, authPromptVisible, hideAuthPrompt } = useAuth();
   const [authScreen, setAuthScreen] = useState<'Login' | 'Register' | 'VerifyEmail'>('Login');
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingPassword, setPendingPassword] = useState('');
+
+  // Always start a freshly-opened prompt on Login, not wherever a previously
+  // cancelled attempt left off.
+  useEffect(() => {
+    if (authPromptVisible) setAuthScreen('Login');
+  }, [authPromptVisible]);
 
   if (isLoading) {
     return (
@@ -114,35 +122,50 @@ export default function RootNavigator() {
     );
   }
 
-  if (!isAuthenticated) {
-    if (authScreen === 'VerifyEmail') {
-      return (
-        <VerifyEmailScreen
-          email={pendingEmail}
-          password={pendingPassword}
-          onVerified={() => setAuthScreen('Login')}
-          onNavigateToLogin={() => setAuthScreen('Login')}
-        />
-      );
-    }
-    if (authScreen === 'Register') {
-      return (
-        <RegisterScreen
-          onNavigateToLogin={() => setAuthScreen('Login')}
-          onRegistered={(email, password) => {
-            setPendingEmail(email);
-            setPendingPassword(password);
-            setAuthScreen('VerifyEmail');
-          }}
-        />
-      );
-    }
-    return <LoginScreen onNavigateToRegister={() => setAuthScreen('Register')} />;
-  }
-
   return (
     <NotificationsProvider>
       <AppNavigator />
+      {authPromptVisible && (
+        <View style={styles.overlay}>
+          <View style={styles.overlayHeader}>
+            <TouchableOpacity testID="auth-overlay-close" onPress={hideAuthPrompt} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={26} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+          {authScreen === 'VerifyEmail' ? (
+            <VerifyEmailScreen
+              email={pendingEmail}
+              password={pendingPassword}
+              onVerified={() => setAuthScreen('Login')}
+              onNavigateToLogin={() => setAuthScreen('Login')}
+            />
+          ) : authScreen === 'Register' ? (
+            <RegisterScreen
+              onNavigateToLogin={() => setAuthScreen('Login')}
+              onRegistered={(email, password) => {
+                setPendingEmail(email);
+                setPendingPassword(password);
+                setAuthScreen('VerifyEmail');
+              }}
+            />
+          ) : (
+            <LoginScreen onNavigateToRegister={() => setAuthScreen('Register')} />
+          )}
+        </View>
+      )}
     </NotificationsProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.background,
+  },
+  overlayHeader: {
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    alignItems: 'flex-end',
+  },
+});
