@@ -10,22 +10,28 @@ jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../api/account', () => ({ deleteAccount: jest.fn() }));
 
 const mockLogout = jest.fn();
+const mockNavigate = jest.fn();
+
+function renderScreen() {
+  return render(<SettingsScreen navigation={{ navigate: mockNavigate }} />);
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLogout.mockResolvedValue(undefined);
   (useAuth as jest.Mock).mockReturnValue({ user: { email: 'jane@shop.com' }, logout: mockLogout });
 });
 
 describe('SettingsScreen', () => {
   it('shows the account email and initial', () => {
-    render(<SettingsScreen />);
+    renderScreen();
     expect(screen.getByText('jane@shop.com')).toBeTruthy();
     expect(screen.getByText('J')).toBeTruthy();
   });
 
   it('shows a fallback when there is no user', () => {
     (useAuth as jest.Mock).mockReturnValue({ user: null, logout: mockLogout });
-    render(<SettingsScreen />);
+    renderScreen();
     expect(screen.getByText('—')).toBeTruthy();
     expect(screen.getByText('?')).toBeTruthy();
   });
@@ -36,7 +42,7 @@ describe('SettingsScreen', () => {
       signOut?.onPress?.();
     });
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('Sign Out'));
 
     expect(alertSpy).toHaveBeenCalledWith('Sign Out', 'Are you sure you want to sign out?', expect.any(Array));
@@ -49,7 +55,7 @@ describe('SettingsScreen', () => {
       cancel?.onPress?.();
     });
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('Sign Out'));
 
     expect(mockLogout).not.toHaveBeenCalled();
@@ -58,7 +64,7 @@ describe('SettingsScreen', () => {
   it('opens the privacy policy URL when tapped', () => {
     const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('Privacy Policy'));
 
     expect(openURLSpy).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
@@ -67,7 +73,7 @@ describe('SettingsScreen', () => {
   it('opens the terms of service URL when tapped', () => {
     const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('Terms of Service'));
 
     expect(openURLSpy).toHaveBeenCalledWith(TERMS_OF_SERVICE_URL);
@@ -76,7 +82,7 @@ describe('SettingsScreen', () => {
   it('opens the support URL when tapped', () => {
     const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('Help & Support'));
 
     expect(openURLSpy).toHaveBeenCalledWith(SUPPORT_URL);
@@ -85,20 +91,21 @@ describe('SettingsScreen', () => {
   it('does not respond to taps on the non-actionable App Version row', () => {
     const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByText('App Version'));
 
     expect(openURLSpy).not.toHaveBeenCalled();
   });
 
-  it('deletes the account and signs out when confirmed', async () => {
-    (deleteAccount as jest.Mock).mockResolvedValue({ deleted: true });
+  it('signs out and returns to Home immediately, without waiting for deletion to finish', async () => {
+    let resolveDelete: (v: { deleted: boolean }) => void = () => {};
+    (deleteAccount as jest.Mock).mockReturnValue(new Promise(resolve => { resolveDelete = resolve; }));
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
       const confirm = buttons?.find(b => b.text === 'Delete Account');
       confirm?.onPress?.();
     });
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByTestId('settings-delete-account'));
 
     expect(alertSpy).toHaveBeenCalledWith(
@@ -106,8 +113,12 @@ describe('SettingsScreen', () => {
       expect.stringContaining('permanently delete'),
       expect.any(Array),
     );
-    await waitFor(() => expect(deleteAccount).toHaveBeenCalled());
+    expect(deleteAccount).toHaveBeenCalled();
+    // logout/navigation happen right away — deleteAccount's promise is still pending
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Home'));
+
+    resolveDelete({ deleted: true });
   });
 
   it('does not delete the account when the confirmation is cancelled', () => {
@@ -116,13 +127,13 @@ describe('SettingsScreen', () => {
       cancel?.onPress?.();
     });
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByTestId('settings-delete-account'));
 
     expect(deleteAccount).not.toHaveBeenCalled();
   });
 
-  it('shows an error and stays signed in when deletion fails', async () => {
+  it('still signs the customer out even when background deletion fails, and surfaces an alert', async () => {
     (deleteAccount as jest.Mock).mockRejectedValue(new Error('boom'));
     jest.spyOn(Alert, 'alert').mockImplementation((title, _msg, buttons) => {
       if (title === 'Delete Account') {
@@ -130,13 +141,14 @@ describe('SettingsScreen', () => {
       }
     });
 
-    render(<SettingsScreen />);
+    renderScreen();
     fireEvent.press(screen.getByTestId('settings-delete-account'));
 
+    await waitFor(() => expect(mockLogout).toHaveBeenCalled());
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Home'));
     await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
-      'Failed to Delete Account',
+      'Account Deletion Failed',
       expect.any(String),
     ));
-    expect(mockLogout).not.toHaveBeenCalled();
   });
 });

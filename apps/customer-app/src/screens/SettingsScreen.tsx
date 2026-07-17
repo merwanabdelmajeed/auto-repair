@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
@@ -9,9 +9,8 @@ import { useAuth } from '../auth/AuthContext';
 import { deleteAccount } from '../api/account';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../constants';
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuth();
-  const [deleting, setDeleting] = useState(false);
 
   function confirmLogout() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -31,15 +30,19 @@ export default function SettingsScreen() {
     );
   }
 
+  // Deletion (vehicles/appointments/notifications/Cognito identity) can take
+  // a few seconds server-side. Sign out and return to the guest Home screen
+  // right away and let it finish in the background instead of making the
+  // customer wait on a spinner for it.
   async function handleDeleteAccount() {
-    setDeleting(true);
-    try {
-      await deleteAccount();
-      await logout();
-    } catch {
-      setDeleting(false);
-      Alert.alert('Failed to Delete Account', 'Please try again, or contact support if the problem continues.');
-    }
+    deleteAccount().catch(() => {
+      Alert.alert(
+        'Account Deletion Failed',
+        "We couldn't finish deleting your account. Please try again from Settings, or contact support if the problem continues.",
+      );
+    });
+    await logout();
+    navigation.navigate('Home');
   }
 
   const initials = user?.email ? user.email[0].toUpperCase() : '?';
@@ -98,19 +101,12 @@ export default function SettingsScreen() {
         {/* Delete Account */}
         <TouchableOpacity
           testID="settings-delete-account"
-          style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+          style={styles.deleteBtn}
           onPress={confirmDeleteAccount}
-          disabled={deleting}
           activeOpacity={0.85}
         >
-          {deleting ? (
-            <ActivityIndicator color={colors.error} />
-          ) : (
-            <>
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
-              <Text style={styles.deleteBtnText}>Delete Account</Text>
-            </>
-          )}
+          <Ionicons name="trash-outline" size={18} color={colors.error} />
+          <Text style={styles.deleteBtnText}>Delete Account</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -208,6 +204,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingVertical: 12,
   },
-  deleteBtnDisabled: { opacity: 0.6 },
   deleteBtnText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },
 });
