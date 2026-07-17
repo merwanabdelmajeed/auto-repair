@@ -13,11 +13,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const { token } = body;
     if (!token || typeof token !== 'string') return badRequest('token is required');
 
+    // ADD on a String Set is additive and idempotent — registering from a
+    // second device (or re-registering the same one) doesn't overwrite any
+    // other device's token, unlike a plain SET would.
     await db.send(new UpdateCommand({
       TableName: TABLE.USERS,
       Key: { PK: `TENANT#${tenantId}`, SK: `USER#${userId}` },
-      UpdateExpression: 'SET expoPushToken = :token, updatedAt = :now',
-      ExpressionAttributeValues: { ':token': token, ':now': new Date().toISOString() },
+      UpdateExpression: 'ADD pushTokens :tokenSet SET updatedAt = :now',
+      ExpressionAttributeValues: { ':tokenSet': new Set([token]), ':now': new Date().toISOString() },
     }));
 
     return ok({ success: true });

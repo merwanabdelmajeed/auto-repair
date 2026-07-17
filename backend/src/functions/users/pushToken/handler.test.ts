@@ -43,7 +43,7 @@ describe('PUT /users/push-token', () => {
     expect(result.statusCode).toBe(400);
   });
 
-  it('saves the token on the caller\'s own user record', async () => {
+  it('adds the token to the caller\'s own user record without overwriting other devices\' tokens', async () => {
     ddbMock.on(UpdateCommand).resolves({});
 
     const result = await handler(fakeEvent({}));
@@ -52,7 +52,8 @@ describe('PUT /users/push-token', () => {
     const call = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
     expect(call?.TableName).toBe(TABLE.USERS);
     expect(call?.Key).toEqual({ PK: 'TENANT#t1', SK: 'USER#user-1' });
-    expect(call?.ExpressionAttributeValues).toMatchObject({ ':token': 'expo-token-123' });
+    expect(call?.UpdateExpression).toContain('ADD pushTokens');
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':tokenSet': new Set(['expo-token-123']) });
   });
 
   it('returns 401 when claims are missing', async () => {

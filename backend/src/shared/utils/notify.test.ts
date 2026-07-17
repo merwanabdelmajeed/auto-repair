@@ -1,8 +1,8 @@
 import { mockClient } from 'aws-sdk-client-mock';
-import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db } from './dynamodb.js';
 import {
-  createNotification, sendPush, getPushToken, notifyUser, getTenantAdminUserIds, notifyAdmins, getCustomersWithTokens,
+  createNotification, sendPush, getPushTokens, removePushToken, notifyUser, getTenantAdminUserIds, notifyAdmins, getCustomersWithTokens,
 } from './notify.js';
 
 const ddbMock = mockClient(db);
@@ -39,19 +39,28 @@ describe('createNotification', () => {
 });
 
 describe('sendPush', () => {
-  it('logs an error and returns when Expo responds with a non-OK HTTP status', async () => {
+  it('returns ok (retryable) when Expo responds with a non-OK HTTP status', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500, text: async () => 'server error' });
 
-    await expect(sendPush('token', 'Title', 'Body')).resolves.toBeUndefined();
+    await expect(sendPush('token', 'Title', 'Body')).resolves.toBe('ok');
   });
 
-  it('logs a ticket error when Expo accepts the request but the ticket reports failure', async () => {
+  it('returns invalid when the ticket reports DeviceNotRegistered', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: async () => ({ data: { status: 'error', message: 'DeviceNotRegistered' } }),
+      json: async () => ({ data: { status: 'error', message: 'not registered', details: { error: 'DeviceNotRegistered' } } }),
     });
 
-    await expect(sendPush('token', 'Title', 'Body')).resolves.toBeUndefined();
+    await expect(sendPush('token', 'Title', 'Body')).resolves.toBe('invalid');
+  });
+
+  it('returns ok (retryable) for other ticket errors', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { status: 'error', message: 'rate limited', details: { error: 'MessageRateExceeded' } } }),
+    });
+
+    await expect(sendPush('token', 'Title', 'Body')).resolves.toBe('ok');
   });
 
   it('succeeds when the ticket reports ok', async () => {
@@ -60,44 +69,56 @@ describe('sendPush', () => {
       json: async () => ({ data: { status: 'ok' } }),
     });
 
-    await expect(sendPush('token', 'Title', 'Body', { type: 'promotion_new' })).resolves.toBeUndefined();
+    await expect(sendPush('token', 'Title', 'Body', { type: 'promotion_new' })).resolves.toBe('ok');
   });
 });
 
-describe('getPushToken', () => {
-  it('returns null when the user has no token on file', async () => {
+describe('getPushTokens', () => {
+  it('returns an empty array when the user has no tokens on file', async () => {
     ddbMock.on(GetCommand).resolves({ Item: {} });
-    await expect(getPushToken('t1', 'u1')).resolves.toBeNull();
+    await expect(getPushTokens('t1', 'u1')).resolves.toEqual([]);
   });
 
-  it('returns the stored token', async () => {
-    ddbMock.on(GetCommand).resolves({ Item: { expoPushToken: 'expo-1' } });
-    await expect(getPushToken('t1', 'u1')).resolves.toBe('expo-1');
+  it('returns every stored token (one per device)', async () => {
+    ddbMock.on(GetCommand).resolves({ Item: { pushTokens: new Set(['expo-android', 'expo-ios']) } });
+    await expect(getPushTokens('t1', 'u1')).resolves.toEqual(expect.arrayContaining(['expo-android', 'expo-ios']));
+  });
+});
+
+describe('removePushToken', () => {
+  it('deletes only the given token from the set', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+
+    await removePushToken('t1', 'u1', 'stale-token');
+
+    const call = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(call?.UpdateExpression).toContain('DELETE pushTokens');
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':tokenSet': new Set(['stale-token']) });
   });
 });
 
 describe('notifyUser', () => {
-  it('creates the notification and sends a push when a token is passed explicitly', async () => {
+  it('creates the notification and sends a push to every device when tokens are passed explicitly', async () => {
     ddbMock.on(PutCommand).resolves({});
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ data: { status: 'ok' } }) });
 
-    await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushToken: 'expo-1' });
+    await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushTokens: ['expo-android', 'expo-ios'] });
 
     expect(ddbMock.commandCalls(PutCommand)).toHaveLength(1);
-    expect(global.fetch).toHaveBeenCalledWith('https://exp.host/--/api/v2/push/send', expect.anything());
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('skips the push entirely when expoPushToken is explicitly null', async () => {
+  it('skips the push entirely when expoPushTokens is explicitly null', async () => {
     ddbMock.on(PutCommand).resolves({});
 
-    await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushToken: null });
+    await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushTokens: null });
 
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('looks up the token from DynamoDB when none is passed', async () => {
+  it('looks up tokens from DynamoDB when none are passed', async () => {
     ddbMock.on(PutCommand).resolves({});
-    ddbMock.on(GetCommand).resolves({ Item: { expoPushToken: 'looked-up-token' } });
+    ddbMock.on(GetCommand).resolves({ Item: { pushTokens: new Set(['looked-up-token']) } });
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ data: { status: 'ok' } }) });
 
     await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B' });
@@ -105,11 +126,25 @@ describe('notifyUser', () => {
     expect(global.fetch).toHaveBeenCalled();
   });
 
+  it('removes a token that Expo reports as no longer registered', async () => {
+    ddbMock.on(PutCommand).resolves({});
+    ddbMock.on(UpdateCommand).resolves({});
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { status: 'error', details: { error: 'DeviceNotRegistered' } } }),
+    });
+
+    await notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushTokens: ['dead-token'] });
+
+    const call = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(call?.ExpressionAttributeValues).toMatchObject({ ':tokenSet': new Set(['dead-token']) });
+  });
+
   it('swallows push failures without throwing', async () => {
     ddbMock.on(PutCommand).resolves({});
     (global.fetch as jest.Mock).mockRejectedValue(new Error('network down'));
 
-    await expect(notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushToken: 'expo-1' }))
+    await expect(notifyUser({ tenantId: 't1', userId: 'u1', type: 'appointment_confirmed', title: 'T', body: 'B', expoPushTokens: ['expo-1'] }))
       .resolves.toBeUndefined();
   });
 });
@@ -145,14 +180,14 @@ describe('notifyAdmins', () => {
 });
 
 describe('getCustomersWithTokens', () => {
-  it('returns only CUSTOMER-role users with their token or null', async () => {
+  it('returns only CUSTOMER-role users with their tokens (empty array when none)', async () => {
     ddbMock.on(QueryCommand).resolves({
-      Items: [{ userId: 'c1', expoPushToken: 'tok-1' }, { userId: 'c2' }],
+      Items: [{ userId: 'c1', pushTokens: new Set(['tok-1', 'tok-2']) }, { userId: 'c2' }],
     });
 
     await expect(getCustomersWithTokens('t1')).resolves.toEqual([
-      { userId: 'c1', expoPushToken: 'tok-1' },
-      { userId: 'c2', expoPushToken: null },
+      { userId: 'c1', pushTokens: expect.arrayContaining(['tok-1', 'tok-2']) },
+      { userId: 'c2', pushTokens: [] },
     ]);
   });
 });

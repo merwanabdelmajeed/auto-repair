@@ -246,7 +246,7 @@ async function fanOutPromoNotification(tenantId: string, promoId: string, code: 
       title: `New Promo: ${code}`,
       body: description || `Use code ${code} on your next visit`,
       promoId,
-      expoPushToken: c.expoPushToken,
+      expoPushTokens: c.pushTokens,
     }).catch(err => logger.error('Promo notif failed', { error: err, userId: c.userId, promoId }))
   ));
 }

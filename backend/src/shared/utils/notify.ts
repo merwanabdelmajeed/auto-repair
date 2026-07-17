@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE, queryAll } from './dynamodb.js';
 import { logger } from './logger.js';
 
@@ -20,8 +20,8 @@ interface NotifyOpts {
   body: string;
   appointmentId?: string;
   promoId?: string;
-  // Pass token to skip the extra DB lookup (use null to skip push entirely)
-  expoPushToken?: string | null;
+  // Pass tokens to skip the extra DB lookup (use null/[] to skip push entirely)
+  expoPushTokens?: string[] | null;
 }
 
 export async function createNotification(opts: NotifyOpts): Promise<void> {
@@ -48,7 +48,10 @@ export async function createNotification(opts: NotifyOpts): Promise<void> {
   }));
 }
 
-export async function sendPush(token: string, title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+// Returns 'invalid' when Expo reports the token is permanently dead (app
+// uninstalled, etc.) so the caller can stop storing it — everything else
+// (including transient errors) is 'ok' to retry naturally on the next event.
+export async function sendPush(token: string, title: string, body: string, data?: Record<string, unknown>): Promise<'ok' | 'invalid'> {
   const res = await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -57,44 +60,62 @@ export async function sendPush(token: string, title: string, body: string, data?
 
   if (!res.ok) {
     logger.error('Expo push send failed (HTTP error)', { status: res.status, body: await res.text() });
-    return;
+    return 'ok';
   }
 
   // A 200 here only means Expo *accepted the request* — it does not mean the
   // notification will actually be delivered. Per-notification success/failure
   // comes back as a "ticket" in the response body (e.g. DeviceNotRegistered,
   // InvalidCredentials, MismatchSenderId), which we must inspect separately.
-  const json = (await res.json().catch(() => null)) as { data?: { status: string; message?: string; details?: unknown } } | null;
+  const json = (await res.json().catch(() => null)) as { data?: { status: string; message?: string; details?: { error?: string } } } | null;
   const ticket = json?.data;
   if (ticket?.status === 'error') {
     logger.error('Expo push send failed (ticket error)', { message: ticket.message, details: ticket.details, token });
-  } else {
-    logger.info('Expo push send accepted', { ticketStatus: ticket?.status, token });
+    return ticket.details?.error === 'DeviceNotRegistered' ? 'invalid' : 'ok';
   }
+  logger.info('Expo push send accepted', { ticketStatus: ticket?.status, token });
+  return 'ok';
 }
 
-export async function getPushToken(tenantId: string, userId: string): Promise<string | null> {
+// A customer/admin can be signed in on more than one device (e.g. Android +
+// iOS at once) — each registers its own token via PUT /users/push-token,
+// so this is a set, not a single overwritten value.
+export async function getPushTokens(tenantId: string, userId: string): Promise<string[]> {
   const result = await db.send(new GetCommand({
     TableName: TABLE.USERS,
     Key: { PK: `TENANT#${tenantId}`, SK: `USER#${userId}` },
   }));
-  return (result.Item?.expoPushToken as string | undefined) ?? null;
+  const tokens = result.Item?.pushTokens as Set<string> | undefined;
+  return tokens ? Array.from(tokens) : [];
+}
+
+export async function removePushToken(tenantId: string, userId: string, token: string): Promise<void> {
+  await db.send(new UpdateCommand({
+    TableName: TABLE.USERS,
+    Key: { PK: `TENANT#${tenantId}`, SK: `USER#${userId}` },
+    UpdateExpression: 'DELETE pushTokens :tokenSet',
+    ExpressionAttributeValues: { ':tokenSet': new Set([token]) },
+  }));
 }
 
 export async function notifyUser(opts: NotifyOpts): Promise<void> {
   await createNotification(opts);
-  const token = opts.expoPushToken !== undefined
-    ? opts.expoPushToken
-    : await getPushToken(opts.tenantId, opts.userId);
-  if (token) {
-    // Awaited so the Lambda's response doesn't return (and freeze the environment)
-    // before this in-flight fetch to Expo's push service completes.
-    await sendPush(token, opts.title, opts.body, {
+  const tokens = opts.expoPushTokens !== undefined
+    ? (opts.expoPushTokens ?? [])
+    : await getPushTokens(opts.tenantId, opts.userId);
+
+  // Awaited so the Lambda's response doesn't return (and freeze the
+  // environment) before these in-flight fetches to Expo's push service
+  // complete — one per registered device, not just the most recent one.
+  await Promise.all(tokens.map(token =>
+    sendPush(token, opts.title, opts.body, {
       type: opts.type,
       ...(opts.appointmentId ? { appointmentId: opts.appointmentId } : {}),
       ...(opts.promoId ? { promoId: opts.promoId } : {}),
-    }).catch(err => logger.error('Push failed', { error: err, userId: opts.userId, type: opts.type }));
-  }
+    })
+      .then(result => result === 'invalid' ? removePushToken(opts.tenantId, opts.userId, token) : undefined)
+      .catch(err => logger.error('Push failed', { error: err, userId: opts.userId, type: opts.type, token }))
+  ));
 }
 
 const ADMIN_ROLE_NAMES = new Set(['SUPER_ADMIN', 'TENANT_OWNER', 'LOCATION_MANAGER']);
@@ -125,7 +146,7 @@ export async function notifyAdmins(tenantId: string, opts: Omit<NotifyOpts, 'use
   ));
 }
 
-export async function getCustomersWithTokens(tenantId: string): Promise<Array<{ userId: string; expoPushToken: string | null }>> {
+export async function getCustomersWithTokens(tenantId: string): Promise<Array<{ userId: string; pushTokens: string[] }>> {
   const items = await queryAll({
     TableName: TABLE.USERS,
     KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
@@ -139,6 +160,6 @@ export async function getCustomersWithTokens(tenantId: string): Promise<Array<{ 
   });
   return items.map(u => ({
     userId: u.userId as string,
-    expoPushToken: (u.expoPushToken as string | undefined) ?? null,
+    pushTokens: u.pushTokens ? Array.from(u.pushTokens as Set<string>) : [],
   }));
 }

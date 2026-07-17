@@ -154,7 +154,7 @@ describe('POST /promotions', () => {
 
   it('creates the promo, uppercases the code, and fans out a notification to customers', async () => {
     ddbMock.on(PutCommand).resolves({});
-    jest.spyOn(notify, 'getCustomersWithTokens').mockResolvedValue([{ userId: 'c1', expoPushToken: 'tok' }]);
+    jest.spyOn(notify, 'getCustomersWithTokens').mockResolvedValue([{ userId: 'c1', pushTokens: ['tok'] }]);
     const notifyUserSpy = jest.spyOn(notify, 'notifyUser').mockResolvedValue();
 
     const result = await handler(postEvent({ code: ' save20 ', type: 'percent', value: 20 }));
