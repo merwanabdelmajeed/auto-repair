@@ -87,13 +87,17 @@ export default function HomeScreen({ navigation }: any) {
       .finally(() => setLoadingPromos(false));
   }, [isAuthenticated]);
 
+  // Guest-only: browsable services satisfy the no-forced-registration
+  // requirement for guests, but for signed-in customers this would just
+  // duplicate the service picker already in the booking flow.
   const loadServices = useCallback(() => {
+    if (isAuthenticated) { setLoadingServices(false); return Promise.resolve(); }
     setLoadingServices(true);
     return listServices()
       .then(data => setServices(data.filter(s => s.isActive).slice(0, 5)))
       .catch(() => {})
       .finally(() => setLoadingServices(false));
-  }, []);
+  }, [isAuthenticated]);
 
   const loadCapacity = useCallback(() => {
     return getCapacity()
@@ -158,26 +162,31 @@ export default function HomeScreen({ navigation }: any) {
           ))}
         </View>
 
-        {/* Services — visible without an account */}
-        <Text style={styles.sectionTitle}>Our Services</Text>
-        {loadingServices ? (
-          <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
-        ) : services.length === 0 ? (
-          <View style={styles.emptyPromos}>
-            <Text style={styles.emptyPromosText}>No services listed right now.</Text>
-          </View>
-        ) : services.map((service) => (
-          <View key={service.serviceId} style={styles.serviceCard}>
-            <View style={styles.serviceIconBox}>
-              <Ionicons name="construct-outline" size={22} color={colors.primary} />
-            </View>
-            <View style={styles.serviceContent}>
-              <Text style={styles.serviceName}>{service.name}</Text>
-              {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
-            </View>
-            <Text style={styles.serviceDuration}>{service.durationMinutes} min</Text>
-          </View>
-        ))}
+        {/* Services — guest-only; signed-in customers pick a service inside
+            the booking flow instead, so this would just be a duplicate. */}
+        {!isAuthenticated && (
+          <>
+            <Text style={styles.sectionTitle}>Our Services</Text>
+            {loadingServices ? (
+              <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
+            ) : services.length === 0 ? (
+              <View style={styles.emptyPromos}>
+                <Text style={styles.emptyPromosText}>No services listed right now.</Text>
+              </View>
+            ) : services.map((service) => (
+              <View key={service.serviceId} style={styles.serviceCard}>
+                <View style={styles.serviceIconBox}>
+                  <Ionicons name="construct-outline" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.serviceContent}>
+                  <Text style={styles.serviceName}>{service.name}</Text>
+                  {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
+                </View>
+                <Text style={styles.serviceDuration}>{service.durationMinutes} min</Text>
+              </View>
+            ))}
+          </>
+        )}
 
         {/* Location */}
         {SHOP_ADDRESS ? (

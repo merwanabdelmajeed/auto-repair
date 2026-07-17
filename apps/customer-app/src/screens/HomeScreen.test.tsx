@@ -120,7 +120,7 @@ describe('HomeScreen — quick actions', () => {
   });
 });
 
-describe('HomeScreen — our services (visible without an account)', () => {
+describe('HomeScreen — our services (guest-only)', () => {
   it('shows the empty state when there are no services', async () => {
     mockGuest();
     (listServices as jest.Mock).mockResolvedValue([]);
@@ -142,11 +142,15 @@ describe('HomeScreen — our services (visible without an account)', () => {
     expect(screen.queryByText('Tire Rotation')).toBeNull();
   });
 
-  it('also shows services when authenticated', async () => {
+  it('hides the section entirely for signed-in customers, and never fetches it', async () => {
     mockAuthed();
     (listServices as jest.Mock).mockResolvedValue([service()]);
     renderScreen();
-    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+
+    await waitFor(() => expect(screen.getByText('My Vehicles')).toBeTruthy());
+    expect(screen.queryByText('Our Services')).toBeNull();
+    expect(screen.queryByText('Oil Change')).toBeNull();
+    expect(listServices).not.toHaveBeenCalled();
   });
 });
 
