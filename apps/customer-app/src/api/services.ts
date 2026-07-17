@@ -5,7 +5,6 @@ export interface Service {
   serviceId: string;
   name: string;
   description: string;
-  durationMinutes: number;
   isActive: boolean;
 }
 

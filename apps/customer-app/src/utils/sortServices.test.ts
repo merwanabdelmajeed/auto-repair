@@ -1,7 +1,7 @@
 import { sortServices } from './sortServices';
 
 function service(overrides: Partial<Parameters<typeof sortServices>[0][number]> = {}) {
-  return { serviceId: 's', name: 'Service', description: '', durationMinutes: 30, isActive: true, ...overrides };
+  return { serviceId: 's', name: 'Service', description: '', isActive: true, ...overrides };
 }
 
 describe('sortServices', () => {
@@ -25,19 +25,10 @@ describe('sortServices', () => {
     expect(result.map(s => s.serviceId)).toEqual(['brake', 'unknown']);
   });
 
-  it('breaks ties within the same priority tier by shorter duration first', () => {
+  it('breaks ties within the same priority tier alphabetically by name', () => {
     const result = sortServices([
-      service({ serviceId: 'long', name: 'Zzz Unrecognized', durationMinutes: 90 }),
-      service({ serviceId: 'short', name: 'Aaa Unrecognized', durationMinutes: 15 }),
-    ]);
-
-    expect(result.map(s => s.serviceId)).toEqual(['short', 'long']);
-  });
-
-  it('breaks remaining ties alphabetically by name', () => {
-    const result = sortServices([
-      service({ serviceId: 'b', name: 'Bbb Unrecognized', durationMinutes: 30 }),
-      service({ serviceId: 'a', name: 'Aaa Unrecognized', durationMinutes: 30 }),
+      service({ serviceId: 'b', name: 'Bbb Unrecognized' }),
+      service({ serviceId: 'a', name: 'Aaa Unrecognized' }),
     ]);
 
     expect(result.map(s => s.serviceId)).toEqual(['a', 'b']);

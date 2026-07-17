@@ -6,9 +6,9 @@ vi.mock('../api/analytics', () => ({ getAnalytics: vi.fn() }));
 
 function analyticsResponse(overrides: Partial<Awaited<ReturnType<typeof getAnalytics>>> = {}) {
   return {
-    summary: { totalBookings: 10, completedBookings: 6, cancelledBookings: 2, pendingBookings: 2, totalRevenue: 500, avgServiceMinutes: 30, uniqueCustomers: 5, newCustomers: 2, returningCustomers: 3 },
+    summary: { totalBookings: 10, completedBookings: 6, cancelledBookings: 2, pendingBookings: 2, totalRevenue: 500, uniqueCustomers: 5, newCustomers: 2, returningCustomers: 3 },
     byDay: [{ date: '2026-01-01', bookings: 3, completed: 2, revenue: 100 }],
-    byService: [{ serviceId: 's1', serviceName: 'Oil Change', bookings: 6, completed: 4, revenue: 300, durationMinutes: 30 }],
+    byService: [{ serviceId: 's1', serviceName: 'Oil Change', bookings: 6, completed: 4, revenue: 300 }],
     byStatus: { completed: 6, pending: 2, cancelled: 2 },
     ...overrides,
   };
@@ -45,7 +45,7 @@ describe('Statistics', () => {
 
   it('shows empty-state messages when there are no bookings in the period', async () => {
     vi.mocked(getAnalytics).mockResolvedValue(analyticsResponse({
-      summary: { totalBookings: 0, completedBookings: 0, cancelledBookings: 0, pendingBookings: 0, totalRevenue: 0, avgServiceMinutes: 0, uniqueCustomers: 0, newCustomers: 0, returningCustomers: 0 },
+      summary: { totalBookings: 0, completedBookings: 0, cancelledBookings: 0, pendingBookings: 0, totalRevenue: 0, uniqueCustomers: 0, newCustomers: 0, returningCustomers: 0 },
       byDay: [], byService: [], byStatus: {},
     }));
 

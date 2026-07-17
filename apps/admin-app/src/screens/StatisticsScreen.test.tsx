@@ -14,12 +14,12 @@ function analytics(overrides: Record<string, unknown> = {}) {
   return {
     summary: {
       totalBookings: 20, completedBookings: 15, cancelledBookings: 2, pendingBookings: 3,
-      totalRevenue: 2500, avgServiceMinutes: 45, uniqueCustomers: 12, newCustomers: 4, returningCustomers: 8,
+      totalRevenue: 2500, uniqueCustomers: 12, newCustomers: 4, returningCustomers: 8,
     },
     byDay: [],
     byService: [
-      { serviceId: 's1', serviceName: 'Oil Change', bookings: 10, completed: 8, revenue: 500, durationMinutes: 30 },
-      { serviceId: 's2', serviceName: 'Brake Check', bookings: 5, completed: 4, revenue: 0, durationMinutes: 45 },
+      { serviceId: 's1', serviceName: 'Oil Change', bookings: 10, completed: 8, revenue: 500 },
+      { serviceId: 's2', serviceName: 'Brake Check', bookings: 5, completed: 4, revenue: 0 },
     ],
     byStatus: { completed: 15, pending: 3, cancelled: 2 },
     ...overrides,
@@ -72,7 +72,7 @@ describe('StatisticsScreen', () => {
 
   it('shows singular "booking" for a count of exactly 1', async () => {
     (getAnalytics as jest.Mock).mockResolvedValue(analytics({
-      byService: [{ serviceId: 's1', serviceName: 'Oil Change', bookings: 1, completed: 1, revenue: 0, durationMinutes: 30 }],
+      byService: [{ serviceId: 's1', serviceName: 'Oil Change', bookings: 1, completed: 1, revenue: 0 }],
     }));
     render(<StatisticsScreen />);
     await waitFor(() => expect(screen.getByText('1 booking')).toBeTruthy());

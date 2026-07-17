@@ -22,11 +22,6 @@ function rank(name: string): number {
   return POPULAR_KEYWORDS.length;
 }
 
-// Within the same priority tier, faster services sort first.
 export function sortServices(svcs: Service[]): Service[] {
-  return [...svcs].sort((a, b) =>
-    rank(a.name) - rank(b.name)
-    || a.durationMinutes - b.durationMinutes
-    || a.name.localeCompare(b.name)
-  );
+  return [...svcs].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
 }

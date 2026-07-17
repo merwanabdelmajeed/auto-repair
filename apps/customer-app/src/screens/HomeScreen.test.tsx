@@ -38,7 +38,7 @@ function promo(overrides: Record<string, unknown> = {}) {
 }
 
 function service(overrides: Record<string, unknown> = {}) {
-  return { serviceId: 's1', name: 'Oil Change', description: 'Full synthetic', durationMinutes: 30, isActive: true, ...overrides };
+  return { serviceId: 's1', name: 'Oil Change', description: 'Full synthetic', isActive: true, ...overrides };
 }
 
 function capacitySettings(todayHours: Record<string, unknown> | null) {
@@ -131,13 +131,12 @@ describe('HomeScreen — our services (guest-only)', () => {
   it('lists active services for a guest, with no login required', async () => {
     mockGuest();
     (listServices as jest.Mock).mockResolvedValue([
-      service({ serviceId: 's1', name: 'Oil Change', durationMinutes: 30 }),
-      service({ serviceId: 's2', name: 'Tire Rotation', description: '', durationMinutes: 20, isActive: false }),
+      service({ serviceId: 's1', name: 'Oil Change' }),
+      service({ serviceId: 's2', name: 'Tire Rotation', description: '', isActive: false }),
     ]);
     renderScreen();
 
     await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
-    expect(screen.getByText('30 min')).toBeTruthy();
     // Inactive services are filtered out
     expect(screen.queryByText('Tire Rotation')).toBeNull();
   });

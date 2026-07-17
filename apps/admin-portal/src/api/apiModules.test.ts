@@ -186,12 +186,12 @@ describe('services api', () => {
     expect(api.get).toHaveBeenCalledWith('/services');
   });
   it('createService', () => {
-    const input = { name: 'Oil Change', description: '', durationMinutes: 30 };
+    const input = { name: 'Oil Change', description: '' };
     services.createService(input);
     expect(api.post).toHaveBeenCalledWith('/services', input);
   });
   it('updateService', () => {
-    const input = { name: 'Oil Change', description: '', durationMinutes: 30 };
+    const input = { name: 'Oil Change', description: '' };
     services.updateService('s1', input);
     expect(api.put).toHaveBeenCalledWith('/services/s1', input);
   });

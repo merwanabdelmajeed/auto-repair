@@ -35,7 +35,7 @@ function location(overrides: Record<string, unknown> = {}) {
   return { locationId: 'loc1', name: 'Main St', address: '1 Main St', ...overrides };
 }
 function service(overrides: Record<string, unknown> = {}) {
-  return { serviceId: 's1', name: 'Oil Change', description: 'Quick service', durationMinutes: 30, isActive: true, ...overrides };
+  return { serviceId: 's1', name: 'Oil Change', description: 'Quick service', isActive: true, ...overrides };
 }
 function vehicle(overrides: Record<string, unknown> = {}) {
   return { vehicleId: 'v1', make: 'Honda', model: 'Civic', trim: null, year: 2020, licensePlate: 'ABC123', color: 'blue', ...overrides };

@@ -42,7 +42,7 @@ describe('GET /services', () => {
   // bearer token's payload instead (see tenantIdFromUnverifiedBearerToken).
   it('is readable by an authenticated caller via their bearer token, no query param needed', async () => {
     ddbMock.on(QueryCommand).resolves({
-      Items: [{ serviceId: 's1', name: 'Oil Change', description: '', durationMinutes: 30, isActive: true, createdAt: 'c', updatedAt: 'u' }],
+      Items: [{ serviceId: 's1', name: 'Oil Change', description: '', isActive: true, createdAt: 'c', updatedAt: 'u' }],
     });
     const result = await handler({
       httpMethod: 'GET',
@@ -59,7 +59,7 @@ describe('GET /services', () => {
 
   it('is readable by a guest (no JWT) via a ?tenantId= query param', async () => {
     ddbMock.on(QueryCommand).resolves({
-      Items: [{ serviceId: 's1', name: 'Oil Change', description: '', durationMinutes: 30, isActive: true, createdAt: 'c', updatedAt: 'u' }],
+      Items: [{ serviceId: 's1', name: 'Oil Change', description: '', isActive: true, createdAt: 'c', updatedAt: 'u' }],
     });
     const result = await handler({
       httpMethod: 'GET',
@@ -120,18 +120,18 @@ describe('POST /services', () => {
   }
 
   it('rejects non-admin callers', async () => {
-    const result = await handler(postEvent({ name: 'X', durationMinutes: 30 }, { 'custom:role': UserRole.CUSTOMER }));
+    const result = await handler(postEvent({ name: 'X' }, { 'custom:role': UserRole.CUSTOMER }));
     expect(result.statusCode).toBe(403);
   });
 
-  it('rejects missing name/durationMinutes', async () => {
-    const result = await handler(postEvent({ name: 'X' }));
+  it('rejects missing name', async () => {
+    const result = await handler(postEvent({}));
     expect(result.statusCode).toBe(400);
   });
 
   it('creates a service, price omitted when not provided', async () => {
     ddbMock.on(PutCommand).resolves({});
-    const result = await handler(postEvent({ name: 'Oil Change', durationMinutes: 30 }));
+    const result = await handler(postEvent({ name: 'Oil Change' }));
     expect(result.statusCode).toBe(201);
     const item = ddbMock.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
     expect(item.price).toBeUndefined();
@@ -139,7 +139,7 @@ describe('POST /services', () => {
 
   it('creates a service with a price when provided', async () => {
     ddbMock.on(PutCommand).resolves({});
-    await handler(postEvent({ name: 'Oil Change', durationMinutes: 30, price: 49.99 }));
+    await handler(postEvent({ name: 'Oil Change', price: 49.99 }));
     const item = ddbMock.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
     expect(item.price).toBe(49.99);
   });
@@ -150,20 +150,20 @@ describe('PUT /services/{serviceId}', () => {
     return fakeEvent({ httpMethod: 'PUT', pathParameters: { serviceId: 's1' }, body: JSON.stringify(body) });
   }
 
-  it('rejects missing name/durationMinutes', async () => {
+  it('rejects missing name', async () => {
     const result = await handler(putEvent({}));
     expect(result.statusCode).toBe(400);
   });
 
   it('returns 404 when the service does not exist', async () => {
     ddbMock.on(UpdateCommand).rejects(Object.assign(new Error('cond'), { name: 'ConditionalCheckFailedException' }));
-    const result = await handler(putEvent({ name: 'X', durationMinutes: 30 }));
+    const result = await handler(putEvent({ name: 'X' }));
     expect(result.statusCode).toBe(404);
   });
 
   it('updates a service, including clearing price via null', async () => {
     ddbMock.on(UpdateCommand).resolves({});
-    const result = await handler(putEvent({ name: 'X', durationMinutes: 30, price: null }));
+    const result = await handler(putEvent({ name: 'X', price: null }));
     expect(result.statusCode).toBe(200);
     const call = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
     expect(call?.ExpressionAttributeValues?.[':price']).toBeUndefined();

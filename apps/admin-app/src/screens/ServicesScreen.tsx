@@ -12,7 +12,7 @@ import {
   type Service, type ServiceInput,
 } from '../api/services';
 
-const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, price: undefined, isActive: true };
+const EMPTY_FORM: ServiceInput = { name: '', description: '', price: undefined, isActive: true };
 
 export default function ServicesScreen() {
   const [services, setServices] = useState<Service[]>([]);
@@ -45,14 +45,13 @@ export default function ServicesScreen() {
 
   function openEdit(svc: Service) {
     setEditing(svc);
-    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, price: svc.price, isActive: svc.isActive });
+    setForm({ name: svc.name, description: svc.description, price: svc.price, isActive: svc.isActive });
     setFormError('');
     setShowModal(true);
   }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError('Service name is required.'); return; }
-    if (form.durationMinutes <= 0) { setFormError('Duration must be greater than 0.'); return; }
     setSaving(true);
     setFormError('');
     try {
@@ -122,7 +121,7 @@ export default function ServicesScreen() {
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.cardMeta}>{svc.durationMinutes} min{svc.price != null ? `  ·  $${svc.price.toFixed(2)}` : ''}</Text>
+                      {svc.price != null ? <Text style={styles.cardMeta}>${svc.price.toFixed(2)}</Text> : null}
                       {svc.description ? <Text style={styles.cardDesc} numberOfLines={1}>{svc.description}</Text> : null}
                     </View>
                   </View>
@@ -162,16 +161,8 @@ export default function ServicesScreen() {
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput style={[styles.input, { height: 72, textAlignVertical: 'top' }]} value={form.description} onChangeText={v => setForm(p => ({ ...p, description: v }))} placeholder="Optional description…" placeholderTextColor={colors.textMuted} multiline />
 
-              <View style={styles.row2}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Duration (min) *</Text>
-                  <TextInput style={styles.input} value={String(form.durationMinutes)} onChangeText={v => setForm(p => ({ ...p, durationMinutes: parseInt(v) || 0 }))} keyboardType="number-pad" placeholderTextColor={colors.textMuted} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Price ($)</Text>
-                  <TextInput style={styles.input} value={form.price != null ? String(form.price) : ''} onChangeText={v => setForm(p => ({ ...p, price: v === '' ? undefined : parseFloat(v) || 0 }))} keyboardType="decimal-pad" placeholder="e.g. 49.99" placeholderTextColor={colors.textMuted} />
-                </View>
-              </View>
+              <Text style={styles.fieldLabel}>Price ($)</Text>
+              <TextInput style={styles.input} value={form.price != null ? String(form.price) : ''} onChangeText={v => setForm(p => ({ ...p, price: v === '' ? undefined : parseFloat(v) || 0 }))} keyboardType="decimal-pad" placeholder="e.g. 49.99" placeholderTextColor={colors.textMuted} />
 
               <View style={styles.toggleRow}>
                 <Text style={styles.toggleLabel}>Active (visible to customers)</Text>
@@ -231,7 +222,6 @@ const styles = StyleSheet.create({
 
   fieldLabel: { ...typography.small, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: spacing.md },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: 11, ...typography.body, color: colors.textPrimary, backgroundColor: colors.background },
-  row2: { flexDirection: 'row', gap: spacing.sm },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider, marginTop: spacing.md },
   toggleLabel: { ...typography.body, color: colors.textPrimary },
 

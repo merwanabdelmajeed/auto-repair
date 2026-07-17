@@ -10,7 +10,7 @@ vi.mock('../api/services', () => ({
 }));
 
 function service(overrides: Partial<Awaited<ReturnType<typeof listServices>>[number]> = {}) {
-  return { serviceId: 's1', name: 'Oil Change', description: 'Quick oil change', durationMinutes: 30, price: 49.99, isActive: true, ...overrides };
+  return { serviceId: 's1', name: 'Oil Change', description: 'Quick oil change', price: 49.99, isActive: true, ...overrides };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -32,7 +32,6 @@ describe('Services', () => {
     vi.mocked(listServices).mockResolvedValue([service()]);
     render(<Services />);
     await waitFor(() => expect(screen.getByText('Oil Change')).toBeInTheDocument());
-    expect(screen.getByText('30 min')).toBeInTheDocument();
     expect(screen.getByText('$49.99')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
   });

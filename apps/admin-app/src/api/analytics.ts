@@ -6,7 +6,6 @@ export interface AnalyticsSummary {
   cancelledBookings: number;
   pendingBookings: number;
   totalRevenue: number;
-  avgServiceMinutes: number;
   uniqueCustomers: number;
   newCustomers: number;
   returningCustomers: number;
@@ -25,7 +24,6 @@ export interface ServiceData {
   bookings: number;
   completed: number;
   revenue: number;
-  durationMinutes: number;
 }
 
 export interface AnalyticsResponse {

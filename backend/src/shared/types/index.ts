@@ -76,7 +76,6 @@ export interface Service {
   tenantId: string;
   name: string;
   description: string;
-  durationMinutes: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

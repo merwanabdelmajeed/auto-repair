@@ -53,7 +53,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         serviceId: i.serviceId as string,
         name: i.name as string,
         description: i.description as string,
-        durationMinutes: i.durationMinutes as number,
         price: i.price as number | undefined,
         isActive: i.isActive as boolean,
         createdAt: i.createdAt as string,
@@ -70,9 +69,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'POST') {
       requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { name, description, durationMinutes, price } = body;
-      if (!name || durationMinutes === undefined) {
-        return badRequest('name and durationMinutes are required');
+      const { name, description, price } = body;
+      if (!name) {
+        return badRequest('name is required');
       }
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
@@ -83,7 +82,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         tenantId,
         name,
         description: description ?? '',
-        durationMinutes: Number(durationMinutes),
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -97,21 +95,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'PUT' && serviceId) {
       requireRole(claims, ...ADMIN_ROLES);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
-      const { name, description, durationMinutes, isActive, price } = body;
-      if (!name || durationMinutes === undefined) {
-        return badRequest('name and durationMinutes are required');
+      const { name, description, isActive, price } = body;
+      if (!name) {
+        return badRequest('name is required');
       }
       const hasPriceUpdate = price !== undefined;
       try {
         await db.send(new UpdateCommand({
           TableName: TABLE.SERVICES,
           Key: { PK: `TENANT#${tenantId}`, SK: `SERVICE#${serviceId}` },
-          UpdateExpression: `SET #n = :name, description = :desc, durationMinutes = :dur, isActive = :active, updatedAt = :now${hasPriceUpdate ? ', price = :price' : ''}`,
+          UpdateExpression: `SET #n = :name, description = :desc, isActive = :active, updatedAt = :now${hasPriceUpdate ? ', price = :price' : ''}`,
           ExpressionAttributeNames: { '#n': 'name' },
           ExpressionAttributeValues: {
             ':name': name,
             ':desc': description ?? '',
-            ':dur': Number(durationMinutes),
             ':active': isActive ?? true,
             ':now': new Date().toISOString(),
             ...(hasPriceUpdate && { ':price': price === null ? undefined : Number(price) }),

@@ -52,7 +52,7 @@ describe('GET /analytics', () => {
       ],
     });
     ddbMock.on(QueryCommand, { TableName: TABLE.SERVICES }).resolves({
-      Items: [{ serviceId: 's1', name: 'Oil Change', price: 100, durationMinutes: 30 }],
+      Items: [{ serviceId: 's1', name: 'Oil Change', price: 100 }],
     });
 
     const result = await handler(fakeEvent());
@@ -65,7 +65,6 @@ describe('GET /analytics', () => {
       cancelledBookings: 1,
       pendingBookings: 0,
       totalRevenue: 100,
-      avgServiceMinutes: 30,
       uniqueCustomers: 2,
       newCustomers: 1, // c1 only — c2 has history before the range
       returningCustomers: 1,
@@ -75,19 +74,8 @@ describe('GET /analytics', () => {
       { date: '2026-01-02', bookings: 1, completed: 0, revenue: 0 },
     ]);
     expect(data.byService).toEqual([
-      { serviceId: 's1', serviceName: 'Oil Change', bookings: 2, completed: 1, revenue: 100, durationMinutes: 30 },
+      { serviceId: 's1', serviceName: 'Oil Change', bookings: 2, completed: 1, revenue: 100 },
     ]);
     expect(data.byStatus).toEqual({ completed: 1, cancelled: 1 });
-  });
-
-  it('handles a period with zero completed appointments without dividing by zero', async () => {
-    ddbMock.on(QueryCommand, { TableName: TABLE.APPOINTMENTS }).resolves({
-      Items: [{ scheduledAt: '2026-01-01T10:00:00.000Z', status: 'pending', serviceId: 's1', customerId: 'c1' }],
-    });
-    ddbMock.on(QueryCommand, { TableName: TABLE.SERVICES }).resolves({ Items: [] });
-
-    const result = await handler(fakeEvent());
-
-    expect(JSON.parse(result.body).data.summary.avgServiceMinutes).toBe(0);
   });
 });

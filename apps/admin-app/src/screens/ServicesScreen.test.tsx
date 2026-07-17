@@ -18,7 +18,7 @@ jest.mock('../api/services', () => ({
 
 function service(overrides: Record<string, unknown> = {}) {
   return {
-    serviceId: 's1', name: 'Oil Change', description: 'Basic oil change', durationMinutes: 30,
+    serviceId: 's1', name: 'Oil Change', description: 'Basic oil change',
     price: 49.99, isActive: true,
     ...overrides,
   };
@@ -44,17 +44,17 @@ describe('ServicesScreen', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to load services.'));
   });
 
-  it('lists services with duration/price and Active/Inactive badges', async () => {
+  it('lists services with price and Active/Inactive badges', async () => {
     (listServices as jest.Mock).mockResolvedValue([service(), service({ serviceId: 's2', name: 'Brake Check', isActive: false, price: null })]);
     render(<ServicesScreen />);
 
     await waitFor(() => expect(screen.getByText('Services (2)')).toBeTruthy());
-    expect(screen.getByText('30 min  ·  $49.99')).toBeTruthy();
+    expect(screen.getByText('$49.99')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
     expect(screen.getByText('Inactive')).toBeTruthy();
   });
 
-  it('validates the name and duration fields', async () => {
+  it('validates the name field is required', async () => {
     (listServices as jest.Mock).mockResolvedValue([]);
     render(<ServicesScreen />);
     await waitFor(() => expect(screen.getByText('No Services Yet')).toBeTruthy());
@@ -62,11 +62,6 @@ describe('ServicesScreen', () => {
     fireEvent.press(screen.getByText('Add Service'));
     fireEvent.press(screen.getAllByText('Add Service')[screen.getAllByText('Add Service').length - 1]);
     expect(screen.getByText('Service name is required.')).toBeTruthy();
-
-    fireEvent.changeText(screen.getByPlaceholderText('e.g. Oil Change'), 'New Service');
-    fireEvent.changeText(screen.getByDisplayValue('30'), '0');
-    fireEvent.press(screen.getAllByText('Add Service')[screen.getAllByText('Add Service').length - 1]);
-    expect(screen.getByText('Duration must be greater than 0.')).toBeTruthy();
   });
 
   it('creates a new service and prepends it to the list', async () => {

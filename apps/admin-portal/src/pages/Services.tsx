@@ -8,7 +8,7 @@ import {
   type ServiceInput,
 } from '../api/services';
 
-const EMPTY_FORM: ServiceInput = { name: '', description: '', durationMinutes: 30, price: undefined, isActive: true };
+const EMPTY_FORM: ServiceInput = { name: '', description: '', price: undefined, isActive: true };
 
 export default function Services() {
   const [services, setServices] = useState<Service[]>([]);
@@ -44,14 +44,13 @@ export default function Services() {
 
   function openEdit(svc: Service) {
     setEditing(svc);
-    setForm({ name: svc.name, description: svc.description, durationMinutes: svc.durationMinutes, price: svc.price, isActive: svc.isActive });
+    setForm({ name: svc.name, description: svc.description, price: svc.price, isActive: svc.isActive });
     setFormError('');
     setShowModal(true);
   }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
-    if (form.durationMinutes <= 0) { setFormError('Duration must be greater than 0.'); return; }
     setSaving(true);
     setFormError('');
     try {
@@ -101,16 +100,16 @@ export default function Services() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}>
-              {['Service Name', 'Description', 'Duration', 'Price', 'Status', 'Actions'].map(col => (
+              {['Service Name', 'Description', 'Price', 'Status', 'Actions'].map(col => (
                 <th key={col} style={{ textAlign: 'left', padding: '13px 16px', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading services…</td></tr>
+              <tr><td colSpan={5} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading services…</td></tr>
             ) : services.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <tr><td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: '36px', marginBottom: '12px' }}>🔧</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>No services yet</div>
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Add your first service to let customers start booking.</div>
@@ -127,7 +126,6 @@ export default function Services() {
                 <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '260px' }}>
                   <span style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{svc.description || '—'}</span>
                 </td>
-                <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{svc.durationMinutes} min</td>
                 <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
                   {svc.price != null ? `$${svc.price.toFixed(2)}` : '—'}
                 </td>
@@ -173,29 +171,17 @@ export default function Services() {
                 />
               </div>
             ))}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration (min) *</label>
-                <input
-                  type="number"
-                  value={String(form.durationMinutes)}
-                  onChange={e => setForm(prev => ({ ...prev, durationMinutes: Number(e.target.value) }))}
-                  placeholder="30"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Price ($)</label>
-                <input
-                  type="number"
-                  value={form.price != null ? String(form.price) : ''}
-                  onChange={e => setForm(prev => ({ ...prev, price: e.target.value === '' ? undefined : Number(e.target.value) }))}
-                  placeholder="e.g. 49.99"
-                  min="0"
-                  step="0.01"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
-                />
-              </div>
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Price ($)</label>
+              <input
+                type="number"
+                value={form.price != null ? String(form.price) : ''}
+                onChange={e => setForm(prev => ({ ...prev, price: e.target.value === '' ? undefined : Number(e.target.value) }))}
+                placeholder="e.g. 49.99"
+                min="0"
+                step="0.01"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '14px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)', boxSizing: 'border-box' }}
+              />
             </div>
 
             <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>

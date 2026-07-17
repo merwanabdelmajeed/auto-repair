@@ -183,7 +183,6 @@ export default function HomeScreen({ navigation }: any) {
                   <Text style={styles.serviceName}>{service.name}</Text>
                   {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
                 </View>
-                <Text style={styles.serviceDuration}>{service.durationMinutes} min</Text>
               </View>
             ))}
           </>
@@ -446,7 +445,6 @@ const styles = StyleSheet.create({
   serviceContent: { flex: 1 },
   serviceName: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
   serviceDesc: { ...typography.small, color: colors.textSecondary, marginTop: 2 },
-  serviceDuration: { ...typography.small, color: colors.textMuted },
 
   promoCard: {
     backgroundColor: colors.surface,

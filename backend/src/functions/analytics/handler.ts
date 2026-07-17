@@ -39,12 +39,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     ]);
 
     const priceMap = new Map<string, number>();
-    const durationMap = new Map<string, number>();
     const nameMap = new Map<string, string>();
     for (const svc of services) {
       const sid = svc.serviceId as string;
       priceMap.set(sid, typeof svc.price === 'number' ? svc.price : 0);
-      durationMap.set(sid, typeof svc.durationMinutes === 'number' ? svc.durationMinutes : 0);
       nameMap.set(sid, svc.name as string);
     }
 
@@ -65,12 +63,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const totalRevenue = completed.reduce(
       (sum, a) => sum + (priceMap.get(a.serviceId as string) ?? 0), 0
     );
-    const totalDuration = completed.reduce(
-      (sum, a) => sum + (durationMap.get(a.serviceId as string) ?? 0), 0
-    );
-    const avgServiceMinutes = completed.length > 0
-      ? Math.round(totalDuration / completed.length)
-      : 0;
 
     const uniqueCustomerIds = new Set(periodAppts.map(a => a.customerId as string));
     const newCustomers = [...uniqueCustomerIds].filter(id => !historicalCustomerIds.has(id)).length;
@@ -96,13 +88,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Per-service breakdown
     const svcAgg = new Map<string, {
-      serviceName: string; bookings: number; completed: number; revenue: number; durationMinutes: number;
+      serviceName: string; bookings: number; completed: number; revenue: number;
     }>();
     for (const a of periodAppts) {
       const sid = a.serviceId as string;
       const svcName = (a.serviceName as string | undefined) ?? nameMap.get(sid) ?? sid;
       if (!svcAgg.has(sid)) {
-        svcAgg.set(sid, { serviceName: svcName, bookings: 0, completed: 0, revenue: 0, durationMinutes: durationMap.get(sid) ?? 0 });
+        svcAgg.set(sid, { serviceName: svcName, bookings: 0, completed: 0, revenue: 0 });
       }
       const entry = svcAgg.get(sid)!;
       entry.bookings++;
@@ -129,7 +121,6 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         cancelledBookings: cancelled.length,
         pendingBookings: periodAppts.length - completed.length - cancelled.length,
         totalRevenue,
-        avgServiceMinutes,
         uniqueCustomers: uniqueCustomerIds.size,
         newCustomers,
         returningCustomers: uniqueCustomerIds.size - newCustomers,

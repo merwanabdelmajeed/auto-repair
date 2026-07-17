@@ -467,7 +467,6 @@ export default function AppointmentsScreen({ route, navigation }: any) {
                   <TouchableOpacity key={svc.serviceId} onPress={() => setSelectedService(svc)} style={[styles.optionRow, selectedService?.serviceId === svc.serviceId && styles.optionRowSelected]}>
                     <View style={styles.optionInfo}>
                       <Text style={styles.optionName}>{svc.name}</Text>
-                      <Text style={styles.optionSub}>{svc.durationMinutes} min</Text>
                       {svc.description ? <Text style={styles.optionDesc}>{svc.description}</Text> : null}
                     </View>
                     {selectedService?.serviceId === svc.serviceId && (
@@ -577,7 +576,6 @@ export default function AppointmentsScreen({ route, navigation }: any) {
                   {[
                     { label: 'Location', value: selectedLocation.name },
                     { label: 'Service', value: selectedService.name },
-                    { label: 'Duration', value: `${selectedService.durationMinutes} min` },
                     { label: 'Vehicle', value: `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}` },
                     { label: 'Date', value: selectedDate },
                     { label: 'Time', value: fmt12h(selectedTime) },
