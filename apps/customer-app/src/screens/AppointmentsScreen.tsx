@@ -14,6 +14,7 @@ import { listVehicles, type Vehicle } from '../api/vehicles';
 import { getAvailability, type AvailabilityResult, type TimeSlot } from '../api/availability';
 import { listLocations, type Location } from '../api/locations';
 import { localDateStr, parseDateParts, fmt12h, fmtDate } from '../utils/bookingDate';
+import { sortServices } from '../utils/sortServices';
 
 type BookingStep = 'location' | 'service' | 'datetime' | 'vehicle' | 'confirm';
 
@@ -24,25 +25,6 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   completed: { bg: 'rgba(34,197,94,0.12)', text: '#16A34A' },
   cancelled: { bg: 'rgba(148,163,184,0.12)', text: '#64748B' },
 };
-
-const POPULAR_KEYWORDS = [
-  'oil change', 'oil', 'tire rotation', 'tire', 'tyre',
-  'brake', 'battery', 'ac service', 'air condition', 'a/c', 'ac',
-  'alignment', 'wheel', 'filter', 'transmission', 'coolant', 'flush',
-  'inspection', 'tune up', 'tune', 'spark', 'engine',
-  'wiper', 'belt', 'fluid', 'exhaust',
-];
-
-function sortByPopularity(svcs: import('../api/services').Service[]) {
-  function rank(name: string): number {
-    const lower = name.toLowerCase();
-    for (let i = 0; i < POPULAR_KEYWORDS.length; i++) {
-      if (lower.includes(POPULAR_KEYWORDS[i]!)) return i;
-    }
-    return POPULAR_KEYWORDS.length;
-  }
-  return [...svcs].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
-}
 
 const LOOKAHEAD_DAYS = 30;
 
@@ -155,7 +137,7 @@ export default function AppointmentsScreen({ route, navigation }: any) {
     setShowBooking(true);
     const [locs, svcs, vehs] = await Promise.all([listLocations(), listServices(), listVehicles()]);
     setLocations(locs);
-    setServices(sortByPopularity(svcs.filter(s => s.isActive)));
+    setServices(sortServices(svcs.filter(s => s.isActive)));
     setVehicles(vehs);
   }
 

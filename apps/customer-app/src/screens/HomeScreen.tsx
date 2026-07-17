@@ -18,6 +18,7 @@ import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listPromotions, type PublicPromotion } from '../api/promotions';
 import { getCapacity, type DayHours } from '../api/capacity';
 import { listServices, type Service } from '../api/services';
+import { sortServices } from '../utils/sortServices';
 import { useAuth } from '../auth/AuthContext';
 import { SHOP_ADDRESS } from '../constants';
 
@@ -94,7 +95,7 @@ export default function HomeScreen({ navigation }: any) {
     if (isAuthenticated) { setLoadingServices(false); return Promise.resolve(); }
     setLoadingServices(true);
     return listServices()
-      .then(data => setServices(data.filter(s => s.isActive).slice(0, 5)))
+      .then(data => setServices(sortServices(data.filter(s => s.isActive)).slice(0, 5)))
       .catch(() => {})
       .finally(() => setLoadingServices(false));
   }, [isAuthenticated]);
