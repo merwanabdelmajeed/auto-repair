@@ -288,4 +288,27 @@ describe('BookingsScreen', () => {
     await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
     expect(screen.queryByText(/▾/)).toBeNull();
   });
+
+  describe('deleted customer', () => {
+    it('shows a plain (non-clickable) status badge in the list, even from confirmed', async () => {
+      setupApis({ appts: [appt({ customerId: undefined, customerName: 'Deleted Customer', status: 'confirmed' })] });
+      render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+      await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+
+      // Plain status text, not the clickable "confirmed ▾" dropdown
+      expect(screen.getByText('confirmed')).toBeTruthy();
+      expect(screen.queryByText(/▾/)).toBeNull();
+    });
+
+    it('hides Change Status in the detail modal and shows a locked notice instead', async () => {
+      setupApis({ appts: [appt({ customerId: undefined, customerName: 'Deleted Customer', status: 'confirmed' })] });
+      render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+      await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+
+      fireEvent.press(screen.getByText('Oil Change'));
+
+      expect(screen.queryByText('Change Status')).toBeNull();
+      expect(screen.getByText(/account was deleted/)).toBeTruthy();
+    });
+  });
 });

@@ -137,7 +137,7 @@ export default function DashboardScreen({ navigation }: any) {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Mark Applied', onPress: async () => {
-          if (!appt.promoId) return;
+          if (!appt.promoId || !appt.customerId) return;
           setTodaysAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, promoApplied: true } : a));
           setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, promoApplied: true } : prev);
           try {
@@ -245,11 +245,11 @@ export default function DashboardScreen({ navigation }: any) {
           const dashFiltered = dashSearch.trim()
             ? todaysAppointments.filter(a => {
                 const q = dashSearch.toLowerCase();
-                const customer = customerMap[a.customerId];
+                const customer = a.customerId ? customerMap[a.customerId] : undefined;
                 return (
                   a.serviceName.toLowerCase().includes(q) ||
                   (a.customerName ?? '').toLowerCase().includes(q) ||
-                  a.customerEmail.toLowerCase().includes(q) ||
+                  (a.customerEmail ?? '').toLowerCase().includes(q) ||
                   (a.vehicleSummary ?? '').toLowerCase().includes(q) ||
                   (customer?.phone ?? '').toLowerCase().includes(q)
                 );
@@ -271,7 +271,7 @@ export default function DashboardScreen({ navigation }: any) {
                 <Text style={styles.serviceName} numberOfLines={1}>{a.serviceName}</Text>
                 {isUpdating ? (
                   <ActivityIndicator size="small" color={colors.primary} />
-                ) : VALID_NEXT[a.status] ? (
+                ) : VALID_NEXT[a.status] && a.customerId ? (
                   <TouchableOpacity onPress={() => openStatusPicker(a)} style={[styles.statusBadge, { backgroundColor: sc.bg }]} activeOpacity={0.7}>
                     <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(a.status)} ▾</Text>
                   </TouchableOpacity>
@@ -298,7 +298,7 @@ export default function DashboardScreen({ navigation }: any) {
                   </Text>
                 </View>
               )}
-              {a.promoCode && !a.promoApplied && !isUpdating && (
+              {a.promoCode && a.customerId && !a.promoApplied && !isUpdating && (
                 <View style={styles.cardActions}>
                   <TouchableOpacity onPress={() => confirmApplyPromo(a)} style={styles.promoBtn} activeOpacity={0.8}>
                     <Ionicons name="pricetag-outline" size={13} color={colors.secondary} />
@@ -335,7 +335,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.modalSheet}>
             {detailAppt && (() => {
               const sc = STATUS_COLOR[detailAppt.status];
-              const customer = customerMap[detailAppt.customerId];
+              const customer = detailAppt.customerId ? customerMap[detailAppt.customerId] : undefined;
               const veh = vehicleMap[detailAppt.vehicleId];
               const isUpdating = updatingAppt === detailAppt.appointmentId;
               return (
@@ -363,7 +363,7 @@ export default function DashboardScreen({ navigation }: any) {
                       ) : null}
                       <View style={styles.infoRow}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
-                        <Text style={styles.infoValue}>{detailAppt.customerEmail}</Text>
+                        <Text style={styles.infoValue}>{detailAppt.customerEmail || '—'}</Text>
                       </View>
                       {customer?.phone ? (
                         <View style={[styles.infoRow, styles.infoRowLast]}>
@@ -455,7 +455,15 @@ export default function DashboardScreen({ navigation }: any) {
                     </View>
 
                     <View style={styles.detailActions}>
-                      {VALID_NEXT[detailAppt.status] && (
+                      {!detailAppt.customerId && (
+                        <View style={styles.deletedCustomerNotice}>
+                          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
+                          <Text style={styles.deletedCustomerNoticeText}>
+                            This customer's account was deleted — status is locked.
+                          </Text>
+                        </View>
+                      )}
+                      {VALID_NEXT[detailAppt.status] && detailAppt.customerId && (
                         <TouchableOpacity onPress={() => openStatusPicker(detailAppt)} style={styles.detailActionBtn} activeOpacity={0.8} disabled={isUpdating}>
                           {isUpdating
                             ? <ActivityIndicator size="small" color={colors.primary} />
@@ -463,7 +471,7 @@ export default function DashboardScreen({ navigation }: any) {
                           }
                         </TouchableOpacity>
                       )}
-                      {detailAppt.promoCode && !detailAppt.promoApplied && !isUpdating && (
+                      {detailAppt.promoCode && detailAppt.customerId && !detailAppt.promoApplied && !isUpdating && (
                         <TouchableOpacity onPress={() => confirmApplyPromo(detailAppt)} style={[styles.detailActionBtn, styles.detailPromoBtn]} activeOpacity={0.8}>
                           <Ionicons name="pricetag-outline" size={16} color={colors.secondary} />
                           <Text style={[styles.detailActionText, { color: colors.secondary }]}>Apply Promo</Text>
@@ -551,4 +559,6 @@ const styles = StyleSheet.create({
   detailActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingVertical: 12, backgroundColor: colors.background },
   detailActionText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
   detailPromoBtn: { borderColor: 'rgba(245,158,11,0.4)' },
+  deletedCustomerNotice: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: borderRadius.md, paddingVertical: 12, paddingHorizontal: spacing.sm, backgroundColor: colors.background },
+  deletedCustomerNoticeText: { ...typography.small, color: colors.textMuted, flex: 1 },
 });

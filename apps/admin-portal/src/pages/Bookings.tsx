@@ -148,7 +148,7 @@ export default function Bookings() {
     if (!pendingPromo) return;
     const appt = pendingPromo;
     setPendingPromo(null);
-    if (!appt.promoId) return;
+    if (!appt.promoId || !appt.customerId) return;
     setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, promoApplied: true } : a));
     setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, promoApplied: true } : prev);
     try {
@@ -173,11 +173,11 @@ export default function Bookings() {
   function matchesSearch(appt: Appointment): boolean {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
-    const customer = customerMap[appt.customerId];
+    const customer = appt.customerId ? customerMap[appt.customerId] : undefined;
     return (
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
-      appt.customerEmail.toLowerCase().includes(q) ||
+      (appt.customerEmail ?? '').toLowerCase().includes(q) ||
       (appt.vehicleSummary ?? '').toLowerCase().includes(q) ||
       (customer?.phone ?? '').toLowerCase().includes(q)
     );
@@ -292,7 +292,7 @@ export default function Bookings() {
                   <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                     {isUpdating ? (
                       <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Updating…</span>
-                    ) : opts ? (
+                    ) : opts && appt.customerId ? (
                       <button
                         onClick={e => { e.stopPropagation(); setStatusTarget({ appt, rect: e.currentTarget.getBoundingClientRect() }); }}
                         style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '100px', backgroundColor: st.bg, color: st.color, border: `1px solid ${st.border}`, cursor: 'pointer', textTransform: 'capitalize', whiteSpace: 'nowrap' }}
@@ -306,7 +306,7 @@ export default function Bookings() {
                     )}
                   </td>
                   <td style={{ padding: '10px 16px' }} onClick={e => e.stopPropagation()}>
-                    {appt.promoCode && !appt.promoApplied ? (
+                    {appt.promoCode && appt.customerId && !appt.promoApplied ? (
                       <button onClick={() => setPendingPromo(appt)} disabled={isUpdating} style={{ background: 'none', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '6px', padding: '5px 10px', fontSize: '12px', cursor: 'pointer', color: '#D97706', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         🏷 Apply
                       </button>
@@ -335,7 +335,7 @@ export default function Bookings() {
         const st = STATUS_STYLE[a.status];
         const opts = VALID_NEXT[a.status];
         const isUpdating = updating === a.appointmentId;
-        const customer = customerMap[a.customerId];
+        const customer = a.customerId ? customerMap[a.customerId] : undefined;
         return (
           <>
             <div onClick={() => setDetailAppt(null)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
@@ -359,7 +359,7 @@ export default function Bookings() {
                   )}
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail}</span>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail || '—'}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📞</span>
@@ -455,9 +455,15 @@ export default function Bookings() {
                   </div>
                 </div>
 
-                {(opts || (a.promoCode && !a.promoApplied)) && (
+                {!a.customerId && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--color-background)', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px' }}>🔒</span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>This customer's account was deleted — status is locked.</span>
+                  </div>
+                )}
+                {((opts && a.customerId) || (a.promoCode && a.customerId && !a.promoApplied)) && (
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    {opts && (
+                    {opts && a.customerId && (
                       <button
                         onClick={e => setStatusTarget({ appt: a, rect: e.currentTarget.getBoundingClientRect() })}
                         disabled={isUpdating}
@@ -466,7 +472,7 @@ export default function Bookings() {
                         {isUpdating ? 'Updating…' : '⇄ Change Status'}
                       </button>
                     )}
-                    {a.promoCode && !a.promoApplied && !isUpdating && (
+                    {a.promoCode && a.customerId && !a.promoApplied && !isUpdating && (
                       <button
                         onClick={() => setPendingPromo(a)}
                         style={{ flex: 1, padding: '10px', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '8px', backgroundColor: 'rgba(245,158,11,0.06)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', color: '#D97706' }}

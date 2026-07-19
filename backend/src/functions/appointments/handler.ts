@@ -228,6 +228,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (!isAdmin) {
         if (status !== 'cancelled') return forbidden('Customers may only cancel their own appointments');
         if (before.Item.customerId !== userId) return forbidden('You can only cancel your own appointments');
+      } else if (!before.Item.customerId) {
+        // customerId is stripped when an account is deleted (see customers
+        // handler) — the appointment is kept for the shop's own records, but
+        // its status is frozen: there's no live customer to notify, and
+        // notifyUser below would otherwise be called with userId undefined.
+        return conflict('This appointment belongs to a deleted customer account and can no longer be updated.');
       }
 
       let updatedItem: Record<string, unknown> | undefined;

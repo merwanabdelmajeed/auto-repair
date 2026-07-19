@@ -2,11 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { listCustomers, type Customer } from '../api/customers';
+import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+const HISTORY_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  pending: { bg: 'rgba(245,158,11,0.1)', color: '#D97706' },
+  confirmed: { bg: 'rgba(59,130,246,0.1)', color: '#2563EB' },
+  'in-progress': { bg: 'rgba(139,92,246,0.1)', color: '#7C3AED' },
+  completed: { bg: 'rgba(16,185,129,0.1)', color: '#059669' },
+  cancelled: { bg: 'rgba(107,114,128,0.1)', color: '#4B5563' },
+};
 
 function displayName(c: Customer) {
   if (c.firstName || c.lastName) return `${c.firstName} ${c.lastName}`.trim();
@@ -32,6 +41,7 @@ export default function Vehicles() {
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -57,14 +67,16 @@ export default function Vehicles() {
     try {
       setLoading(true);
       setError('');
-      const [v, c] = await Promise.all([
+      const [v, c, a] = await Promise.all([
         fetchAllPages(cursor => listVehicles(cursor)),
         fetchAllPages(cursor => listCustomers(cursor)),
+        fetchAllPages(cursor => listAppointments(cursor)),
       ]);
       setVehicles(v);
       const map: Record<string, Customer> = {};
       c.forEach(cu => { map[cu.userId] = cu; });
       setCustomerMap(map);
+      setAppointments(a);
     } catch {
       setError('Failed to load vehicles.');
     } finally {
@@ -124,6 +136,14 @@ export default function Vehicles() {
     });
 
   const filterCustomer = customerIdFilter ? customerMap[customerIdFilter] : null;
+
+  // Filtered by vehicleId, not customerId, so history still shows even for a
+  // vehicle whose owning customer account has since been deleted.
+  const detailVehicleHistory = detailVehicle
+    ? appointments
+        .filter(a => a.vehicleId === detailVehicle.vehicleId)
+        .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+    : [];
 
   return (
     <div style={{ maxWidth: '1100px' }}>
@@ -337,6 +357,36 @@ export default function Vehicles() {
                       </div>
                       <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>›</span>
                     </div>
+                  </>
+                )}
+
+                {/* Service history — keyed by vehicleId, so this still works
+                    even when the owning customer was deleted. */}
+                {!isEditing && (
+                  <>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', marginTop: owner ? '16px' : 0 }}>Service History</div>
+                    {detailVehicleHistory.length === 0 ? (
+                      <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                        No appointments recorded for this vehicle yet.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {detailVehicleHistory.map(appt => {
+                          const st = HISTORY_STATUS_STYLE[appt.status] ?? HISTORY_STATUS_STYLE.cancelled!;
+                          return (
+                            <div key={appt.appointmentId} style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '10px 12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{appt.serviceName}</span>
+                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', backgroundColor: st.bg, color: st.color, textTransform: 'capitalize' }}>
+                                  {appt.status.replace('-', ' ')}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{fmtDate(appt.scheduledAt)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

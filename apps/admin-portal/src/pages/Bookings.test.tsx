@@ -198,3 +198,25 @@ describe('Bookings — detail panel vehicle editing', () => {
     expect(updateVehicle).not.toHaveBeenCalled();
   });
 });
+
+describe('Bookings — deleted customer', () => {
+  it('shows a plain (non-clickable) status badge in the table, even from confirmed', async () => {
+    mockLoad({ appointments: [appt({ customerId: undefined, customerName: 'Deleted Customer', status: 'confirmed' })] });
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/▾/)).not.toBeInTheDocument();
+  });
+
+  it('hides Change Status in the detail panel and shows a locked notice instead', async () => {
+    mockLoad({ appointments: [appt({ customerId: undefined, customerName: 'Deleted Customer', status: 'confirmed' })] });
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+
+    fireEvent.click(screen.getByText('Oil Change'));
+
+    expect(screen.queryByText('⇄ Change Status')).not.toBeInTheDocument();
+    expect(screen.getByText(/account was deleted/)).toBeInTheDocument();
+  });
+});

@@ -170,4 +170,34 @@ describe('PATCH /appointments/{id}/status', () => {
 
     expect(result.statusCode).toBe(200);
   });
+
+  it('blocks an admin from changing status on a deleted customer\'s appointment, even from confirmed', async () => {
+    // customerId is stripped by the account-deletion anonymization — no
+    // customerId on the stored item means the owning account is gone.
+    mockExistingAppointment({ customerId: undefined, status: 'confirmed', customerName: 'Deleted Customer' });
+
+    const result = await handler(fakeEvent({
+      httpMethod: 'PATCH',
+      pathParameters: { appointmentId: 'appt1' },
+      body: JSON.stringify({ status: 'completed' }),
+      claims: { 'custom:role': UserRole.TENANT_OWNER },
+    }));
+
+    expect(result.statusCode).toBe(409);
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+    expect(notifyAdmins).not.toHaveBeenCalled();
+  });
+
+  it('blocks cancelling a deleted customer\'s appointment too, not just completing it', async () => {
+    mockExistingAppointment({ customerId: undefined, status: 'confirmed' });
+
+    const result = await handler(fakeEvent({
+      httpMethod: 'PATCH',
+      pathParameters: { appointmentId: 'appt1' },
+      body: JSON.stringify({ status: 'cancelled' }),
+      claims: { 'custom:role': UserRole.TENANT_OWNER },
+    }));
+
+    expect(result.statusCode).toBe(409);
+  });
 });

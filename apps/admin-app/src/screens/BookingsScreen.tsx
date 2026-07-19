@@ -163,7 +163,7 @@ export default function BookingsScreen({ route, navigation }: any) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Mark Applied', onPress: async () => {
-            if (!appt.promoId) return;
+            if (!appt.promoId || !appt.customerId) return;
             setAppointments(prev => prev.map(a => a.appointmentId === appt.appointmentId ? { ...a, promoApplied: true } : a));
             setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? { ...prev, promoApplied: true } : prev);
             try {
@@ -209,11 +209,11 @@ export default function BookingsScreen({ route, navigation }: any) {
   function matchesSearch(appt: Appointment): boolean {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
-    const customer = customerMap[appt.customerId];
+    const customer = appt.customerId ? customerMap[appt.customerId] : undefined;
     return (
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
-      appt.customerEmail.toLowerCase().includes(q) ||
+      (appt.customerEmail ?? '').toLowerCase().includes(q) ||
       (appt.vehicleSummary ?? '').toLowerCase().includes(q) ||
       (customer?.phone ?? '').toLowerCase().includes(q)
     );
@@ -299,7 +299,7 @@ export default function BookingsScreen({ route, navigation }: any) {
                   </View>
                   {isUpdating ? (
                     <ActivityIndicator size="small" color={colors.primary} />
-                  ) : VALID_NEXT[appt.status] ? (
+                  ) : VALID_NEXT[appt.status] && appt.customerId ? (
                     <TouchableOpacity onPress={() => openStatusPicker(appt)} style={[styles.statusBadge, { backgroundColor: sc.bg }]} activeOpacity={0.7}>
                       <Text style={[styles.statusText, { color: sc.text }]}>{appt.status} ▾</Text>
                     </TouchableOpacity>
@@ -347,7 +347,7 @@ export default function BookingsScreen({ route, navigation }: any) {
           <View style={styles.modalSheet}>
             {detailAppt && (() => {
               const sc = STATUS_COLOR[detailAppt.status];
-              const customer = customerMap[detailAppt.customerId];
+              const customer = detailAppt.customerId ? customerMap[detailAppt.customerId] : undefined;
               const veh = vehicleMap[detailAppt.vehicleId];
               const isUpdating = updating === detailAppt.appointmentId;
               return (
@@ -376,7 +376,7 @@ export default function BookingsScreen({ route, navigation }: any) {
                       ) : null}
                       <View style={styles.infoRow}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
-                        <Text style={styles.infoValue}>{detailAppt.customerEmail}</Text>
+                        <Text style={styles.infoValue}>{detailAppt.customerEmail || '—'}</Text>
                       </View>
                       {customer?.phone ? (
                         <View style={[styles.infoRow, styles.infoRowLast]}>
@@ -470,14 +470,22 @@ export default function BookingsScreen({ route, navigation }: any) {
 
                     {/* Actions */}
                     <View style={styles.detailActions}>
-                      {VALID_NEXT[detailAppt.status] && (
+                      {!detailAppt.customerId && (
+                        <View style={styles.deletedCustomerNotice}>
+                          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
+                          <Text style={styles.deletedCustomerNoticeText}>
+                            This customer's account was deleted — status is locked.
+                          </Text>
+                        </View>
+                      )}
+                      {VALID_NEXT[detailAppt.status] && detailAppt.customerId && (
                         <TouchableOpacity onPress={() => openStatusPicker(detailAppt)} style={styles.detailActionBtn} activeOpacity={0.8} disabled={isUpdating}>
                           {isUpdating
                             ? <ActivityIndicator size="small" color={colors.primary} />
                             : <><Ionicons name="swap-horizontal-outline" size={16} color={colors.primary} /><Text style={styles.detailActionText}>Change Status</Text></>}
                         </TouchableOpacity>
                       )}
-                      {detailAppt.promoCode && !detailAppt.promoApplied && !isUpdating && (
+                      {detailAppt.promoCode && detailAppt.customerId && !detailAppt.promoApplied && !isUpdating && (
                         <TouchableOpacity onPress={() => confirmApplyPromo(detailAppt)} style={[styles.detailActionBtn, styles.detailPromoBtn]} activeOpacity={0.8}>
                           <Ionicons name="pricetag-outline" size={16} color={colors.secondary} />
                           <Text style={[styles.detailActionText, { color: colors.secondary }]}>Apply Promo</Text>
@@ -564,5 +572,7 @@ const styles = StyleSheet.create({
   detailActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   detailActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingVertical: 12, backgroundColor: colors.background },
   detailActionText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
+  deletedCustomerNotice: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: borderRadius.md, paddingVertical: 12, paddingHorizontal: spacing.sm, backgroundColor: colors.background },
+  deletedCustomerNoticeText: { ...typography.small, color: colors.textMuted, flex: 1 },
   detailPromoBtn: { borderColor: 'rgba(245,158,11,0.4)' },
 });

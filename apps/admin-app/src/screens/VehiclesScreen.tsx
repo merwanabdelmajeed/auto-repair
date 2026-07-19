@@ -9,11 +9,17 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { listCustomers, type Customer } from '../api/customers';
+import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+const HISTORY_STATUS_COLOR: Record<string, string> = {
+  pending: '#F59E0B', confirmed: '#3B82F6',
+  'in-progress': '#8B5CF6', completed: '#10B981', cancelled: '#6B7280',
+};
 
 function displayName(c: Customer) {
   if (c.firstName || c.lastName) return `${c.firstName} ${c.lastName}`.trim();
@@ -23,6 +29,7 @@ function displayName(c: Customer) {
 export default function VehiclesScreen({ navigation, route }: any) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -39,14 +46,16 @@ export default function VehiclesScreen({ navigation, route }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [v, c] = await Promise.all([
+      const [v, c, a] = await Promise.all([
         fetchAllPages(cursor => listVehicles(cursor)),
         fetchAllPages(cursor => listCustomers(cursor)),
+        fetchAllPages(cursor => listAppointments(cursor)),
       ]);
       setVehicles(v);
       const map: Record<string, Customer> = {};
       c.forEach(cu => { map[cu.userId] = cu; });
       setCustomerMap(map);
+      setAppointments(a);
     } catch {
       Alert.alert('Error', 'Failed to load vehicles.');
     } finally {
@@ -105,6 +114,14 @@ export default function VehiclesScreen({ navigation, route }: any) {
     });
 
   const filterCustomer = customerIdFilter ? customerMap[customerIdFilter] : null;
+
+  // Filtered by vehicleId, not customerId, so history still shows even for a
+  // vehicle whose owning customer account has since been deleted.
+  const selectedVehicleHistory = selectedVehicle
+    ? appointments
+        .filter(a => a.vehicleId === selectedVehicle.vehicleId)
+        .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+    : [];
 
   return (
     <Layout>
@@ -320,6 +337,38 @@ export default function VehiclesScreen({ navigation, route }: any) {
                         </TouchableOpacity>
                       </>
                     )}
+
+                    {/* Service history — keyed by vehicleId, so this still
+                        works even when the owning customer was deleted. */}
+                    {!isEditing && (
+                      <>
+                        <Text style={styles.sectionLabel}>Service History</Text>
+                        {selectedVehicleHistory.length === 0 ? (
+                          <View style={styles.historyEmpty}>
+                            <Text style={styles.historyEmptyText}>No appointments recorded for this vehicle yet.</Text>
+                          </View>
+                        ) : (
+                          selectedVehicleHistory.map((appt, i) => {
+                            const date = new Date(appt.scheduledAt);
+                            const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            const badgeColor = HISTORY_STATUS_COLOR[appt.status] ?? '#6B7280';
+                            return (
+                              <View key={appt.appointmentId} style={[styles.historyCard, i === selectedVehicleHistory.length - 1 && styles.historyCardLast]}>
+                                <View style={styles.historyCardTop}>
+                                  <Text style={styles.historyService} numberOfLines={1}>{appt.serviceName}</Text>
+                                  <View style={[styles.historyBadge, { backgroundColor: badgeColor + '22', borderColor: badgeColor + '55' }]}>
+                                    <Text style={[styles.historyBadgeText, { color: badgeColor }]}>
+                                      {appt.status.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.historyDate}>{dateStr}</Text>
+                              </View>
+                            );
+                          })
+                        )}
+                      </>
+                    )}
                   </ScrollView>
                 </>
               );
@@ -394,4 +443,14 @@ const styles = StyleSheet.create({
   ownerName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', marginBottom: 2 },
   ownerEmail: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
   ownerPhone: { ...typography.small, color: colors.textSecondary },
+
+  historyEmpty: { backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, alignItems: 'center' },
+  historyEmptyText: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
+  historyCard: { backgroundColor: colors.background, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: spacing.sm },
+  historyCardLast: { marginBottom: 0 },
+  historyCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  historyService: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', flex: 1, marginRight: spacing.sm },
+  historyBadge: { borderWidth: 1, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 2 },
+  historyBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
+  historyDate: { ...typography.small, color: colors.textMuted },
 });

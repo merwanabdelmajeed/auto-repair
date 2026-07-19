@@ -3,9 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import Vehicles from './Vehicles';
 import { listVehicles, updateVehicle } from '../api/vehicles';
 import { listCustomers } from '../api/customers';
+import { listAppointments } from '../api/appointments';
 
 vi.mock('../api/vehicles', () => ({ listVehicles: vi.fn(), updateVehicle: vi.fn() }));
 vi.mock('../api/customers', () => ({ listCustomers: vi.fn() }));
+vi.mock('../api/appointments', () => ({ listAppointments: vi.fn() }));
 
 function vehicle(overrides: Record<string, unknown> = {}) {
   return { vehicleId: 'v1', customerId: 'c1', make: 'Honda', model: 'Civic', trim: null, year: 2020, licensePlate: 'ABC123', color: 'blue', vin: '1HGCM82633A123456', createdAt: '2026-01-01T00:00:00.000Z', ...overrides };
@@ -13,12 +15,24 @@ function vehicle(overrides: Record<string, unknown> = {}) {
 function customer(overrides: Record<string, unknown> = {}) {
   return { userId: 'c1', email: 'jane@shop.com', firstName: 'Jane', lastName: 'Doe', phone: '555-1234', status: 'ACTIVE', createdAt: 'c', ...overrides };
 }
+function appointment(overrides: Record<string, unknown> = {}) {
+  return {
+    appointmentId: 'a1', customerId: 'c1', customerEmail: 'jane@shop.com', customerName: 'Jane Doe',
+    vehicleId: 'v1', serviceId: 's1', scheduledAt: '2026-06-01T09:00:00.000Z', status: 'completed',
+    promoCode: null, promoId: null, promoApplied: false, serviceName: 'Oil Change',
+    vehicleSummary: '2020 Honda Civic', createdAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 function renderPage(initialEntries = ['/vehicles']) {
   return render(<MemoryRouter initialEntries={initialEntries}><Vehicles /></MemoryRouter>);
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(listAppointments).mockResolvedValue({ items: [], nextCursor: null });
+});
 
 describe('Vehicles', () => {
   it('shows an error when loading fails', async () => {
@@ -161,5 +175,53 @@ describe('Vehicles', () => {
     fireEvent.click(screen.getByText('jane@shop.com'));
 
     await waitFor(() => expect(screen.queryByText('Vehicle Details')).not.toBeInTheDocument());
+  });
+
+  describe('service history', () => {
+    it('shows the empty state when the vehicle has no appointments', async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+
+      fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+      expect(screen.getByText('No appointments recorded for this vehicle yet.')).toBeInTheDocument();
+    });
+
+    it('lists appointments for the vehicle, filtered by vehicleId only', async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+      vi.mocked(listAppointments).mockResolvedValue({
+        items: [
+          appointment({ appointmentId: 'a1', serviceName: 'Oil Change' }),
+          appointment({ appointmentId: 'a2', vehicleId: 'other-vehicle', serviceName: 'Brake Check' }),
+        ],
+        nextCursor: null,
+      } as never);
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+
+      fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+      expect(screen.getByText('Oil Change')).toBeInTheDocument();
+      expect(screen.queryByText('Brake Check')).not.toBeInTheDocument();
+    });
+
+    it('still shows service history for a vehicle whose owning customer was deleted', async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle({ customerId: undefined })], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+      vi.mocked(listAppointments).mockResolvedValue({
+        items: [appointment({ customerId: undefined, customerName: 'Deleted Customer', serviceName: 'Oil Change' })],
+        nextCursor: null,
+      } as never);
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+
+      fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+      expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument();
+      expect(screen.getByText('Oil Change')).toBeInTheDocument();
+    });
   });
 });

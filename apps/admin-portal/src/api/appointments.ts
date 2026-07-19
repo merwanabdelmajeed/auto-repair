@@ -4,8 +4,10 @@ export type AppointmentStatus = 'pending' | 'confirmed' | 'in-progress' | 'compl
 
 export interface Appointment {
   appointmentId: string;
-  customerId: string;
-  customerEmail: string;
+  // Absent when the owning customer account has since been deleted —
+  // the appointment is kept (anonymized) for the shop's own records.
+  customerId?: string;
+  customerEmail?: string;
   customerName: string;
   vehicleId: string;
   serviceId: string;
