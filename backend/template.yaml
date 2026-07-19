@@ -12,10 +12,6 @@ Parameters:
     Type: String
     Default: '+18557294596'
     Description: E.164 toll-free number (AWS End User Messaging) used as the origination identity for phone-verification OTP texts. Provisioned out-of-band via request-phone-number.
-  ShopName:
-    Type: String
-    Default: 'Auto Repair Shop'
-    Description: Display name used as the brand in outbound OTP text messages.
 
 Mappings:
   EnvironmentMap:
@@ -1578,7 +1574,6 @@ Resources:
       Environment:
         Variables:
           ORIGINATION_NUMBER: !Ref OriginationNumber
-          APP_NAME: !Ref ShopName
       Events:
         VerificationPhoneSend:
           Type: Api

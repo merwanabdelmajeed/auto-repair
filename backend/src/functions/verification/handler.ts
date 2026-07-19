@@ -7,7 +7,6 @@ import { ok, badRequest, unauthorized, tooManyRequests, serverError } from '../.
 import { logger } from '../../shared/utils/logger.js';
 import { sendSms, toE164Us } from '../../shared/utils/sms.js';
 
-const APP_NAME = process.env.APP_NAME ?? 'AutoRepair';
 const CODE_TTL_SECONDS = 600;        // code is valid for 10 minutes
 const RESEND_COOLDOWN_SECONDS = 60;  // min gap between two sends to one phone
 const MAX_SENDS_PER_HOUR = 5;        // per user+phone, rolling hour
@@ -90,7 +89,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         },
       }));
 
-      await sendSms(e164, `Your ${APP_NAME} verification code is ${code}. It expires in 10 minutes. Reply STOP to opt out.`);
+      // Brand-neutral OTP: this number is registered under the platform operator
+      // (not any one client shop), so the message carries no shop name.
+      await sendSms(e164, `Your verification code is ${code}. It expires in 10 minutes. Reply STOP to opt out, HELP for help. Msg & data rates may apply.`);
 
       return ok({ sent: true, resendInSeconds: RESEND_COOLDOWN_SECONDS, expiresInSeconds: CODE_TTL_SECONDS });
     }
