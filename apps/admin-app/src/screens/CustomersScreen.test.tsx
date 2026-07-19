@@ -68,7 +68,7 @@ describe('CustomersScreen', () => {
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
 
-    fireEvent.changeText(screen.getByPlaceholderText('Search by name, email, or phone…'), 'bob');
+    fireEvent.changeText(screen.getByPlaceholderText('Search by name or email…'), 'bob');
 
     expect(screen.getByText('Bob Smith')).toBeTruthy();
     expect(screen.queryByText('Jane Doe')).toBeNull();
@@ -79,7 +79,7 @@ describe('CustomersScreen', () => {
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
 
-    fireEvent.changeText(screen.getByPlaceholderText('Search by name, email, or phone…'), 'zzz-nomatch');
+    fireEvent.changeText(screen.getByPlaceholderText('Search by name or email…'), 'zzz-nomatch');
 
     expect(screen.getByText('No matches found')).toBeTruthy();
   });
@@ -89,10 +89,10 @@ describe('CustomersScreen', () => {
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
 
-    fireEvent.changeText(screen.getByPlaceholderText('Search by name, email, or phone…'), 'bob');
+    fireEvent.changeText(screen.getByPlaceholderText('Search by name or email…'), 'bob');
     fireEvent.press(screen.getByText('close-circle'));
 
-    expect(screen.getByPlaceholderText('Search by name, email, or phone…').props.value).toBe('');
+    expect(screen.getByPlaceholderText('Search by name or email…').props.value).toBe('');
   });
 
   it('filters to a single customer when route.params.customerId is set, with a "back to all" banner', async () => {
@@ -137,15 +137,15 @@ describe('CustomersScreen', () => {
     await waitFor(() => expect(screen.getByText('noname@shop.com')).toBeTruthy());
   });
 
-  it('shows "Inactive" status and no-phone fallback in the detail modal', async () => {
-    setupApis([customer({ status: 'INACTIVE', phone: null })], []);
+  it('shows "Inactive" status and never displays a phone number in the detail modal', async () => {
+    setupApis([customer({ status: 'INACTIVE' })], []);
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
 
     fireEvent.press(screen.getByText('Jane Doe'));
 
     expect(screen.getByText('Inactive')).toBeTruthy();
-    expect(screen.getByText('No phone number')).toBeTruthy();
+    expect(screen.queryByText('5551234567')).toBeNull();
   });
 
   it('closes the detail modal via the close button', async () => {

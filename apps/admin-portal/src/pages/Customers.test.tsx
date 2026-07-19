@@ -45,7 +45,7 @@ describe('Customers', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument());
     expect(screen.getByText('2 vehicles')).toBeInTheDocument();
-    expect(screen.getByText('555-1234')).toBeInTheDocument();
+    expect(screen.queryByText('555-1234')).not.toBeInTheDocument();
   });
 
   it('falls back to email as the display name and initials when no first/last name', async () => {
@@ -55,7 +55,7 @@ describe('Customers', () => {
     await waitFor(() => expect(screen.getByText('noname@shop.com')).toBeInTheDocument());
   });
 
-  it('filters by search across name/email/phone, with a "No matches" empty state', async () => {
+  it('filters by search across name/email, with a "No matches" empty state', async () => {
     vi.mocked(listCustomers).mockResolvedValue({
       items: [customer(), customer({ userId: 'c2', firstName: 'Bob', lastName: 'Smith', email: 'bob@shop.com', phone: '555-9999' })],
       nextCursor: null,
@@ -64,11 +64,11 @@ describe('Customers', () => {
     renderPage();
     await waitFor(() => screen.getByText('Jane Doe'));
 
-    fireEvent.change(screen.getByPlaceholderText('Search by name, email, or phone…'), { target: { value: 'bob' } });
+    fireEvent.change(screen.getByPlaceholderText('Search by name or email…'), { target: { value: 'bob' } });
     expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument();
     expect(screen.getByText('Bob Smith')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Search by name, email, or phone…'), { target: { value: 'zzz-no-match' } });
+    fireEvent.change(screen.getByPlaceholderText('Search by name or email…'), { target: { value: 'zzz-no-match' } });
     expect(screen.getByText('No matches')).toBeInTheDocument();
   });
 

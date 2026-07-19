@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboardSummary, type DashboardSummary } from '../api/dashboard';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
-import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
@@ -38,7 +37,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [todaysAppointments, setTodaysAppointments] = useState<Appointment[]>([]);
-  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -60,18 +58,14 @@ export default function Dashboard() {
     Promise.all([
       getDashboardSummary().catch(() => null),
       fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
-      fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
       fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
-    ]).then(([sum, appts, customers, vehicles]) => {
+    ]).then(([sum, appts, vehicles]) => {
       setSummary(sum);
       setTodaysAppointments(
         appts
           .filter(a => a.scheduledAt.startsWith(today))
           .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
       );
-      const map: Record<string, Customer> = {};
-      customers.forEach(c => { map[c.userId] = c; });
-      setCustomerMap(map);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
@@ -183,13 +177,11 @@ export default function Dashboard() {
           const dashFiltered = dashSearch.trim()
             ? todaysAppointments.filter(a => {
                 const q = dashSearch.toLowerCase();
-                const customer = a.customerId ? customerMap[a.customerId] : undefined;
                 return (
                   a.serviceName.toLowerCase().includes(q) ||
                   (a.customerName ?? '').toLowerCase().includes(q) ||
                   (a.customerEmail ?? '').toLowerCase().includes(q) ||
-                  (a.vehicleSummary ?? '').toLowerCase().includes(q) ||
-                  (customer?.phone ?? '').toLowerCase().includes(q)
+                  (a.vehicleSummary ?? '').toLowerCase().includes(q)
                 );
               })
             : todaysAppointments;
@@ -314,7 +306,6 @@ export default function Dashboard() {
         const st = STATUS_STYLE[a.status];
         const opts = VALID_NEXT[a.status];
         const isUpdating = updating === a.appointmentId;
-        const customer = a.customerId ? customerMap[a.customerId] : undefined;
         return (
           <>
             <div onClick={() => setDetailAppt(null)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 200 }} />
@@ -336,13 +327,9 @@ export default function Dashboard() {
                       <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{a.customerName}</span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📞</span>
-                    <span style={{ fontSize: '13px', color: customer?.phone ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{customer?.phone ?? '—'}</span>
                   </div>
                 </div>
 

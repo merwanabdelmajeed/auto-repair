@@ -1,9 +1,7 @@
 import React from 'react';
-import { Linking } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import RegisterScreen from './RegisterScreen';
 import { useAuth } from '../auth/AuthContext';
-import { PRIVACY_POLICY_URL } from '../constants';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 
@@ -46,7 +44,7 @@ describe('RegisterScreen', () => {
     expect(screen.getByText('Password must be at least 8 characters.')).toBeTruthy();
   });
 
-  it('registers with trimmed names/email and no phone/consent when phone is left blank', async () => {
+  it('registers with trimmed names/email', async () => {
     mockRegister.mockResolvedValue(undefined);
     render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
     fillRequiredFields({ first: '  Jane  ', last: '  Doe  ', email: '  jane@shop.com  ' });
@@ -54,66 +52,14 @@ describe('RegisterScreen', () => {
     fireEvent.press(screen.getByTestId('register-submit-btn'));
 
     await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
-      'jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe', undefined, undefined,
+      'jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe',
     ));
     expect(mockOnRegistered).toHaveBeenCalledWith('jane@shop.com', 'password1');
   });
 
-  it('does not show the SMS consent checkbox until a phone number is entered', () => {
+  it('does not render a phone number field', () => {
     render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    expect(screen.queryByTestId('register-sms-consent')).toBeNull();
-
-    fireEvent.changeText(screen.getByPlaceholderText('(555) 123-4567'), '5551234567');
-
-    expect(screen.getByTestId('register-sms-consent')).toBeTruthy();
-  });
-
-  it('hides the consent checkbox again and resets consent when phone is cleared', () => {
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    const phoneInput = screen.getByPlaceholderText('(555) 123-4567');
-    fireEvent.changeText(phoneInput, '5551234567');
-    fireEvent.press(screen.getByTestId('register-sms-consent'));
-
-    fireEvent.changeText(phoneInput, '');
-
-    expect(screen.queryByTestId('register-sms-consent')).toBeNull();
-  });
-
-  it('registers with phone but consent undefined-as-false when the box is left unchecked', async () => {
-    mockRegister.mockResolvedValue(undefined);
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    fillRequiredFields();
-    fireEvent.changeText(screen.getByPlaceholderText('(555) 123-4567'), '5551234567');
-
-    fireEvent.press(screen.getByTestId('register-submit-btn'));
-
-    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
-      'jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe', '(555) 123-4567', false,
-    ));
-  });
-
-  it('registers with phone and smsConsent true when the box is checked', async () => {
-    mockRegister.mockResolvedValue(undefined);
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    fillRequiredFields();
-    fireEvent.changeText(screen.getByPlaceholderText('(555) 123-4567'), '5551234567');
-    fireEvent.press(screen.getByTestId('register-sms-consent'));
-
-    fireEvent.press(screen.getByTestId('register-submit-btn'));
-
-    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
-      'jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe', '(555) 123-4567', true,
-    ));
-  });
-
-  it('opens the privacy policy link from the consent text', () => {
-    const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    fireEvent.changeText(screen.getByPlaceholderText('(555) 123-4567'), '5551234567');
-
-    fireEvent.press(screen.getByText('Privacy Policy'));
-
-    expect(openURLSpy).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
+    expect(screen.queryByPlaceholderText('(555) 123-4567')).toBeNull();
   });
 
   it('shows the Cognito error message on failure', async () => {

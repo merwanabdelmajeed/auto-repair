@@ -66,8 +66,7 @@ export default function CustomersScreen({ navigation, route }: any) {
   const filtered = search.trim()
     ? base.filter(c =>
         c.email.toLowerCase().includes(search.toLowerCase()) ||
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-        (c.phone ?? '').toLowerCase().includes(search.toLowerCase())
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase())
       )
     : base;
 
@@ -79,7 +78,7 @@ export default function CustomersScreen({ navigation, route }: any) {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name, email, or phone…"
+          placeholder="Search by name or email…"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
         />
@@ -135,9 +134,6 @@ export default function CustomersScreen({ navigation, route }: any) {
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{displayName(c)}</Text>
                 {(c.firstName || c.lastName) && <Text style={styles.cardEmail}>{c.email}</Text>}
-                <Text style={[styles.cardPhone, !c.phone && styles.cardPhoneMuted]}>
-                  {c.phone ?? '—'}
-                </Text>
                 <Text style={styles.cardDate}>Joined {fmtDate(c.createdAt)}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -178,15 +174,9 @@ export default function CustomersScreen({ navigation, route }: any) {
                     {/* Contact info */}
                     <Text style={styles.sectionLabel}>Contact</Text>
                     <View style={styles.infoCard}>
-                      <View style={styles.infoRow}>
+                      <View style={[styles.infoRow, styles.infoRowLast]}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
                         <Text style={styles.infoValue}>{selectedCustomer.email}</Text>
-                      </View>
-                      <View style={[styles.infoRow, styles.infoRowLast]}>
-                        <Ionicons name="call-outline" size={15} color={colors.textMuted} />
-                        <Text style={[styles.infoValue, !selectedCustomer.phone && { color: colors.textMuted }]}>
-                          {selectedCustomer.phone ?? 'No phone number'}
-                        </Text>
                       </View>
                     </View>
 
@@ -272,8 +262,6 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1 },
   cardName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', marginBottom: 2 },
   cardEmail: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
-  cardPhone: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
-  cardPhoneMuted: { color: colors.textMuted },
   cardDate: { ...typography.small, color: colors.textMuted },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

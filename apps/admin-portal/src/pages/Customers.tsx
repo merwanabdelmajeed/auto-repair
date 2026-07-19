@@ -61,8 +61,7 @@ export default function Customers() {
   const filtered = search.trim()
     ? base.filter(c =>
         c.email.toLowerCase().includes(search.toLowerCase()) ||
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-        (c.phone ?? '').toLowerCase().includes(search.toLowerCase())
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase())
       )
     : base;
 
@@ -74,7 +73,7 @@ export default function Customers() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, email, or phone…"
+            placeholder="Search by name or email…"
             style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '14px', color: 'var(--color-text-primary)', width: '100%' }}
           />
         </div>
@@ -113,16 +112,16 @@ export default function Customers() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-background)' }}>
-              {['Customer', 'Phone', 'Vehicles', 'Status', 'Joined'].map(col => (
+              {['Customer', 'Vehicles', 'Status', 'Joined'].map(col => (
                 <th key={col} style={{ textAlign: 'left', padding: '13px 16px', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading customers…</td></tr>
+              <tr><td colSpan={4} style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading customers…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <tr><td colSpan={4} style={{ padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: '36px', marginBottom: '12px' }}>👤</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>{search ? 'No matches' : 'No customers yet'}</div>
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Customers register through the customer app.</div>
@@ -141,9 +140,6 @@ export default function Customers() {
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{displayName(c)}</div>
                     {(c.firstName || c.lastName) && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{c.email}</div>}
-                  </td>
-                  <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                    {c.phone ?? <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                     {vehicles.length > 0
@@ -193,10 +189,6 @@ export default function Customers() {
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{c.email}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📞</span>
-                    <span style={{ fontSize: '13px', color: c.phone ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{c.phone ?? '—'}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📅</span>
