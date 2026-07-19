@@ -1,0 +1,21 @@
+version: 1
+# Monorepo build spec — Amplify builds only the admin-portal web app.
+# appRoot makes Amplify cd into apps/admin-portal; baseDirectory is relative to it.
+# (Also set AMPLIFY_MONOREPO_APP_ROOT=apps/admin-portal in each app's env vars.)
+applications:
+  - appRoot: apps/admin-portal
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
