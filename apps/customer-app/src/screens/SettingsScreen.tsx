@@ -15,8 +15,13 @@ export default function SettingsScreen({ navigation }: any) {
   function confirmLogout() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => void logout() },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void handleLogout() },
     ]);
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigation.navigate('Home');
   }
 
   function confirmDeleteAccount() {
