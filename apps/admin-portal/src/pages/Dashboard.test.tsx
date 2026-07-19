@@ -193,13 +193,12 @@ describe('Dashboard — detail panel', () => {
     await waitFor(() => screen.getByText('Oil Change'));
 
     fireEvent.click(screen.getByText('Oil Change'));
-    // 555-1234 (phone) and the plain "Pending" status span are only ever rendered
-    // inside the detail panel, unlike the email/vehicle-summary text which also appears in the row.
-    expect(screen.getByText('555-1234')).toBeInTheDocument();
+    // The plain "Pending" status span is only ever rendered inside the detail
+    // panel, unlike the email/vehicle-summary text which also appears in the row.
     expect(screen.getByText('Pending', { selector: 'span' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('✕'));
-    expect(screen.queryByText('555-1234')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pending', { selector: 'span' })).not.toBeInTheDocument();
   });
 
   it('expands vehicle details and saves an inline plate/VIN edit', async () => {

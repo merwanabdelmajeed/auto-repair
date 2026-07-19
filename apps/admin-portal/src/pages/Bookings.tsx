@@ -7,7 +7,6 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '../api/appointments';
-import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
@@ -53,7 +52,6 @@ function fmt(iso: string) {
 
 export default function Bookings() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -94,15 +92,11 @@ export default function Bookings() {
     try {
       setLoading(true);
       setError('');
-      const [data, customers, vehicles] = await Promise.all([
+      const [data, vehicles] = await Promise.all([
         fetchAllPages(cursor => listAppointments(cursor)),
-        fetchAllPages(cursor => listCustomers(cursor)),
         fetchAllPages(cursor => listVehicles(cursor)),
       ]);
       setAppointments(data);
-      const map: Record<string, Customer> = {};
-      customers.forEach(c => { map[c.userId] = c; });
-      setCustomerMap(map);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
@@ -173,13 +167,11 @@ export default function Bookings() {
   function matchesSearch(appt: Appointment): boolean {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
-    const customer = customerMap[appt.customerId];
     return (
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
       appt.customerEmail.toLowerCase().includes(q) ||
-      (appt.vehicleSummary ?? '').toLowerCase().includes(q) ||
-      (customer?.phone ?? '').toLowerCase().includes(q)
+      (appt.vehicleSummary ?? '').toLowerCase().includes(q)
     );
   }
 
@@ -335,7 +327,6 @@ export default function Bookings() {
         const st = STATUS_STYLE[a.status];
         const opts = VALID_NEXT[a.status];
         const isUpdating = updating === a.appointmentId;
-        const customer = customerMap[a.customerId];
         return (
           <>
             <div onClick={() => setDetailAppt(null)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
@@ -357,13 +348,9 @@ export default function Bookings() {
                       <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{a.customerName}</span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📞</span>
-                    <span style={{ fontSize: '13px', color: customer?.phone ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{customer?.phone ?? '—'}</span>
                   </div>
                 </div>
 

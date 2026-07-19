@@ -314,7 +314,6 @@ export default function VehiclesScreen({ navigation, route }: any) {
                           <View style={{ flex: 1 }}>
                             <Text style={styles.ownerName}>{displayName(owner)}</Text>
                             <Text style={styles.ownerEmail}>{owner.email}</Text>
-                            {owner.phone ? <Text style={styles.ownerPhone}>{owner.phone}</Text> : null}
                           </View>
                           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
@@ -392,6 +391,5 @@ const styles = StyleSheet.create({
   ownerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
   ownerAvatarText: { ...typography.h4, color: colors.white, fontSize: 15 },
   ownerName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', marginBottom: 2 },
-  ownerEmail: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
-  ownerPhone: { ...typography.small, color: colors.textSecondary },
+  ownerEmail: { ...typography.small, color: colors.textSecondary },
 });

@@ -332,8 +332,7 @@ export default function Vehicles() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '2px' }}>{displayName(owner)}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: owner.phone ? '2px' : 0 }}>{owner.email}</div>
-                        {owner.phone && <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{owner.phone}</div>}
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{owner.email}</div>
                       </div>
                       <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>›</span>
                     </div>

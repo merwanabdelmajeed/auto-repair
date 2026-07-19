@@ -15,7 +15,6 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '../api/appointments';
-import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
 import { fetchAllPages } from '../utils/fetchAllPages';
@@ -59,7 +58,6 @@ function fmtDateOnly(iso: string) {
 
 export default function BookingsScreen({ route, navigation }: any) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,15 +76,11 @@ export default function BookingsScreen({ route, navigation }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [appts, customers, vehicles] = await Promise.all([
+      const [appts, vehicles] = await Promise.all([
         fetchAllPages(cursor => listAppointments(cursor)),
-        fetchAllPages(cursor => listCustomers(cursor)),
         fetchAllPages(cursor => listVehicles(cursor)),
       ]);
       setAppointments(appts);
-      const cmap: Record<string, Customer> = {};
-      customers.forEach(c => { cmap[c.userId] = c; });
-      setCustomerMap(cmap);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
@@ -209,13 +203,11 @@ export default function BookingsScreen({ route, navigation }: any) {
   function matchesSearch(appt: Appointment): boolean {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
-    const customer = customerMap[appt.customerId];
     return (
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
       appt.customerEmail.toLowerCase().includes(q) ||
-      (appt.vehicleSummary ?? '').toLowerCase().includes(q) ||
-      (customer?.phone ?? '').toLowerCase().includes(q)
+      (appt.vehicleSummary ?? '').toLowerCase().includes(q)
     );
   }
 
@@ -347,7 +339,6 @@ export default function BookingsScreen({ route, navigation }: any) {
           <View style={styles.modalSheet}>
             {detailAppt && (() => {
               const sc = STATUS_COLOR[detailAppt.status];
-              const customer = customerMap[detailAppt.customerId];
               const veh = vehicleMap[detailAppt.vehicleId];
               const isUpdating = updating === detailAppt.appointmentId;
               return (
@@ -374,16 +365,10 @@ export default function BookingsScreen({ route, navigation }: any) {
                           <Text style={styles.infoValue}>{detailAppt.customerName}</Text>
                         </View>
                       ) : null}
-                      <View style={styles.infoRow}>
+                      <View style={[styles.infoRow, styles.infoRowLast]}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
                         <Text style={styles.infoValue}>{detailAppt.customerEmail}</Text>
                       </View>
-                      {customer?.phone ? (
-                        <View style={[styles.infoRow, styles.infoRowLast]}>
-                          <Ionicons name="call-outline" size={15} color={colors.textMuted} />
-                          <Text style={styles.infoValue}>{customer.phone}</Text>
-                        </View>
-                      ) : <View style={styles.infoRowLast} />}
                     </View>
 
                     {/* Appointment section */}

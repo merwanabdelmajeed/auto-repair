@@ -11,7 +11,6 @@ import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { getDashboardSummary, type DashboardSummary } from '../api/dashboard';
 import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
-import { listCustomers, type Customer } from '../api/customers';
 import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
 import { fetchAllPages } from '../utils/fetchAllPages';
@@ -44,7 +43,6 @@ function fmtDateOnly(iso: string) {
 export default function DashboardScreen({ navigation }: any) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [todaysAppointments, setTodaysAppointments] = useState<Appointment[]>([]);
-  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,10 +61,9 @@ export default function DashboardScreen({ navigation }: any) {
     if (!isRefresh) setLoading(true);
     const today = todayLocalDate();
     try {
-      const [sum, appts, customers, vehicles] = await Promise.all([
+      const [sum, appts, vehicles] = await Promise.all([
         getDashboardSummary().catch(() => null as DashboardSummary | null),
         fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
-        fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
         fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
       ]);
       setSummary(sum);
@@ -75,9 +72,6 @@ export default function DashboardScreen({ navigation }: any) {
           .filter(a => a.scheduledAt.startsWith(today))
           .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
       );
-      const cmap: Record<string, Customer> = {};
-      customers.forEach(c => { cmap[c.userId] = c; });
-      setCustomerMap(cmap);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
@@ -245,13 +239,11 @@ export default function DashboardScreen({ navigation }: any) {
           const dashFiltered = dashSearch.trim()
             ? todaysAppointments.filter(a => {
                 const q = dashSearch.toLowerCase();
-                const customer = customerMap[a.customerId];
                 return (
                   a.serviceName.toLowerCase().includes(q) ||
                   (a.customerName ?? '').toLowerCase().includes(q) ||
                   a.customerEmail.toLowerCase().includes(q) ||
-                  (a.vehicleSummary ?? '').toLowerCase().includes(q) ||
-                  (customer?.phone ?? '').toLowerCase().includes(q)
+                  (a.vehicleSummary ?? '').toLowerCase().includes(q)
                 );
               })
             : todaysAppointments;
@@ -335,7 +327,6 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.modalSheet}>
             {detailAppt && (() => {
               const sc = STATUS_COLOR[detailAppt.status];
-              const customer = customerMap[detailAppt.customerId];
               const veh = vehicleMap[detailAppt.vehicleId];
               const isUpdating = updatingAppt === detailAppt.appointmentId;
               return (
@@ -361,16 +352,10 @@ export default function DashboardScreen({ navigation }: any) {
                           <Text style={styles.infoValue}>{detailAppt.customerName}</Text>
                         </View>
                       ) : null}
-                      <View style={styles.infoRow}>
+                      <View style={[styles.infoRow, styles.infoRowLast]}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
                         <Text style={styles.infoValue}>{detailAppt.customerEmail}</Text>
                       </View>
-                      {customer?.phone ? (
-                        <View style={[styles.infoRow, styles.infoRowLast]}>
-                          <Ionicons name="call-outline" size={15} color={colors.textMuted} />
-                          <Text style={styles.infoValue}>{customer.phone}</Text>
-                        </View>
-                      ) : <View style={styles.infoRowLast} />}
                     </View>
 
                     <Text style={styles.sectionLabel}>Appointment</Text>

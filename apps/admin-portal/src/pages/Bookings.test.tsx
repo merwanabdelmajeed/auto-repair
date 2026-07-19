@@ -92,14 +92,14 @@ describe('Bookings — URL appointmentId auto-open', () => {
   it('opens the detail panel for the matching appointment and strips the query param', async () => {
     mockLoad();
     renderPage(['/bookings?appointmentId=a1']);
-    await waitFor(() => expect(screen.getByText('555-1234')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('✕')).toBeInTheDocument());
   });
 
   it('does nothing when the appointmentId param matches no loaded appointment', async () => {
     mockLoad();
     renderPage(['/bookings?appointmentId=does-not-exist']);
     await waitFor(() => screen.getByText('Oil Change'));
-    expect(screen.queryByText('555-1234')).not.toBeInTheDocument();
+    expect(screen.queryByText('✕')).not.toBeInTheDocument();
   });
 });
 
