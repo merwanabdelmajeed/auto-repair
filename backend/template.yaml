@@ -8,6 +8,14 @@ Parameters:
     Default: prod
     AllowedValues: [dev, staging, prod]
     Description: Deployment environment. Determines the suffix appended to every environment-scoped resource name (empty for prod, so the currently-deployed prod stack is unaffected by this parameterization).
+  OriginationNumber:
+    Type: String
+    Default: '+18557294596'
+    Description: E.164 toll-free number (AWS End User Messaging) used as the origination identity for phone-verification OTP texts. Provisioned out-of-band via request-phone-number.
+  ShopName:
+    Type: String
+    Default: 'Auto Repair Shop'
+    Description: Display name used as the brand in outbound OTP text messages.
 
 Mappings:
   EnvironmentMap:
@@ -116,6 +124,13 @@ Resources:
                   - cognito-idp:AdminDeleteUser
                 # Same circular-dependency reason as the ListUsers grant above —
                 # can't scope to !GetAtt UserPool.Arn.
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sms-voice:SendTextMessage
+                # End User Messaging authorizes a send against both the
+                # origination phone-number resource and the destination; '*'
+                # keeps this simple and matches the sns:Publish grant style above.
                 Resource: '*'
 
   # ── COGNITO ───────────────────────────────────────────────
@@ -700,6 +715,30 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+
+  VerificationsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub
+        - 'autorepair-verifications${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      # OTP rows are short-lived; DynamoDB TTL purges them ~an hour after issue so
+      # spent/abandoned codes never accumulate. No PITR — nothing here is durable.
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
   AnalyticsTable:
     Type: AWS::DynamoDB::Table
@@ -1517,6 +1556,42 @@ Resources:
               - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
             Description: Send 24h and 2h appointment reminders
             Enabled: true
+
+  VerificationFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/verification/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-verification${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          ORIGINATION_NUMBER: !Ref OriginationNumber
+          APP_NAME: !Ref ShopName
+      Events:
+        VerificationPhoneSend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /verification/phone/send
+            Method: POST
+        VerificationPhoneConfirm:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /verification/phone/confirm
+            Method: POST
 
 # ─────────────────────────────────────────────────────────────
 # ANALYTICS

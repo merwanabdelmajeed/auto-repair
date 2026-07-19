@@ -166,9 +166,9 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
                 color={smsConsent ? colors.primary : colors.textMuted}
               />
               <Text style={styles.consentText}>
-                I agree to receive SMS text messages from {SHOP_NAME} (appointment reminders,
-                service updates, and promotions). Message frequency varies. Message & data rates
-                may apply. Reply STOP to opt out, HELP for help. See our{' '}
+                I agree to receive a one-time verification code by SMS from {SHOP_NAME} to verify
+                my phone number. Message & data rates may apply. Reply STOP to opt out, HELP for
+                help. See our{' '}
                 <Text style={styles.consentLink} onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}>
                   Privacy Policy
                 </Text>.

@@ -36,11 +36,11 @@ describe('ProfileScreen — display', () => {
     expect(screen.getByText('J')).toBeTruthy();
   });
 
-  it('does not show a phone field', () => {
+  it('shows the optional phone verification section', () => {
     setup({ email: 'jane@shop.com' });
     render(<ProfileScreen />);
-    expect(screen.queryByText('Phone Number')).toBeNull();
-    expect(screen.queryByText('Verify')).toBeNull();
+    expect(screen.getByText('Phone Verification')).toBeTruthy();
+    expect(screen.getByTestId('phone-send-btn')).toBeTruthy();
   });
 });
 
@@ -53,7 +53,8 @@ describe('ProfileScreen — edit profile modal', () => {
 
     expect(screen.getByDisplayValue('Jane')).toBeTruthy();
     expect(screen.getByDisplayValue('Doe')).toBeTruthy();
-    expect(screen.queryByPlaceholderText('(555) 123-4567')).toBeNull();
+    // The edit modal itself only edits name — it exposes the Save Changes action.
+    expect(screen.getByText('Save Changes')).toBeTruthy();
   });
 
   it('requires first and last name', () => {

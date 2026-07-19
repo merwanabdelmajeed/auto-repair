@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
+import PhoneVerification from '../components/PhoneVerification';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
@@ -94,6 +95,9 @@ export default function ProfileScreen() {
             </View>
           ))}
         </View>
+
+        {/* Phone Verification */}
+        <PhoneVerification />
 
         {/* Sign Out */}
         <TouchableOpacity style={styles.signOutBtn} onPress={confirmLogout} activeOpacity={0.8}>

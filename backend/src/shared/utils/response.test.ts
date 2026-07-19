@@ -1,4 +1,4 @@
-import { ok, paginated, created, badRequest, unauthorized, forbidden, notFound, conflict, serverError } from './response.js';
+import { ok, paginated, created, badRequest, unauthorized, forbidden, notFound, conflict, tooManyRequests, serverError } from './response.js';
 
 function body(result: { body: string }) {
   return JSON.parse(result.body);
@@ -54,6 +54,12 @@ describe('response helpers', () => {
     const r = conflict('slot taken');
     expect(r.statusCode).toBe(409);
     expect(body(r).error).toBe('slot taken');
+  });
+
+  it('tooManyRequests returns status 429, defaulting its message', () => {
+    expect(tooManyRequests().statusCode).toBe(429);
+    expect(body(tooManyRequests()).error).toBe('Too many requests');
+    expect(body(tooManyRequests('slow down')).error).toBe('slow down');
   });
 
   it('serverError defaults its message when called with no argument', () => {

@@ -7,6 +7,7 @@ import * as notifications from './notifications';
 import * as promotions from './promotions';
 import * as services from './services';
 import * as vehicles from './vehicles';
+import * as verification from './verification';
 
 jest.mock('./client', () => ({
   api: { get: jest.fn(), post: jest.fn(), put: jest.fn(), patch: jest.fn(), delete: jest.fn() },
@@ -105,5 +106,16 @@ describe('vehicles api', () => {
   it('lookupPlate URL-encodes plate and state', () => {
     vehicles.lookupPlate('ABC 123', 'ca');
     expect(api.get).toHaveBeenCalledWith('/vehicles/plate?plate=ABC%20123&state=ca');
+  });
+});
+
+describe('verification api', () => {
+  it('sendPhoneCode', () => {
+    verification.sendPhoneCode('(555) 123-4567');
+    expect(api.post).toHaveBeenCalledWith('/verification/phone/send', { phone: '(555) 123-4567' });
+  });
+  it('confirmPhoneCode', () => {
+    verification.confirmPhoneCode('(555) 123-4567', '654321');
+    expect(api.post).toHaveBeenCalledWith('/verification/phone/confirm', { phone: '(555) 123-4567', code: '654321' });
   });
 });
