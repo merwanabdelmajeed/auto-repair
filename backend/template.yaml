@@ -18,6 +18,12 @@ Mappings:
     prod:
       Suffix: ''
 
+Conditions:
+  # WAF (per-IP rate limiting) is only worth its ~$6/mo Web ACL floor on the
+  # public prod API. The dev/staging APIs have no real traffic to protect, so
+  # the WebACL + its stage association below are created for prod only.
+  IsProd: !Equals [!Ref Environment, prod]
+
 Globals:
   Function:
     Runtime: nodejs20.x
@@ -804,6 +810,7 @@ Resources:
   # Cognito's own SignUp/OTP APIs — those are called directly from the apps,
   # never through this API Gateway, and rely on Cognito's own built-in quotas.
   ApiWebAcl:
+    Condition: IsProd
     Type: AWS::WAFv2::WebACL
     Properties:
       Name: !Sub
@@ -840,6 +847,7 @@ Resources:
               - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
 
   ApiWebAclAssociation:
+    Condition: IsProd
     Type: AWS::WAFv2::WebACLAssociation
     # SAM's implicitly-created Stage resource is not otherwise referenced here
     # (ResourceArn below is a hand-built ARN, not a !Ref/!GetAtt), so on a
