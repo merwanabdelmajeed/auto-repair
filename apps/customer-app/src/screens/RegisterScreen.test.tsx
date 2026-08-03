@@ -52,7 +52,7 @@ describe('RegisterScreen', () => {
     fireEvent.press(screen.getByTestId('register-submit-btn'));
 
     await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
-      'jane@shop.com', 'password1', 'demo-tenant', 'Jane', 'Doe',
+      'jane@shop.com', 'password1', 'purrfect-17', 'Jane', 'Doe',
     ));
     expect(mockOnRegistered).toHaveBeenCalledWith('jane@shop.com', 'password1');
   });
