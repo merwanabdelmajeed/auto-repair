@@ -140,6 +140,29 @@ describe('login', () => {
 
     await expect(CognitoService.login('a@shop.com', 'wrong')).rejects.toThrow('bad credentials');
   });
+
+  it.each(['SUPER_ADMIN', 'TENANT_OWNER', 'LOCATION_MANAGER'])(
+    'rejects and signs out a %s (admin) account authenticating against the customer client',
+    async (role) => {
+      mockUserInstance.authenticateUser.mockImplementation((_auth: unknown, callbacks: { onSuccess: (s: unknown) => void }) => {
+        callbacks.onSuccess(fakeSession({ 'custom:role': role }));
+      });
+
+      await expect(CognitoService.login('admin@shop.com', 'pw')).rejects.toBeInstanceOf(CognitoService.NotAuthorizedRoleError);
+      expect(mockUserInstance.signOut).toHaveBeenCalled();
+    },
+  );
+
+  it('allows a customer whose token has no custom:role claim (self-signup sets role only in DynamoDB)', async () => {
+    mockUserInstance.authenticateUser.mockImplementation((_auth: unknown, callbacks: { onSuccess: (s: unknown) => void }) => {
+      callbacks.onSuccess(fakeSession({ 'custom:role': undefined }));
+    });
+
+    const user = await CognitoService.login('a@shop.com', 'pw');
+
+    expect(user.userId).toBe('u1');
+    expect(mockUserInstance.signOut).not.toHaveBeenCalled();
+  });
 });
 
 describe('logout', () => {
@@ -171,6 +194,14 @@ describe('getSessionUser', () => {
     mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
     mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
     await expect(CognitoService.getSessionUser()).resolves.toMatchObject({ userId: 'u1', tenantId: 't1' });
+  });
+
+  it('signs out and resolves null for a valid session belonging to an admin role', async () => {
+    mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
+    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) =>
+      cb(null, fakeSession({ 'custom:role': 'TENANT_OWNER' })));
+    await expect(CognitoService.getSessionUser()).resolves.toBeNull();
+    expect(mockUserInstance.signOut).toHaveBeenCalled();
   });
 });
 
