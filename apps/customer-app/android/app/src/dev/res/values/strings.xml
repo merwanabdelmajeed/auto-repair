@@ -1,0 +1,5 @@
+<resources>
+  <!-- Overrides app_name from src/main for the `dev` product flavor only, so
+       the dev build's launcher label distinguishes it from the prod app. -->
+  <string name="app_name">Purrfect Auto Dev</string>
+</resources>

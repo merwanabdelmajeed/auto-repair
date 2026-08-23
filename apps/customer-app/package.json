@@ -4,8 +4,12 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start --port 8081",
-    "android": "expo run:android --port 8081",
-    "ios": "expo run:ios --port 8081",
+    "android": "npm run android:prod",
+    "android:dev": "node -e \"require('fs').copyFileSync('.env.dev.bak','.env')\" && cross-env APP_VARIANT=dev expo run:android --port 8081 --variant devDebug",
+    "android:prod": "node -e \"require('fs').copyFileSync('.env.prod.bak','.env')\" && cross-env APP_VARIANT=prod expo run:android --port 8081 --variant prodDebug",
+    "ios": "npm run ios:prod",
+    "ios:dev": "node -e \"require('fs').copyFileSync('.env.dev.bak','.env')\" && cross-env APP_VARIANT=dev expo run:ios --port 8081",
+    "ios:prod": "node -e \"require('fs').copyFileSync('.env.prod.bak','.env')\" && cross-env APP_VARIANT=prod expo run:ios --port 8081",
     "web": "expo start --web --port 8081",
     "test": "jest",
     "test:coverage": "jest --coverage",
@@ -39,6 +43,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/react": "~18.3.12",
+    "cross-env": "^7.0.3",
     "jest": "^29.7.0",
     "jest-expo": "^52.0.6",
     "typescript": "^5.3.3"

@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "994465376905",
+    "project_id": "auto-repair-c4e99",
+    "storage_bucket": "auto-repair-c4e99.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994465376905:android:4892f3f546f5dbe544f458",
+        "android_client_info": {
+          "package_name": "com.autorepair.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnqfWCfywe-pCZqlGNWXCUNGRLgurati8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994465376905:android:c687570dde99f06044f458",
+        "android_client_info": {
+          "package_name": "com.autorepair.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnqfWCfywe-pCZqlGNWXCUNGRLgurati8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994465376905:android:56bf71c890701d4644f458",
+        "android_client_info": {
+          "package_name": "com.autorepair.customer.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnqfWCfywe-pCZqlGNWXCUNGRLgurati8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

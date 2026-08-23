@@ -91,7 +91,7 @@ android {
         applicationId 'com.autorepair.customer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
+        versionCode 3
         versionName "1.0.0"
     }
     signingConfigs {
@@ -114,6 +114,25 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
+        }
+    }
+    // Two installable variants from one project: `prod` keeps the base
+    // applicationId (com.autorepair.customer); `dev` appends ".dev" so the
+    // dev app (pointed at the dev backend) installs alongside prod on the same
+    // device. Build/run a variant with `expo run:android --variant devDebug`
+    // or `prodDebug` (see the app's package.json scripts).
+    flavorDimensions "env"
+    productFlavors {
+        prod {
+            dimension "env"
+            // Inherits applicationId com.autorepair.customer from defaultConfig.
+        }
+        dev {
+            dimension "env"
+            applicationIdSuffix ".dev"
+            // App label overridden in src/dev/res/values/strings.xml.
+            // Requires src/dev/google-services.json registered for
+            // com.autorepair.customer.dev, or the dev build will fail.
         }
     }
     packagingOptions {
