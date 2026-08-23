@@ -26,7 +26,8 @@
         "backgroundColor": "#0F2044"
       },
       "package": "com.autorepair.customer",
-      "googleServicesFile": "./android/app/google-services.json"
+      "versionCode": 4,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png",
