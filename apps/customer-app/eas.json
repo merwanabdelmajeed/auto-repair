@@ -19,6 +19,29 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
       }
     },
+    "development-ios": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "APP_VARIANT": "dev",
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_gUSWo1byB",
+        "EXPO_PUBLIC_COGNITO_CUSTOMER_CLIENT_ID": "7agv100sivirn64e0so3pg9iut",
+        "EXPO_PUBLIC_API_BASE_URL": "https://bim2pne2sa.execute-api.us-east-1.amazonaws.com/prod"
+      }
+    },
+    "production-ios": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
+        "EXPO_PUBLIC_COGNITO_CUSTOMER_CLIENT_ID": "1r1pa5nvf4ob4bdfva8j1gha0h",
+        "EXPO_PUBLIC_API_BASE_URL": "https://yzj4dz75a5.execute-api.us-east-1.amazonaws.com/prod"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "android": {
