@@ -37,8 +37,5 @@ export const notFound = (error = 'Not found'): APIGatewayProxyResult =>
 export const conflict = (error: string): APIGatewayProxyResult =>
   json(409, { success: false, error });
 
-export const tooManyRequests = (error = 'Too many requests'): APIGatewayProxyResult =>
-  json(429, { success: false, error });
-
 export const serverError = (error = 'Internal server error'): APIGatewayProxyResult =>
   json(500, { success: false, error });

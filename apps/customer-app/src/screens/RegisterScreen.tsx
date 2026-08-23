@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SHOP_NAME, PRIVACY_POLICY_URL, DEFAULT_TENANT_ID } from '../constants';
+import { SHOP_NAME, DEFAULT_TENANT_ID } from '../constants';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
@@ -20,31 +19,16 @@ type Props = {
   onRegistered: (email: string, password: string) => void;
 };
 
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
 export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Props) {
   const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [smsConsent, setSmsConsent] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  function handlePhoneChange(text: string) {
-    const formatted = formatPhone(text);
-    setPhone(formatted);
-    if (!formatted) setSmsConsent(false);
-  }
 
   const handleRegister = async () => {
     if (!firstName.trim() || !lastName.trim() || !email || !password || !confirm) {
@@ -63,10 +47,8 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
     setLoading(true);
     try {
       const trimmedEmail = email.trim();
-      const trimmedPhone = phone.trim();
       await register(
         trimmedEmail, password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(),
-        trimmedPhone || undefined, trimmedPhone ? smsConsent : undefined,
       );
       onRegistered(trimmedEmail, password);
     } catch (e: unknown) {
@@ -141,40 +123,6 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
             autoCapitalize="none"
             autoComplete="email"
           />
-
-          <Text style={styles.label}>Phone <Text style={styles.optional}>(optional)</Text></Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={handlePhoneChange}
-            placeholder="(555) 123-4567"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-          />
-
-          {phone ? (
-            <TouchableOpacity
-              testID="register-sms-consent"
-              style={styles.consentRow}
-              onPress={() => setSmsConsent((v) => !v)}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={smsConsent ? 'checkbox' : 'square-outline'}
-                size={20}
-                color={smsConsent ? colors.primary : colors.textMuted}
-              />
-              <Text style={styles.consentText}>
-                I agree to receive a one-time verification code by SMS from {SHOP_NAME} to verify
-                my phone number. Message & data rates may apply. Reply STOP to opt out, HELP for
-                help. See our{' '}
-                <Text style={styles.consentLink} onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}>
-                  Privacy Policy
-                </Text>.
-              </Text>
-            </TouchableOpacity>
-          ) : null}
 
           <Text style={styles.label}>Password</Text>
           <View style={styles.passwordRow}>
@@ -295,15 +243,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     backgroundColor: colors.background,
   },
-  optional: { color: colors.textMuted, fontWeight: '400' },
-  consentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  consentText: { ...typography.bodySmall, color: colors.textSecondary, flex: 1, lineHeight: 18 },
-  consentLink: { color: colors.primary, fontWeight: '600' },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 48 },
   eyeBtn: {

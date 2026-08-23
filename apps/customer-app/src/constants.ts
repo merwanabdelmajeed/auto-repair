@@ -21,4 +21,4 @@ export const SUPPORT_URL =
 // For MVP, tenant ID is hardcoded — single-tenant deployment, no invitation-code
 // flow yet (Phase 12). Used both at registration and for guest browsing, since
 // unauthenticated requests have no JWT to derive it from.
-export const DEFAULT_TENANT_ID = 'demo-tenant';
+export const DEFAULT_TENANT_ID = 'purrfect-17';
