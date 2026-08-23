@@ -4,9 +4,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import SettingsScreen from './SettingsScreen';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
+import { updateProfileName } from '../api/users';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../auth/CognitoService', () => ({ updateProfile: jest.fn() }));
+jest.mock('../api/users', () => ({ updateProfileName: jest.fn() }));
 
 const mockLogout = jest.fn();
 const mockUpdateUser = jest.fn();
@@ -51,8 +53,9 @@ describe('SettingsScreen', () => {
     expect(updateProfile).not.toHaveBeenCalled();
   });
 
-  it('saves the profile and closes the modal on success', async () => {
+  it('saves the profile — updates Cognito AND persists the name to the backend', async () => {
     (updateProfile as jest.Mock).mockResolvedValue(undefined);
+    (updateProfileName as jest.Mock).mockResolvedValue({ firstName: 'Janet', lastName: 'Smith' });
     render(<SettingsScreen />);
     fireEvent.press(screen.getByText('Admin Profile'));
 
@@ -61,12 +64,25 @@ describe('SettingsScreen', () => {
     fireEvent.press(screen.getByText('Save Changes'));
 
     await waitFor(() => expect(updateProfile).toHaveBeenCalledWith('Janet', 'Smith'));
+    expect(updateProfileName).toHaveBeenCalledWith('Janet', 'Smith');
     expect(mockUpdateUser).toHaveBeenCalledWith({ givenName: 'Janet', familyName: 'Smith' });
     await waitFor(() => expect(screen.queryByPlaceholderText('First name')).toBeNull());
   });
 
-  it('shows an error message when saving the profile fails', async () => {
+  it('shows an error message when the Cognito update fails (and skips the backend call)', async () => {
     (updateProfile as jest.Mock).mockRejectedValue(new Error('network error'));
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByText('Admin Profile'));
+
+    fireEvent.press(screen.getByText('Save Changes'));
+
+    await waitFor(() => expect(screen.getByText('Failed to save. Please try again.')).toBeTruthy());
+    expect(updateProfileName).not.toHaveBeenCalled();
+  });
+
+  it('shows an error when the backend name sync fails', async () => {
+    (updateProfile as jest.Mock).mockResolvedValue(undefined);
+    (updateProfileName as jest.Mock).mockRejectedValue(new Error('network error'));
     render(<SettingsScreen />);
     fireEvent.press(screen.getByText('Admin Profile'));
 

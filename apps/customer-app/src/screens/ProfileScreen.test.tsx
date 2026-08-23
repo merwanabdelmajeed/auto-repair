@@ -4,10 +4,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import ProfileScreen from './ProfileScreen';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
+import { updateProfileName } from '../api/users';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../auth/CognitoService', () => ({
   updateProfile: jest.fn(),
+}));
+jest.mock('../api/users', () => ({
+  updateProfileName: jest.fn(),
 }));
 
 const mockLogout = jest.fn();
@@ -67,20 +71,22 @@ describe('ProfileScreen — edit profile modal', () => {
     expect(updateProfile).not.toHaveBeenCalled();
   });
 
-  it('saves successfully and closes the modal', async () => {
+  it('saves successfully — updates Cognito AND persists the name to the backend', async () => {
     setup({ givenName: 'Jane', familyName: 'Doe', email: 'jane@shop.com' });
     (updateProfile as jest.Mock).mockResolvedValue(undefined);
+    (updateProfileName as jest.Mock).mockResolvedValue({ firstName: 'Jane', lastName: 'Doe' });
     render(<ProfileScreen />);
     fireEvent.press(screen.getByText('Edit Profile'));
 
     fireEvent.press(screen.getByText('Save Changes'));
 
     await waitFor(() => expect(updateProfile).toHaveBeenCalledWith('Jane', 'Doe'));
+    expect(updateProfileName).toHaveBeenCalledWith('Jane', 'Doe');
     expect(mockUpdateUser).toHaveBeenCalledWith({ givenName: 'Jane', familyName: 'Doe' });
     expect(screen.queryByText('Save Changes')).toBeNull();
   });
 
-  it('shows an error when saving fails', async () => {
+  it('shows an error when the Cognito update fails', async () => {
     setup({ givenName: 'Jane', familyName: 'Doe', email: 'jane@shop.com' });
     (updateProfile as jest.Mock).mockRejectedValue(new Error('boom'));
     render(<ProfileScreen />);
@@ -89,6 +95,20 @@ describe('ProfileScreen — edit profile modal', () => {
     fireEvent.press(screen.getByText('Save Changes'));
 
     await waitFor(() => expect(screen.getByText('Failed to save. Please try again.')).toBeTruthy());
+    expect(updateProfileName).not.toHaveBeenCalled();
+  });
+
+  it('shows an error (and keeps the modal open) when the backend name sync fails', async () => {
+    setup({ givenName: 'Jane', familyName: 'Doe', email: 'jane@shop.com' });
+    (updateProfile as jest.Mock).mockResolvedValue(undefined);
+    (updateProfileName as jest.Mock).mockRejectedValue(new Error('network'));
+    render(<ProfileScreen />);
+    fireEvent.press(screen.getByText('Edit Profile'));
+
+    fireEvent.press(screen.getByText('Save Changes'));
+
+    await waitFor(() => expect(screen.getByText('Failed to save. Please try again.')).toBeTruthy());
+    expect(screen.getByText('Save Changes')).toBeTruthy();
   });
 
   it('closes the modal via the close button', () => {

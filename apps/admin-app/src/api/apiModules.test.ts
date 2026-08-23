@@ -10,6 +10,7 @@ import * as locations from './locations';
 import * as notifications from './notifications';
 import * as promotions from './promotions';
 import * as services from './services';
+import * as users from './users';
 import * as vehicles from './vehicles';
 
 jest.mock('./client', () => ({
@@ -169,6 +170,13 @@ describe('services api', () => {
   it('deleteService', () => {
     services.deleteService('s1');
     expect(api.delete).toHaveBeenCalledWith('/services/s1');
+  });
+});
+
+describe('users api', () => {
+  it('updateProfileName PUTs /users/me with the name', () => {
+    users.updateProfileName('Jane', 'Doe');
+    expect(api.put).toHaveBeenCalledWith('/users/me', { firstName: 'Jane', lastName: 'Doe' });
   });
 });
 

@@ -1459,6 +1459,32 @@ Resources:
             Path: /users/push-token
             Method: PUT
 
+  UserProfileFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/users/profile/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-user-profile${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        UserProfilePut:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /users/me
+            Method: PUT
+
   NotificationsFunction:
     Type: AWS::Serverless::Function
     Metadata:

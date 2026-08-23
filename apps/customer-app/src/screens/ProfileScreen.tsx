@@ -8,6 +8,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
+import { updateProfileName } from '../api/users';
 
 export default function ProfileScreen() {
   const { user, logout, updateUser } = useAuth();
@@ -41,6 +42,9 @@ export default function ProfileScreen() {
     setError('');
     try {
       await updateProfile(firstName.trim(), lastName.trim());
+      // Persist to the DynamoDB USERS record too — Cognito alone leaves the
+      // admin Customers list showing the old name.
+      await updateProfileName(firstName.trim(), lastName.trim());
       updateUser({ givenName: firstName.trim(), familyName: lastName.trim() });
       setShowEdit(false);
     } catch {
