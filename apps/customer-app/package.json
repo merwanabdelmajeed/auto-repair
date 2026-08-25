@@ -61,6 +61,7 @@
       "<rootDir>/jest.setup.js"
     ],
     "testTimeout": 15000,
+    "workerIdleMemoryLimit": "512MB",
     "collectCoverageFrom": [
       "src/**/*.{ts,tsx}",
       "!src/**/*.test.{ts,tsx}",

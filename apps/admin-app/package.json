@@ -12,34 +12,35 @@
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
-    "@expo/vector-icons": "~14.0.4",
-    "@react-native-async-storage/async-storage": "1.23.1",
-    "@react-native-community/datetimepicker": "8.2.0",
+    "@expo/vector-icons": "^14.1.0",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-community/datetimepicker": "8.4.1",
     "@react-navigation/drawer": "^6.7.2",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^7.17.6",
     "amazon-cognito-identity-js": "^6.3.18",
-    "expo": "~52.0.18",
-    "expo-constants": "~17.0.8",
-    "expo-dev-client": "~5.0.20",
-    "expo-device": "~7.0.3",
-    "expo-notifications": "^0.29.14",
-    "expo-status-bar": "~2.0.0",
-    "react": "18.3.1",
-    "react-native": "0.76.9",
-    "react-native-gesture-handler": "~2.20.2",
-    "react-native-reanimated": "~3.16.1",
-    "react-native-safe-area-context": "4.12.0",
-    "react-native-screens": "~4.4.0"
+    "expo": "^53.0.0",
+    "expo-constants": "~17.1.8",
+    "expo-dev-client": "~5.2.4",
+    "expo-device": "~7.1.4",
+    "expo-font": "~13.3.2",
+    "expo-notifications": "~0.31.5",
+    "expo-status-bar": "~2.2.3",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-reanimated": "~3.17.4",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
-    "@types/react": "~18.3.12",
+    "@types/react": "~19.0.10",
     "jest": "^29.7.0",
-    "jest-expo": "^52.0.6",
-    "typescript": "^5.3.3"
+    "jest-expo": "~53.0.14",
+    "typescript": "~5.8.3"
   },
   "private": true,
   "jest": {
@@ -53,6 +54,7 @@
       "<rootDir>/jest.setup.js"
     ],
     "testTimeout": 15000,
+    "workerIdleMemoryLimit": "512MB",
     "collectCoverageFrom": [
       "src/**/*.{ts,tsx}",
       "!src/**/*.test.{ts,tsx}",
