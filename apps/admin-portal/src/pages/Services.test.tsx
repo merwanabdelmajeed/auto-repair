@@ -32,8 +32,9 @@ describe('Services', () => {
     vi.mocked(listServices).mockResolvedValue([service()]);
     render(<Services />);
     await waitFor(() => expect(screen.getByText('Oil Change')).toBeInTheDocument());
-    expect(screen.getByText('$49.99')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
+    // Prices are not shown in the admin — no dollar amount should render.
+    expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
   });
 
   it('validates the Add Service form before saving', async () => {

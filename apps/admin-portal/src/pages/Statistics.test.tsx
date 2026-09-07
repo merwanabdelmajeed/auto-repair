@@ -23,8 +23,10 @@ describe('Statistics', () => {
     render(<Statistics />);
 
     await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
-    expect(screen.getByText('$500')).toBeInTheDocument();
     expect(screen.getByText('Oil Change')).toBeInTheDocument();
+    // Revenue is not shown in the admin — no dollar amount should render.
+    expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
   });
 
   it('reloads analytics for a different period when a period button is clicked', async () => {

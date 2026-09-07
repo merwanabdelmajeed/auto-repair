@@ -44,14 +44,15 @@ describe('ServicesScreen', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to load services.'));
   });
 
-  it('lists services with price and Active/Inactive badges', async () => {
+  it('lists services with Active/Inactive badges and no price', async () => {
     (listServices as jest.Mock).mockResolvedValue([service(), service({ serviceId: 's2', name: 'Brake Check', isActive: false, price: null })]);
     render(<ServicesScreen />);
 
     await waitFor(() => expect(screen.getByText('Services (2)')).toBeTruthy());
-    expect(screen.getByText('$49.99')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
     expect(screen.getByText('Inactive')).toBeTruthy();
+    // Prices are not shown in the admin app — no dollar amount should render.
+    expect(screen.queryByText('$49.99')).toBeNull();
   });
 
   it('validates the name field is required', async () => {

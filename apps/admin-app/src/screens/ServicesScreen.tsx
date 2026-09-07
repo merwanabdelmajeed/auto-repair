@@ -12,7 +12,7 @@ import {
   type Service, type ServiceInput,
 } from '../api/services';
 
-const EMPTY_FORM: ServiceInput = { name: '', description: '', price: undefined, isActive: true };
+const EMPTY_FORM: ServiceInput = { name: '', description: '', isActive: true };
 
 export default function ServicesScreen() {
   const [services, setServices] = useState<Service[]>([]);
@@ -45,7 +45,7 @@ export default function ServicesScreen() {
 
   function openEdit(svc: Service) {
     setEditing(svc);
-    setForm({ name: svc.name, description: svc.description, price: svc.price, isActive: svc.isActive });
+    setForm({ name: svc.name, description: svc.description, isActive: svc.isActive });
     setFormError('');
     setShowModal(true);
   }
@@ -121,7 +121,6 @@ export default function ServicesScreen() {
                           </Text>
                         </View>
                       </View>
-                      {svc.price != null ? <Text style={styles.cardMeta}>${svc.price.toFixed(2)}</Text> : null}
                       {svc.description ? <Text style={styles.cardDesc} numberOfLines={1}>{svc.description}</Text> : null}
                     </View>
                   </View>
@@ -160,9 +159,6 @@ export default function ServicesScreen() {
 
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput style={[styles.input, { height: 72, textAlignVertical: 'top' }]} value={form.description} onChangeText={v => setForm(p => ({ ...p, description: v }))} placeholder="Optional description…" placeholderTextColor={colors.textMuted} multiline />
-
-              <Text style={styles.fieldLabel}>Price ($)</Text>
-              <TextInput style={styles.input} value={form.price != null ? String(form.price) : ''} onChangeText={v => setForm(p => ({ ...p, price: v === '' ? undefined : parseFloat(v) || 0 }))} keyboardType="decimal-pad" placeholder="e.g. 49.99" placeholderTextColor={colors.textMuted} />
 
               <View style={styles.toggleRow}>
                 <Text style={styles.toggleLabel}>Active (visible to customers)</Text>

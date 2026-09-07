@@ -36,23 +36,25 @@ describe('StatisticsScreen', () => {
     await waitFor(() => expect(screen.getByText('Total Bookings')).toBeTruthy());
   });
 
-  it('renders KPI cards with formatted revenue', async () => {
+  it('renders KPI cards without any revenue figure', async () => {
     (getAnalytics as jest.Mock).mockResolvedValue(analytics());
     render(<StatisticsScreen />);
 
     await waitFor(() => expect(screen.getByText('Total Bookings')).toBeTruthy());
     expect(screen.getByText('20')).toBeTruthy();
     expect(screen.getByText('15 completed')).toBeTruthy();
-    expect(screen.getByText('$2.5k')).toBeTruthy();
     expect(screen.getByText('12')).toBeTruthy();
     expect(screen.getByText('4 new')).toBeTruthy();
     expect(screen.getByText('8')).toBeTruthy();
+    expect(screen.queryByText('Revenue')).toBeNull();
+    expect(screen.queryByText('$2.5k')).toBeNull();
   });
 
-  it('formats revenue under $1000 without the k suffix', async () => {
+  it('does not display revenue anywhere, even when the API returns it', async () => {
     (getAnalytics as jest.Mock).mockResolvedValue(analytics({ summary: { ...analytics().summary, totalRevenue: 450 } }));
     render(<StatisticsScreen />);
-    await waitFor(() => expect(screen.getByText('$450')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Total Bookings')).toBeTruthy());
+    expect(screen.queryByText('$450')).toBeNull();
   });
 
   it('shows an error message when loading fails', async () => {
@@ -61,12 +63,12 @@ describe('StatisticsScreen', () => {
     await waitFor(() => expect(screen.getByText('Failed to load analytics.')).toBeTruthy());
   });
 
-  it('lists service popularity bars with booking counts and revenue', async () => {
+  it('lists service popularity bars with booking counts (no revenue)', async () => {
     (getAnalytics as jest.Mock).mockResolvedValue(analytics());
     render(<StatisticsScreen />);
 
     await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
-    expect(screen.getByText('10 bookings  ·  $500')).toBeTruthy();
+    expect(screen.getByText('10 bookings')).toBeTruthy();
     expect(screen.getByText('5 bookings')).toBeTruthy();
   });
 

@@ -14,11 +14,6 @@ function periodRange(period: Period): { start: string; end: string } {
   return { start: toDateStr(start), end: toDateStr(end) };
 }
 
-function fmtMoney(n: number) {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-}
-
-
 function ServiceBar({ svc, max }: { svc: ServiceData; max: number }) {
   const pct = max > 0 ? (svc.bookings / max) * 100 : 0;
   return (
@@ -27,7 +22,6 @@ function ServiceBar({ svc, max }: { svc: ServiceData; max: number }) {
         <span style={{ color: 'var(--color-text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{svc.serviceName}</span>
         <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0, fontSize: '12px' }}>
           {svc.bookings} booking{svc.bookings !== 1 ? 's' : ''}
-          {svc.revenue > 0 ? `  ·  ${fmtMoney(svc.revenue)}` : ''}
         </span>
       </div>
       <div style={{ height: '6px', backgroundColor: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -40,11 +34,11 @@ function ServiceBar({ svc, max }: { svc: ServiceData; max: number }) {
 function downloadCSV(data: AnalyticsResponse, period: Period) {
   const { start, end } = periodRange(period);
   const rows: string[][] = [
-    ['Date', 'Bookings', 'Completed', 'Revenue ($)'],
-    ...data.byDay.map(d => [d.date, String(d.bookings), String(d.completed), d.revenue.toFixed(2)]),
+    ['Date', 'Bookings', 'Completed'],
+    ...data.byDay.map(d => [d.date, String(d.bookings), String(d.completed)]),
     [],
-    ['Service', 'Bookings', 'Completed', 'Revenue ($)'],
-    ...data.byService.map(s => [s.serviceName, String(s.bookings), String(s.completed), s.revenue.toFixed(2)]),
+    ['Service', 'Bookings', 'Completed'],
+    ...data.byService.map(s => [s.serviceName, String(s.bookings), String(s.completed)]),
   ];
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -89,7 +83,6 @@ export default function Statistics() {
 
   const kpis = data ? [
     { label: 'Total Bookings', value: String(data.summary.totalBookings), sub: `${data.summary.completedBookings} completed` },
-    { label: 'Revenue', value: fmtMoney(data.summary.totalRevenue), sub: `from ${data.summary.completedBookings} jobs` },
     { label: 'Customers', value: String(data.summary.uniqueCustomers), sub: `${data.summary.newCustomers} new` },
     { label: 'Returning Customers', value: String(data.summary.returningCustomers), sub: `of ${data.summary.uniqueCustomers} total` },
   ] : [];
@@ -139,9 +132,9 @@ export default function Statistics() {
       )}
 
       {/* KPI Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '24px' }}>
         {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
+          ? Array.from({ length: 3 }).map((_, i) => (
             <div key={i} style={{ backgroundColor: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)', padding: '20px', minHeight: '80px', opacity: 0.5 }} />
           ))
           : kpis.map(k => (

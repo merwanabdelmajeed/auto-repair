@@ -21,12 +21,6 @@ function periodRange(period: Period): { start: string; end: string } {
 }
 
 
-function fmtMoney(n: number) {
-  return n >= 1000
-    ? `$${(n / 1000).toFixed(1)}k`
-    : `$${n.toFixed(0)}`;
-}
-
 const STATUS_COLORS: Record<string, string> = {
   completed: '#22c55e',
   pending: '#f59e0b',
@@ -98,7 +92,7 @@ export default function StatisticsScreen() {
         {/* KPI Cards */}
         <View style={styles.kpiGrid}>
           {loading ? (
-            Array.from({ length: 4 }).map((_, i) => (
+            Array.from({ length: 3 }).map((_, i) => (
               <View key={i} style={[styles.kpiCard, styles.kpiSkeleton]} />
             ))
           ) : data ? (
@@ -107,11 +101,6 @@ export default function StatisticsScreen() {
                 <Text style={styles.kpiLabel}>Total Bookings</Text>
                 <Text style={styles.kpiValue}>{data.summary.totalBookings}</Text>
                 <Text style={styles.kpiSub}>{data.summary.completedBookings} completed</Text>
-              </View>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Revenue</Text>
-                <Text style={styles.kpiValue}>{fmtMoney(data.summary.totalRevenue)}</Text>
-                <Text style={styles.kpiSub}>from completed jobs</Text>
               </View>
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Customers</Text>
@@ -141,7 +130,6 @@ export default function StatisticsScreen() {
                     <Text style={styles.svcName} numberOfLines={1}>{svc.serviceName}</Text>
                     <Text style={styles.svcMeta}>
                       {svc.bookings} booking{svc.bookings !== 1 ? 's' : ''}
-                      {svc.revenue > 0 ? `  ·  ${fmtMoney(svc.revenue)}` : ''}
                     </Text>
                   </View>
                   <View style={styles.svcBarTrack}>
