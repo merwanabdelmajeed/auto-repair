@@ -12,8 +12,11 @@ import Capacity from './pages/Capacity';
 import BlockedTimes from './pages/BlockedTimes';
 import Promotions from './pages/Promotions';
 import Statistics from './pages/Statistics';
-import Guide from './pages/Guide';
 import Settings from './pages/Settings';
+
+// Lazy-loaded: the guide bundles a large self-contained HTML document, so it is
+// split into its own chunk that only loads when the Guide page is opened.
+const Guide = React.lazy(() => import('./pages/Guide'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -50,7 +53,7 @@ function AppRoutes() {
         <Route path="blocked-times" element={<BlockedTimes />} />
         <Route path="promotions" element={<Promotions />} />
         <Route path="statistics" element={<Statistics />} />
-        <Route path="guide" element={<Guide />} />
+        <Route path="guide" element={<React.Suspense fallback={null}><Guide /></React.Suspense>} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

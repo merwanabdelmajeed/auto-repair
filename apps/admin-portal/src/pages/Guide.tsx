@@ -1,16 +1,25 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
+// The guide is a self-contained HTML document (all images inlined as data URIs).
+// We import it as a raw string and render it from an in-memory blob URL rather
+// than serving it as a static file — Amplify's SPA rewrite would otherwise send
+// /owner-guide.html back to index.html, nesting the portal inside itself.
+import guideHtml from '../assets/owner-guide.html?raw';
 
-/**
- * Owner's Guide — renders the self-contained guide document
- * (public/owner-guide.html) inside a full-height iframe. The guide is a static
- * asset so it stays fast and never couples to the app's data or auth.
- */
 export default function Guide() {
+  const [url, setUrl] = useState('');
+
+  useEffect(() => {
+    const blob = new Blob([guideHtml], { type: 'text/html' });
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, []);
+
   return (
     <div style={{ height: '100%', minHeight: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
         <a
-          href="/owner-guide.html"
+          href={url || undefined}
           target="_blank"
           rel="noreferrer"
           style={{
@@ -25,6 +34,8 @@ export default function Guide() {
             fontSize: '13px',
             fontWeight: 500,
             textDecoration: 'none',
+            pointerEvents: url ? 'auto' : 'none',
+            opacity: url ? 1 : 0.5,
           }}
         >
           <span aria-hidden="true">↗</span>
@@ -33,7 +44,7 @@ export default function Guide() {
       </div>
       <iframe
         title="Owner's Guide"
-        src="/owner-guide.html"
+        src={url}
         style={{
           flex: 1,
           width: '100%',
