@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/blocked-times', label: 'Blocked Times', icon: '🚫' },
   { path: '/promotions', label: 'Promotions', icon: '🏷️' },
   { path: '/statistics', label: 'Statistics', icon: '📊' },
+  { path: '/guide', label: 'Guide', icon: '📖' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 

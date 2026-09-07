@@ -16,6 +16,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/blocked-times': { title: 'Blocked Times', subtitle: 'Block dates for holidays and closures' },
   '/promotions': { title: 'Promotions', subtitle: 'Create and manage promotions' },
   '/statistics': { title: 'Statistics', subtitle: 'Analytics and reporting' },
+  '/guide': { title: "Owner's Guide", subtitle: 'How to use the customer app, admin app, and portal' },
   '/settings': { title: 'Settings', subtitle: 'Configure your shop settings' },
 };
 

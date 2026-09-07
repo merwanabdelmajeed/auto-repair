@@ -12,6 +12,7 @@ import Capacity from './pages/Capacity';
 import BlockedTimes from './pages/BlockedTimes';
 import Promotions from './pages/Promotions';
 import Statistics from './pages/Statistics';
+import Guide from './pages/Guide';
 import Settings from './pages/Settings';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ function AppRoutes() {
         <Route path="blocked-times" element={<BlockedTimes />} />
         <Route path="promotions" element={<Promotions />} />
         <Route path="statistics" element={<Statistics />} />
+        <Route path="guide" element={<Guide />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
