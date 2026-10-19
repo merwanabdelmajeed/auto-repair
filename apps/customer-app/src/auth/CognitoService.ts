@@ -132,7 +132,16 @@ export async function logout(): Promise<void> {
   user?.signOut();
 }
 
+// On React Native the library saves tokens to AsyncStorage but reads them from
+// an in-memory cache that only storage.sync() fills. Without this, every cold
+// start (app killed, phone rebooted, app updated) looks signed out.
+function syncStoredSession(): Promise<void> {
+  const storage = (pool as unknown as { storage?: { sync?: (cb: () => void) => void } }).storage;
+  return new Promise(resolve => (storage?.sync ? storage.sync(() => resolve()) : resolve()));
+}
+
 export async function getSessionUser(): Promise<AuthUser | null> {
+  await syncStoredSession();
   return new Promise((resolve) => {
     const user = pool.getCurrentUser();
     if (!user) return resolve(null);

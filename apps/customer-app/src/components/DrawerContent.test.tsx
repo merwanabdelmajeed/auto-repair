@@ -3,10 +3,13 @@ import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
+import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DrawerContent from './DrawerContent';
 import { useAuth } from '../auth/AuthContext';
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('expo-constants', () => ({ expoConfig: { version: '1.1.0', extra: {} } }));
 
 const mockRequireAuth = jest.fn((action: () => void) => action());
 const mockLogout = jest.fn(() => Promise.resolve());
@@ -74,6 +77,17 @@ describe('DrawerContent', () => {
 
     expect(mockRequireAuth).toHaveBeenCalled();
     expect(props.navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it('shows the app version from the app config', () => {
+    renderWithSafeArea(<DrawerContent {...fakeProps()} />);
+    expect(screen.getByText('v1.1.0')).toBeTruthy();
+  });
+
+  it('keeps the footer clear of the system navigation bar (edge-to-edge)', () => {
+    jest.mocked(useSafeAreaInsets).mockReturnValueOnce({ top: 0, right: 0, bottom: 48, left: 0 });
+    renderWithSafeArea(<DrawerContent {...fakeProps()} />);
+    expect(StyleSheet.flatten(screen.getByTestId('drawer-footer').props.style).paddingBottom).toBe(24 + 48);
   });
 
   it('hides Sign Out from guests', () => {

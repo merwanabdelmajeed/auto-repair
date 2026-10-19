@@ -180,6 +180,17 @@ describe('getSessionUser', () => {
     await expect(CognitoService.getSessionUser()).resolves.toMatchObject({ userId: 'u1', tenantId: 't1' });
   });
 
+  it('loads the saved session from device storage before restoring it (cold start)', async () => {
+    const calls: string[] = [];
+    (mockPool as Record<string, unknown>).storage = { sync: jest.fn((cb: () => void) => { calls.push('sync'); cb(); }) };
+    mockPool.getCurrentUser.mockImplementation(() => { calls.push('getCurrentUser'); return mockUserInstance; });
+    mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) => cb(null, fakeSession()));
+
+    await expect(CognitoService.getSessionUser()).resolves.toMatchObject({ userId: 'u1' });
+    expect(calls).toEqual(['sync', 'getCurrentUser']);
+    delete (mockPool as Record<string, unknown>).storage;
+  });
+
   it('signs out and resolves null for a valid session belonging to an admin role', async () => {
     mockPool.getCurrentUser.mockReturnValue(mockUserInstance);
     mockUserInstance.getSession.mockImplementation((cb: (err: Error | null, s: unknown) => void) =>

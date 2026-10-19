@@ -1,8 +1,9 @@
 import React from 'react';
-import { SHOP_NAME, SHOP_CITY } from '../constants';
+import { SHOP_NAME, SHOP_CITY, APP_VERSION } from '../constants';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 
@@ -25,6 +26,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { navigation, state } = props;
   const { requireAuth, isAuthenticated, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const activeRouteName = state.routes[state.index]?.name;
 
   function confirmLogout() {
@@ -98,9 +100,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         )}
       </View>
 
-      <View style={styles.footer}>
+      <View testID="drawer-footer" style={[styles.footer, { paddingBottom: spacing.lg + insets.bottom }]}>
         <View style={styles.divider} />
-        <Text style={styles.versionText}>v1.0.0</Text>
+        {APP_VERSION ? <Text style={styles.versionText}>v{APP_VERSION}</Text> : null}
       </View>
     </DrawerContentScrollView>
   );

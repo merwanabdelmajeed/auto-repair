@@ -8,6 +8,7 @@ import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../consta
 
 jest.mock('../auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../api/account', () => ({ deleteAccount: jest.fn() }));
+jest.mock('expo-constants', () => ({ expoConfig: { version: '1.1.0', extra: {} } }));
 
 const mockLogout = jest.fn();
 const mockNavigate = jest.fn();
@@ -27,6 +28,11 @@ describe('SettingsScreen', () => {
     renderScreen();
     expect(screen.getByText('jane@shop.com')).toBeTruthy();
     expect(screen.getByText('J')).toBeTruthy();
+  });
+
+  it('shows the app version from the app config', () => {
+    renderScreen();
+    expect(screen.getByText('1.1.0')).toBeTruthy();
   });
 
   it('shows a fallback when there is no user', () => {

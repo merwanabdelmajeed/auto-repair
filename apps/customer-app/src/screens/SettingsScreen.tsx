@@ -7,7 +7,7 @@ import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { deleteAccount } from '../api/account';
-import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../constants';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL, APP_VERSION } from '../constants';
 
 export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuth();
@@ -64,7 +64,7 @@ export default function SettingsScreen({ navigation }: any) {
             { icon: 'document-text-outline' as const, label: 'Terms of Service', onPress: () => void Linking.openURL(TERMS_OF_SERVICE_URL) },
             { icon: 'shield-outline' as const, label: 'Privacy Policy', onPress: () => void Linking.openURL(PRIVACY_POLICY_URL) },
             { icon: 'help-circle-outline' as const, label: 'Help & Support', onPress: () => void Linking.openURL(SUPPORT_URL) },
-            { icon: 'information-circle-outline' as const, label: 'App Version', value: '1.0.0' },
+            { icon: 'information-circle-outline' as const, label: 'App Version', value: APP_VERSION || '—' },
           ].map((item, i, arr) => (
             <TouchableOpacity
               key={item.label}

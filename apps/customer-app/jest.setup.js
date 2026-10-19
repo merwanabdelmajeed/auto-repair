@@ -3,6 +3,9 @@
 // this, the native module's `install()` call throws in the test environment.
 import 'react-native-gesture-handler/jestSetup';
 
+// Official mock: useSafeAreaInsets returns zero insets without a provider.
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+
 // @expo/vector-icons' Ionicons relies on expo-font's native font-loading state,
 // which jest-expo's default mocks don't fully satisfy (loadedNativeFonts.forEach
 // is not a function) — render a plain stub instead so any screen/component using

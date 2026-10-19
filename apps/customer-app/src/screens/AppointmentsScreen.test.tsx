@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import AppointmentsScreen from './AppointmentsScreen';
 import { listAppointments, createAppointment, cancelAppointment } from '../api/appointments';
@@ -59,6 +60,15 @@ describe('AppointmentsScreen — list', () => {
     (listAppointments as jest.Mock).mockRejectedValue(new Error('down'));
     render(<AppointmentsScreen navigation={{ setParams: jest.fn() }} route={{ params: {} }} />);
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to load appointments.'));
+  });
+
+  it('lifts the + button above the system navigation bar (edge-to-edge)', async () => {
+    jest.mocked(useSafeAreaInsets).mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+    (listAppointments as jest.Mock).mockResolvedValue([]);
+    render(<AppointmentsScreen navigation={{ setParams: jest.fn() }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('No Upcoming Appointments')).toBeTruthy());
+    expect(StyleSheet.flatten(screen.getByTestId('appointments-fab').props.style).bottom).toBe(24 + 48);
+    jest.mocked(useSafeAreaInsets).mockReturnValue({ top: 0, right: 0, bottom: 0, left: 0 });
   });
 
   it('shows the empty state for Upcoming with a Book button', async () => {

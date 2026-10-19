@@ -5,6 +5,7 @@ import {
   Modal, Alert, ActivityIndicator, FlatList, TextInput, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { listAppointments, createAppointment, cancelAppointment, type Appointment } from '../api/appointments';
@@ -38,6 +39,7 @@ function buildDates(): string[] {
 }
 
 export default function AppointmentsScreen({ route, navigation }: any) {
+  const insets = useSafeAreaInsets();
   const dates = buildDates();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,7 +351,7 @@ export default function AppointmentsScreen({ route, navigation }: any) {
       )}
 
       {!loading && (
-        <TouchableOpacity style={styles.fab} onPress={() => void openBooking()} activeOpacity={0.85}>
+        <TouchableOpacity testID="appointments-fab" style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => void openBooking()} activeOpacity={0.85}>
           <Ionicons name="add" size={28} color={colors.white} />
         </TouchableOpacity>
       )}
