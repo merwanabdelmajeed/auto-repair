@@ -5,30 +5,9 @@ import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } f
 import { ok, created, badRequest, notFound, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
+import { publicTenantId } from '../../shared/utils/publicTenant.js';
 
 const ADMIN_ROLES = [UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER];
-
-// GET /services has Auth: Authorizer NONE (see template.yaml), so API Gateway
-// never runs the Cognito authorizer on this route and event.requestContext.
-// authorizer.claims is never populated — even for admin-portal/admin-app
-// callers sending a real, valid token. This route's data (a tenant's service
-// catalog) is meant to be publicly readable anyway — it's reachable via
-// ?tenantId= with zero auth by design — so decoding (without re-verifying)
-// a bearer token's payload to pull tenantId doesn't expose anything that
-// isn't already exposed by the guest path.
-function tenantIdFromUnverifiedBearerToken(event: APIGatewayProxyEvent): string | undefined {
-  const header = event.headers?.Authorization ?? event.headers?.authorization;
-  if (!header) return undefined;
-  const token = header.replace(/^Bearer\s+/i, '');
-  const payload = token.split('.')[1];
-  if (!payload) return undefined;
-  try {
-    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-    return (JSON.parse(json) as Record<string, string>)['custom:tenantId'];
-  } catch {
-    return undefined;
-  }
-}
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
@@ -41,7 +20,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // don't have to pass ?tenantId= themselves; falls back to the query
     // param for guest browsing.
     if (method === 'GET') {
-      const tenantId = tenantIdFromUnverifiedBearerToken(event) ?? event.queryStringParameters?.tenantId;
+      const tenantId = publicTenantId(event);
       if (!tenantId) return badRequest('tenantId is required');
 
       const items = await queryAll({

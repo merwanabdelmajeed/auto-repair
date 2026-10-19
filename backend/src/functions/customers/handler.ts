@@ -4,9 +4,10 @@ import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/
 import { createHash } from 'node:crypto';
 import { db, TABLE, queryPage, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
-import { ok, paginated, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
+import { ok, paginated, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
+import { parseContactUpdate, updateExpression } from '../../shared/utils/contactUpdate.js';
 
 const cognito = new CognitoIdentityProviderClient({});
 
@@ -107,6 +108,40 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     requireRole(claims, UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER);
 
     const { tenantId } = claims;
+
+    // PATCH /customers/{customerId} — an admin updates a customer's phone
+    // and/or address (rules in parseContactUpdate: phone non-empty, address
+    // optional and clearable, no format/uniqueness checks). Only the DynamoDB
+    // USERS record is updated: it's what every app reads these from, and
+    // seeded/demo customers have no Cognito account at all. The key is built
+    // from the admin's own tenantId, so this can't reach another tenant's
+    // customer.
+    if (method === 'PATCH') {
+      const customerId = event.pathParameters?.customerId;
+      if (!customerId) return badRequest('customerId is required');
+      const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
+      const update = parseContactUpdate(body);
+      if ('error' in update) return badRequest(update.error);
+      if (!update.changed) return badRequest('phone or address is required');
+
+      try {
+        await db.send(new UpdateCommand({
+          TableName: TABLE.USERS,
+          Key: { PK: `TENANT#${tenantId}`, SK: `USER#${customerId}` },
+          // Must be an existing customer — never an admin's record, and never
+          // create a ghost row for an unknown id.
+          ConditionExpression: 'attribute_exists(PK) AND #role = :customer',
+          UpdateExpression: updateExpression([...update.sets, 'updatedAt = :now'], update.removes),
+          ExpressionAttributeNames: { '#role': 'role' },
+          ExpressionAttributeValues: { ...update.values, ':customer': 'CUSTOMER', ':now': new Date().toISOString() },
+        }));
+      } catch (e) {
+        if ((e as { name?: string }).name === 'ConditionalCheckFailedException') return notFound('Customer not found');
+        throw e;
+      }
+      return ok({ userId: customerId, ...update.result });
+    }
+
     const cursor = event.queryStringParameters?.cursor ?? null;
     const limit = Math.min(Number(event.queryStringParameters?.limit ?? 25) || 25, 100);
 
@@ -128,6 +163,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       firstName: (i.firstName as string) ?? '',
       lastName: (i.lastName as string) ?? '',
       phone: (i.phone as string) ?? null,
+      address: (i.address as Record<string, string>) ?? null,
       status: i.status as string,
       createdAt: i.createdAt as string,
     }));

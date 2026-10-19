@@ -4,10 +4,24 @@ import Vehicles from './Vehicles';
 import { listVehicles, updateVehicle } from '../api/vehicles';
 import { listCustomers } from '../api/customers';
 import { listAppointments } from '../api/appointments';
+import { decodeVin } from '../utils/vin';
 
 vi.mock('../api/vehicles', () => ({ listVehicles: vi.fn(), updateVehicle: vi.fn() }));
+vi.mock('../components/AddVehicleForm', () => ({
+  default: ({ customerId, initialVin, onAdded, onCancel }: { customerId: string; initialVin?: string; onAdded: (v: unknown) => void; onCancel: () => void }) => (
+    <div>
+      <span>AddVehicleForm:{customerId}:{initialVin}</span>
+      <button onClick={() => onAdded({ vehicleId: 'v2', customerId, make: 'TOYOTA', model: 'Camry', trim: 'LE', year: 2019, licensePlate: null, color: 'Red', vin: initialVin, createdAt: '2026-01-02T00:00:00.000Z' })}>form-add</button>
+      <button onClick={onCancel}>form-cancel</button>
+    </div>
+  ),
+}));
 vi.mock('../api/customers', () => ({ listCustomers: vi.fn() }));
 vi.mock('../api/appointments', () => ({ listAppointments: vi.fn() }));
+vi.mock('../utils/vin', async () => {
+  const actual = await vi.importActual<typeof import('../utils/vin')>('../utils/vin');
+  return { ...actual, decodeVin: vi.fn() };
+});
 
 function vehicle(overrides: Record<string, unknown> = {}) {
   return { vehicleId: 'v1', customerId: 'c1', make: 'Honda', model: 'Civic', trim: null, year: 2020, licensePlate: 'ABC123', color: 'blue', vin: '1HGCM82633A123456', createdAt: '2026-01-01T00:00:00.000Z', ...overrides };
@@ -148,7 +162,102 @@ describe('Vehicles', () => {
     fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
     fireEvent.click(screen.getByText('Save Changes'));
 
-    await waitFor(() => expect(screen.getByText('Failed to save changes.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Failed to save.')).toBeInTheDocument());
+  });
+
+  it('blocks a VIN for a different car and offers to add it as a new vehicle instead', async () => {
+    vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    vi.mocked(decodeVin).mockResolvedValue({ status: 'ok', vehicle: { make: 'TOYOTA', model: 'Camry', year: '2019', trim: 'LE' } });
+    renderPage();
+    await waitFor(() => screen.getByText('2020 Honda Civic'));
+    fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '4t1b11hk5ku000000' } });
+
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Different car' })).toHaveTextContent('This VIN belongs to a 2019 TOYOTA Camry LE — a different car.'));
+    expect(screen.getByText('Save Changes')).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add as new vehicle' }));
+    expect(screen.getByText('AddVehicleForm:c1:4T1B11HK5KU000000')).toBeInTheDocument();
+    expect(screen.queryByText('Save Changes')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('form-add'));
+    expect(updateVehicle).not.toHaveBeenCalled();
+    // The new car is listed and opened; the original Civic is untouched.
+    await waitFor(() => expect(screen.getAllByText('2019 TOYOTA Camry LE').length).toBeGreaterThan(0));
+    expect(screen.getByText('2020 Honda Civic')).toBeInTheDocument();
+    expect(screen.queryByText(/^AddVehicleForm:/)).not.toBeInTheDocument();
+  });
+  it('backs out of a wrong-car VIN with Cancel — nothing saved, and the add form can be cancelled too', async () => {
+    vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    vi.mocked(decodeVin).mockResolvedValue({ status: 'ok', vehicle: { make: 'TOYOTA', model: 'Camry', year: '2019' } });
+    renderPage();
+    await waitFor(() => screen.getByText('2020 Honda Civic'));
+    fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '4T1B11HK5KU000000' } });
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Different car' })).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByRole('group', { name: 'Different car' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '4T1B11HK5KU000000' } });
+    await waitFor(() => expect(screen.getByRole('group', { name: 'Different car' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Add as new vehicle' }));
+    fireEvent.click(screen.getByText('form-cancel'));
+
+    expect(updateVehicle).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^AddVehicleForm:/)).not.toBeInTheDocument();
+    expect(screen.getByText('VIN: 1HGCM82633A123456')).toBeInTheDocument();
+  });
+  it('saves a corrected VIN for the same car (trim ignored) with a ✓ match note', async () => {
+    vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    vi.mocked(decodeVin).mockResolvedValue({ status: 'ok', vehicle: { make: 'HONDA', model: 'Civic', year: '2020', trim: 'EX' } });
+    vi.mocked(updateVehicle).mockResolvedValue(vehicle({ vin: '2HGFC2F59LH000000' }));
+    renderPage();
+    await waitFor(() => screen.getByText('2020 Honda Civic'));
+    fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '2HGFC2F59LH000000' } });
+    expect(await screen.findByText('✓ VIN matches this vehicle (2020 HONDA Civic EX).')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Save Changes'));
+    await waitFor(() => expect(updateVehicle).toHaveBeenCalledWith('v1', { licensePlate: 'ABC123', vin: '2HGFC2F59LH000000' }));
+  });
+
+  it('notes when the VIN lookup is unavailable and saves without asking', async () => {
+    vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    vi.mocked(decodeVin).mockResolvedValue({ status: 'unavailable' });
+    vi.mocked(updateVehicle).mockResolvedValue(vehicle({ vin: '4T1B11HK5KU000000' }));
+    renderPage();
+    await waitFor(() => screen.getByText('2020 Honda Civic'));
+    fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '4T1B11HK5KU000000' } });
+    expect(await screen.findByText('VIN lookup is unavailable right now — it will be saved as entered.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Save Changes'));
+    await waitFor(() => expect(updateVehicle).toHaveBeenCalledWith('v1', { licensePlate: 'ABC123', vin: '4T1B11HK5KU000000' }));
+  });
+  it('rejects a changed VIN that is not 17 characters', async () => {
+    vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    renderPage();
+    await waitFor(() => screen.getByText('2020 Honda Civic'));
+    fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+    fireEvent.click(screen.getByText('✏️ Edit Plate / VIN'));
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'ABC' } });
+    fireEvent.click(screen.getByText('Save Changes'));
+
+    expect(await screen.findByText('VIN must be 17 characters.')).toBeInTheDocument();
+    expect(updateVehicle).not.toHaveBeenCalled();
   });
 
   it('cancels edit mode without saving', async () => {

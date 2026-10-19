@@ -55,10 +55,24 @@ describe('GET /customers', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body.data.items).toEqual([
-      { userId: 'c1', email: 'c1@shop.com', firstName: 'A', lastName: 'B', phone: null, status: 'ACTIVE', createdAt: 't' },
+      { userId: 'c1', email: 'c1@shop.com', firstName: 'A', lastName: 'B', phone: null, address: null, status: 'ACTIVE', createdAt: 't' },
     ]);
     const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
     expect(call?.ExpressionAttributeValues).toMatchObject({ ':customer': 'CUSTOMER' });
+  });
+
+  it('returns phone and address when the record has them', async () => {
+    const address = { line1: '1 Main St', city: 'Irvine', state: 'CA', postalCode: '92618' };
+    ddbMock.on(QueryCommand, { TableName: TABLE.USERS }).resolves({
+      Items: [
+        { userId: 'c1', email: 'c1@shop.com', firstName: 'A', lastName: 'B', phone: '(949) 555-1234', address, status: 'ACTIVE', createdAt: 't' },
+      ],
+    });
+
+    const result = await handler(fakeEvent());
+
+    const body = JSON.parse(result.body);
+    expect(body.data.items[0]).toMatchObject({ phone: '(949) 555-1234', address });
   });
 
   it('caps the requested page limit at 100', async () => {
@@ -68,6 +82,88 @@ describe('GET /customers', () => {
 
     const call = ddbMock.commandCalls(QueryCommand)[0]?.args[0].input;
     expect(call?.Limit).toBe(100);
+  });
+});
+
+describe('PATCH /customers/{customerId}', () => {
+  function patchEvent(body: unknown, opts: { customerId?: string | null; claims?: Record<string, string> } = {}) {
+    return fakeEvent({
+      httpMethod: 'PATCH',
+      pathParameters: opts.customerId === null ? null : { customerId: opts.customerId ?? 'c1' },
+      body: JSON.stringify(body),
+      claims: opts.claims,
+    } as never);
+  }
+
+  it('updates the phone on the customer record, scoped to the admin tenant', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+
+    const result = await handler(patchEvent({ phone: '  (949) 555-1234 ' }));
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).data).toEqual({ userId: 'c1', phone: '(949) 555-1234' });
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.TableName).toBe(TABLE.USERS);
+    expect(input?.Key).toEqual({ PK: 'TENANT#t1', SK: 'USER#c1' });
+    expect(input?.ExpressionAttributeValues).toMatchObject({ ':phone': '(949) 555-1234', ':customer': 'CUSTOMER' });
+  });
+
+  it('lets a location manager update a phone', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+    const result = await handler(patchEvent({ phone: '555' }, { claims: { 'custom:role': UserRole.LOCATION_MANAGER } }));
+    expect(result.statusCode).toBe(200);
+  });
+
+  it('rejects customers', async () => {
+    const result = await handler(patchEvent({ phone: '555' }, { claims: { 'custom:role': UserRole.CUSTOMER } }));
+    expect(result.statusCode).toBe(403);
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it('requires a non-empty phone, and at least one of phone/address', async () => {
+    expect((await handler(patchEvent({ phone: '   ' }))).statusCode).toBe(400);
+    expect((await handler(patchEvent({}))).statusCode).toBe(400);
+    expect((await handler(patchEvent({ address: 'not an object' }))).statusCode).toBe(400);
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it('updates the address as separate string fields', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+
+    const result = await handler(patchEvent({ address: { line1: ' 1 Main St ', city: 'Irvine', state: 'CA', postalCode: '92618' } }));
+
+    expect(result.statusCode).toBe(200);
+    const address = { line1: '1 Main St', city: 'Irvine', state: 'CA', postalCode: '92618' };
+    expect(JSON.parse(result.body).data).toEqual({ userId: 'c1', address });
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.UpdateExpression).toBe('SET address = :address, updatedAt = :now');
+    expect(input?.ExpressionAttributeValues).toMatchObject({ ':address': address });
+  });
+
+  it('clears the address when it is sent blank', async () => {
+    ddbMock.on(UpdateCommand).resolves({});
+
+    const result = await handler(patchEvent({ address: { line1: ' ' } }));
+
+    expect(JSON.parse(result.body).data).toEqual({ userId: 'c1', address: null });
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.UpdateExpression).toBe('SET updatedAt = :now REMOVE address');
+  });
+
+  it('requires a customerId path parameter', async () => {
+    expect((await handler(patchEvent({ phone: '555' }, { customerId: null }))).statusCode).toBe(400);
+  });
+
+  it('returns 404 when the record is missing or not a customer', async () => {
+    ddbMock.on(UpdateCommand).rejects(Object.assign(new Error('cond'), { name: 'ConditionalCheckFailedException' }));
+    const result = await handler(patchEvent({ phone: '555' }));
+    expect(result.statusCode).toBe(404);
+  });
+
+  it('returns 500 on an unexpected DynamoDB error', async () => {
+    ddbMock.on(UpdateCommand).rejects(new Error('boom'));
+    const result = await handler(patchEvent({ phone: '555' }));
+    expect(result.statusCode).toBe(500);
   });
 });
 

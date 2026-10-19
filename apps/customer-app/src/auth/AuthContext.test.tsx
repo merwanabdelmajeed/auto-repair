@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from './AuthContext';
 import * as CognitoService from './CognitoService';
@@ -19,7 +19,7 @@ function Probe() {
       <Text testID="authed">{String(isAuthenticated)}</Text>
       <Text testID="email">{user?.email ?? 'none'}</Text>
       <Text testID="login" onPress={() => void login('a@shop.com', 'pw')}>login</Text>
-      <Text testID="register" onPress={() => void register('a@shop.com', 'pw', 't1', 'Jane', 'Doe')}>register</Text>
+      <Text testID="register" onPress={() => void register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '(949) 555-1234')}>register</Text>
       <Text testID="logout" onPress={() => void logout()}>logout</Text>
       <Text testID="update" onPress={() => updateUser({ givenName: 'Jane' })}>update</Text>
     </>
@@ -72,7 +72,7 @@ describe('AuthProvider', () => {
 
     await act(async () => fireEvent.press(screen.getByTestId('register')));
 
-    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe', undefined, undefined);
+    expect(CognitoService.register).toHaveBeenCalledWith('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '(949) 555-1234', undefined);
     expect(screen.getByTestId('authed').props.children).toBe('false');
   });
 
@@ -107,5 +107,67 @@ describe('useAuth', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<Probe />)).toThrow('useAuth must be used inside AuthProvider');
     consoleSpy.mockRestore();
+  });
+});
+
+describe('requireAuth prompt', () => {
+  function PromptProbe({ action }: { action: () => void }) {
+    const { requireAuth, authPromptVisible, authPromptScreen, hideAuthPrompt } = useAuth();
+    return (
+      <>
+        <Text testID="visible">{String(authPromptVisible)}</Text>
+        <Text testID="screen">{authPromptScreen}</Text>
+        <Text testID="gate" onPress={() => requireAuth(action)}>gate</Text>
+        <Text testID="hide" onPress={hideAuthPrompt}>hide</Text>
+      </>
+    );
+  }
+
+  async function renderSignedOut(action = jest.fn()) {
+    (CognitoService.getSessionUser as jest.Mock).mockResolvedValue(null);
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    render(<AuthProvider><PromptProbe action={action} /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId('visible')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('gate'));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    return { alertSpy, buttons, action };
+  }
+
+  it('offers Cancel, Sign In and Create Account to a signed-out user', async () => {
+    const { alertSpy, buttons, action } = await renderSignedOut();
+    expect(alertSpy).toHaveBeenCalledWith('Account Required', expect.any(String), expect.any(Array));
+    expect(buttons.map(b => b.text)).toEqual(['Cancel', 'Sign In', 'Create Account']);
+    expect(action).not.toHaveBeenCalled();
+    expect(screen.getByTestId('visible').props.children).toBe('false');
+  });
+
+  it('Create Account opens the overlay on the Register screen', async () => {
+    const { buttons } = await renderSignedOut();
+    act(() => buttons.find(b => b.text === 'Create Account')!.onPress!());
+    expect(screen.getByTestId('visible').props.children).toBe('true');
+    expect(screen.getByTestId('screen').props.children).toBe('Register');
+  });
+
+  it('Sign In opens the overlay on the Login screen', async () => {
+    const { buttons } = await renderSignedOut();
+    act(() => buttons.find(b => b.text === 'Create Account')!.onPress!());
+    fireEvent.press(screen.getByTestId('hide'));
+    act(() => buttons.find(b => b.text === 'Sign In')!.onPress!());
+    expect(screen.getByTestId('visible').props.children).toBe('true');
+    expect(screen.getByTestId('screen').props.children).toBe('Login');
+  });
+
+  it('runs the action directly when signed in, with no prompt', async () => {
+    (CognitoService.getSessionUser as jest.Mock).mockResolvedValue(fakeUser);
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const action = jest.fn();
+    render(<AuthProvider><PromptProbe action={action} /></AuthProvider>);
+    await waitFor(() => expect(CognitoService.getSessionUser).toHaveBeenCalled());
+    await act(async () => {});
+
+    fireEvent.press(screen.getByTestId('gate'));
+
+    expect(action).toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 });

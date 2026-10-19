@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
+import { formatPhone } from '../utils/phone';
+import { cleanAddress } from '../utils/address';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 type Props = {
   onNavigateToLogin: () => void;
@@ -24,6 +26,12 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [line1, setLine1] = useState('');
+  const [line2, setLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,8 +39,10 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
-    if (!firstName.trim() || !lastName.trim() || !email || !password || !confirm) {
-      setError('All fields are required.');
+    // Address is optional; phone is required but deliberately not validated
+    // beyond being non-empty (no format, uniqueness, or ownership checks).
+    if (!firstName.trim() || !lastName.trim() || !email || !phone.trim() || !password || !confirm) {
+      setError('Please fill in all required fields.');
       return;
     }
     if (password !== confirm) {
@@ -49,6 +59,7 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
       const trimmedEmail = email.trim();
       await register(
         trimmedEmail, password, DEFAULT_TENANT_ID, firstName.trim(), lastName.trim(),
+        phone.trim(), cleanAddress({ line1, line2, city, state, postalCode }),
       );
       onRegistered(trimmedEmail, password);
     } catch (e: unknown) {
@@ -123,6 +134,80 @@ export default function RegisterScreen({ onNavigateToLogin, onRegistered }: Prop
             autoCapitalize="none"
             autoComplete="email"
           />
+
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput
+            style={styles.input}
+            value={phone}
+            onChangeText={(t) => setPhone(formatPhone(t))}
+            placeholder="(555) 555-5555"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+            textContentType="telephoneNumber"
+          />
+
+          <Text style={styles.sectionLabel}>
+            Address <Text style={styles.optional}>(optional)</Text>
+          </Text>
+          <Text style={styles.label}>Street Address</Text>
+          <TextInput
+            style={styles.input}
+            value={line1}
+            onChangeText={setLine1}
+            placeholder="123 Main St"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="words"
+            autoComplete="street-address"
+            textContentType="streetAddressLine1"
+          />
+          <Text style={styles.label}>Apt, Suite, Unit</Text>
+          <TextInput
+            style={styles.input}
+            value={line2}
+            onChangeText={setLine2}
+            placeholder="Apt 4B"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="words"
+            textContentType="streetAddressLine2"
+          />
+          <Text style={styles.label}>City</Text>
+          <TextInput
+            style={styles.input}
+            value={city}
+            onChangeText={setCity}
+            placeholder="Lake Forest"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="words"
+            textContentType="addressCity"
+          />
+          <View style={styles.nameRow}>
+            <View style={styles.nameField}>
+              <Text style={styles.label}>State</Text>
+              <TextInput
+                style={styles.input}
+                value={state}
+                onChangeText={setState}
+                placeholder="CA"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                textContentType="addressState"
+              />
+            </View>
+            <View style={styles.nameField}>
+              <Text style={styles.label}>ZIP Code</Text>
+              <TextInput
+                style={styles.input}
+                value={postalCode}
+                onChangeText={setPostalCode}
+                placeholder="92630"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                autoComplete="postal-code"
+                textContentType="postalCode"
+              />
+            </View>
+          </View>
 
           <Text style={styles.label}>Password</Text>
           <View style={styles.passwordRow}>
@@ -233,6 +318,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     marginTop: spacing.md,
   },
+  sectionLabel: {
+    ...typography.h4,
+    color: colors.textPrimary,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  optional: { ...typography.bodySmall, color: colors.textMuted, fontWeight: '400' },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

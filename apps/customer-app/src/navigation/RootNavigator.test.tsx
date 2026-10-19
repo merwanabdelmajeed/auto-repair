@@ -82,6 +82,13 @@ describe('RootNavigator', () => {
     expect(screen.getByText('LoginScreen')).toBeTruthy();
   });
 
+  it('opens the overlay straight on Register when the user chose Create Account', () => {
+    mockAuth({ isAuthenticated: false, authPromptVisible: true, authPromptScreen: 'Register' });
+    renderNav();
+    expect(screen.getByText('RegisterScreen')).toBeTruthy();
+    expect(screen.queryByText('LoginScreen')).toBeNull();
+  });
+
   it('closes the overlay via the close button, calling hideAuthPrompt', () => {
     mockAuth({ isAuthenticated: false, authPromptVisible: true });
     renderNav();

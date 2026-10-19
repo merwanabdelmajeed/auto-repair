@@ -253,6 +253,7 @@ Resources:
         - custom:phone
         - phone_number
         - phone_number_verified
+        - address
       WriteAttributes:
         - email
         - given_name
@@ -260,6 +261,10 @@ Resources:
         - custom:tenantId
         - custom:phone
         - phone_number
+        # Standard OIDC attribute, no Schema change needed. The customer app
+        # writes the optional signup address here as a JSON string; the
+        # PostConfirmation trigger splits it into fields on the USERS record.
+        - address
 
   UserPoolClientAdmin:
     Type: AWS::Cognito::UserPoolClient
@@ -1128,6 +1133,12 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /customers/me
             Method: DELETE
+        CustomersPatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /customers/{customerId}
+            Method: PATCH
 
   LocationsFunction:
     Type: AWS::Serverless::Function
@@ -1277,6 +1288,11 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /capacity
             Method: GET
+            # Unauthenticated so the customer app can show today's hours to
+            # guests (operating hours aren't sensitive). The handler takes the
+            # tenant from the bearer token or ?tenantId=; PUT stays admin-only.
+            Auth:
+              Authorizer: NONE
         CapacityPut:
           Type: Api
           Properties:
@@ -1484,6 +1500,12 @@ Resources:
             RestApiId: !Ref AutoRepairApi
             Path: /users/me
             Method: PUT
+        UserProfileGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /users/me
+            Method: GET
 
   NotificationsFunction:
     Type: AWS::Serverless::Function

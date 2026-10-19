@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
+import { listVehicles, type Vehicle } from '../api/vehicles';
+import { useVehicleEdit } from '../hooks/useVehicleEdit';
+import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AddVehicleForm from '../components/AddVehicleForm';
 import { listCustomers, type Customer } from '../api/customers';
 import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
@@ -47,12 +50,11 @@ export default function Vehicles() {
   const [search, setSearch] = useState('');
   const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
 
-  // inline edit state
-  const [isEditing, setIsEditing] = useState(false);
-  const [editPlate, setEditPlate] = useState('');
-  const [editVin, setEditVin] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [editError, setEditError] = useState('');
+  // inline plate/VIN edit (shared flow — see hook)
+  const vehicleEdit = useVehicleEdit(updated => {
+    setVehicles(prev => prev.map(v => (v.vehicleId === updated.vehicleId ? updated : v)));
+    setDetailVehicle(updated);
+  });
 
   useEffect(() => { void load(); }, []);
 
@@ -86,41 +88,7 @@ export default function Vehicles() {
 
   function openDetail(v: Vehicle) {
     setDetailVehicle(v);
-    setIsEditing(false);
-    setEditError('');
-  }
-
-  function startEdit() {
-    if (!detailVehicle) return;
-    setEditPlate(detailVehicle.licensePlate ?? '');
-    setEditVin(detailVehicle.vin ?? '');
-    setEditError('');
-    setIsEditing(true);
-  }
-
-  function cancelEdit() {
-    setIsEditing(false);
-    setEditError('');
-  }
-
-  async function saveEdit() {
-    if (!detailVehicle) return;
-    setSaving(true);
-    setEditError('');
-    try {
-      const updated = await updateVehicle(detailVehicle.vehicleId, {
-        licensePlate: editPlate.trim() || null,
-        vin: editVin.trim() || null,
-      });
-      const merged = { ...detailVehicle, ...updated };
-      setVehicles(prev => prev.map(v => v.vehicleId === detailVehicle.vehicleId ? merged : v));
-      setDetailVehicle(merged);
-      setIsEditing(false);
-    } catch {
-      setEditError('Failed to save changes.');
-    } finally {
-      setSaving(false);
-    }
+    vehicleEdit.cancel();
   }
 
   const filtered = vehicles
@@ -238,20 +206,20 @@ export default function Vehicles() {
         const owner = customerMap[v.customerId];
         return (
           <>
-            <div onClick={() => { setDetailVehicle(null); setIsEditing(false); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
+            <div onClick={() => { setDetailVehicle(null); vehicleEdit.cancel(); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
             <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '400px', backgroundColor: 'var(--color-surface)', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', zIndex: 201, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 16px', borderBottom: '1px solid var(--color-border)' }}>
                 <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Vehicle Details</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {!isEditing && (
+                  {!vehicleEdit.editing && (
                     <button
-                      onClick={startEdit}
+                      onClick={() => vehicleEdit.start(v)}
                       style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '5px 10px', fontSize: '12px', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600 }}
                     >
                       ✏️ Edit Plate / VIN
                     </button>
                   )}
-                  <button onClick={() => { setDetailVehicle(null); setIsEditing(false); }} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>✕</button>
+                  <button onClick={() => { setDetailVehicle(null); vehicleEdit.cancel(); }} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>✕</button>
                 </div>
               </div>
 
@@ -269,12 +237,13 @@ export default function Vehicles() {
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Details</div>
                 <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>
                   {/* License Plate */}
-                  {isEditing ? (
+                  {vehicleEdit.editing ? (
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--color-divider)' }}>
                       <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0 }}>🪪</span>
                       <input
-                        value={editPlate}
-                        onChange={e => setEditPlate(e.target.value.toUpperCase())}
+                        aria-label="License plate"
+                        value={vehicleEdit.plate}
+                        onChange={e => vehicleEdit.setPlate(e.target.value)}
                         placeholder="License plate"
                         style={{ ...inputStyle, marginBottom: 0 }}
                       />
@@ -294,13 +263,14 @@ export default function Vehicles() {
                   </div>
 
                   {/* VIN */}
-                  {isEditing ? (
+                  {vehicleEdit.editing ? (
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--color-divider)' }}>
                       <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', flexShrink: 0 }}>🔢</span>
                       <input
-                        value={editVin}
-                        onChange={e => setEditVin(e.target.value.toUpperCase())}
-                        placeholder="VIN number"
+                        aria-label="VIN"
+                        value={vehicleEdit.vin}
+                        onChange={e => vehicleEdit.setVin(e.target.value)}
+                        placeholder="17-character VIN"
                         style={{ ...inputStyle, marginBottom: 0, fontFamily: 'monospace' }}
                       />
                     </div>
@@ -320,25 +290,43 @@ export default function Vehicles() {
                 </div>
 
                 {/* Edit error */}
-                {editError && (
+                {vehicleEdit.error && (
                   <div style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', color: 'var(--color-error)', fontSize: '13px' }}>
-                    {editError}
+                    {vehicleEdit.error}
                   </div>
                 )}
 
                 {/* Edit actions */}
-                {isEditing && (
+                {vehicleEdit.editing && (
+                  <VinDetailsPrompt lookup={vehicleEdit.lookup} onAddAsNew={vehicleEdit.startAddAsNew} style={{ marginBottom: '12px' }} />
+                )}
+                {vehicleEdit.editing && (
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-                    <button onClick={cancelEdit} style={{ flex: 1, padding: '10px', border: '1px solid var(--color-border)', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                    <button onClick={vehicleEdit.cancel} style={{ flex: 1, padding: '10px', border: '1px solid var(--color-border)', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
                       Cancel
                     </button>
-                    <button onClick={() => void saveEdit()} disabled={saving} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--color-secondary)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
-                      {saving ? 'Saving…' : 'Save Changes'}
+                    <button onClick={() => void vehicleEdit.save()} disabled={!vehicleEdit.canSave} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--color-secondary)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', cursor: vehicleEdit.canSave ? 'pointer' : 'not-allowed', opacity: vehicleEdit.canSave ? 1 : 0.7 }}>
+                      {vehicleEdit.saving ? 'Saving…' : 'Save Changes'}
                     </button>
                   </div>
                 )}
 
-                {owner && !isEditing && (
+                {vehicleEdit.addNew && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <AddVehicleForm
+                      customerId={vehicleEdit.addNew.customerId}
+                      initialVin={vehicleEdit.addNew.vin}
+                      onCancel={vehicleEdit.closeAddAsNew}
+                      onAdded={nv => {
+                        vehicleEdit.closeAddAsNew();
+                        setVehicles(prev => [nv, ...prev]);
+                        setDetailVehicle(nv);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {owner && !vehicleEdit.editing && (
                   <>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Owner</div>
                     <div
@@ -361,7 +349,7 @@ export default function Vehicles() {
 
                 {/* Service history — keyed by vehicleId, so this still works
                     even when the owning customer was deleted. */}
-                {!isEditing && (
+                {!vehicleEdit.editing && (
                   <>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', marginTop: owner ? '16px' : 0 }}>Service History</div>
                     {detailVehicleHistory.length === 0 ? (

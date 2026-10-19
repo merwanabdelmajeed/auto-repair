@@ -1,20 +1,37 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput, ActivityIndicator, Alert,
+  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { updateProfile } from '../auth/CognitoService';
-import { updateProfileName } from '../api/users';
+import { getMyProfile, updateMyProfile } from '../api/users';
+import { formatPhone } from '../utils/phone';
+import { cleanAddress, formatAddress, type Address } from '../utils/address';
+
+const ADDRESS_INPUTS: { key: keyof Address; label: string; placeholder: string; numeric?: boolean }[] = [
+  { key: 'line1', label: 'Street Address', placeholder: '123 Main St' },
+  { key: 'line2', label: 'Apt, Suite, Unit', placeholder: 'Apt 4B' },
+  { key: 'city', label: 'City', placeholder: 'Lake Forest' },
+  { key: 'state', label: 'State', placeholder: 'CA' },
+  { key: 'postalCode', label: 'ZIP Code', placeholder: '92630', numeric: true },
+];
 
 export default function ProfileScreen() {
-  const { user, logout, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const [showEdit, setShowEdit] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  // Phone and address come from the API (DynamoDB), not the Cognito token —
+  // refetched on every visit so a change made by the shop shows up here too.
+  const [phone, setPhone] = useState<string | null>(null);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [address, setAddress] = useState<Address | null>(null);
+  const [addressInput, setAddressInput] = useState<Address>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,9 +43,20 @@ export default function ProfileScreen() {
     ? `${user.givenName} ${user.familyName}`
     : user?.email ?? '';
 
+  useFocusEffect(useCallback(() => {
+    getMyProfile()
+      .then(p => {
+        setPhone(p.phone);
+        setAddress(p.address);
+      })
+      .catch(() => { /* leave the phone/address rows as "—" */ });
+  }, []));
+
   function openEdit() {
     setFirstName(user?.givenName ?? '');
     setLastName(user?.familyName ?? '');
+    setPhoneInput(phone ?? '');
+    setAddressInput({ ...(address ?? {}) });
     setError('');
     setShowEdit(true);
   }
@@ -38,14 +66,23 @@ export default function ProfileScreen() {
       setError('First and last name are required.');
       return;
     }
+    // Required (as at signup) but not validated beyond that.
+    if (!phoneInput.trim()) {
+      setError('Phone number is required.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       await updateProfile(firstName.trim(), lastName.trim());
       // Persist to the DynamoDB USERS record too — Cognito alone leaves the
-      // admin Customers list showing the old name.
-      await updateProfileName(firstName.trim(), lastName.trim());
+      // admin Customers list showing the old name. Phone and address live only
+      // there. Address is optional: an all-blank form clears it.
+      const newAddress = cleanAddress(addressInput) ?? null;
+      await updateMyProfile(firstName.trim(), lastName.trim(), phoneInput.trim(), newAddress);
       updateUser({ givenName: firstName.trim(), familyName: lastName.trim() });
+      setPhone(phoneInput.trim());
+      setAddress(newAddress);
       setShowEdit(false);
     } catch {
       setError('Failed to save. Please try again.');
@@ -54,16 +91,11 @@ export default function ProfileScreen() {
     }
   }
 
-  function confirmLogout() {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => void logout() },
-    ]);
-  }
-
   const fields = [
     { icon: 'person-outline' as const, label: 'Full Name', value: displayName || '—' },
     { icon: 'mail-outline' as const, label: 'Email Address', value: user?.email ?? '—' },
+    { icon: 'call-outline' as const, label: 'Phone Number', value: phone ?? '—' },
+    { icon: 'location-outline' as const, label: 'Address', value: formatAddress(address) ?? '—' },
   ];
 
   return (
@@ -99,17 +131,11 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={confirmLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
-
       </ScrollView>
 
       {/* Edit Modal */}
       <Modal visible={showEdit} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
@@ -118,48 +144,79 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-            <Text style={styles.inputLabel}>First Name</Text>
-            <TextInput
-              style={styles.input}
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder="First name"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="words"
-            />
+              <Text style={styles.inputLabel}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="First name"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+              />
 
-            <Text style={styles.inputLabel}>Last Name</Text>
-            <TextInput
-              style={styles.input}
-              value={lastName}
-              onChangeText={setLastName}
-              placeholder="Last name"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="words"
-            />
+              <Text style={styles.inputLabel}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Last name"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+              />
 
-            <Text style={styles.emailNote}>
-              <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} /> Email address cannot be changed.
-            </Text>
+              <Text style={styles.inputLabel}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={phoneInput}
+                onChangeText={t => setPhoneInput(formatPhone(t))}
+                placeholder="(555) 555-5555"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="phone-pad"
+                autoComplete="tel"
+              />
 
-            <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-              onPress={() => void handleSave()}
-              disabled={saving}
-              activeOpacity={0.85}
-            >
-              {saving
-                ? <ActivityIndicator color={colors.primary} />
-                : <Text style={styles.saveBtnText}>Save Changes</Text>}
-            </TouchableOpacity>
+              <Text style={styles.addressHeading}>
+                Address <Text style={styles.optional}>(optional)</Text>
+              </Text>
+              {ADDRESS_INPUTS.map(f => (
+                <React.Fragment key={f.key}>
+                  <Text style={styles.inputLabel}>{f.label}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={addressInput[f.key] ?? ''}
+                    onChangeText={t => setAddressInput(a => ({ ...a, [f.key]: t }))}
+                    placeholder={f.placeholder}
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize={f.key === 'state' ? 'characters' : 'words'}
+                    keyboardType={f.numeric ? 'number-pad' : 'default'}
+                  />
+                </React.Fragment>
+              ))}
+
+              <Text style={styles.emailNote}>
+                <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} /> Email address cannot be changed.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+                onPress={() => void handleSave()}
+                disabled={saving}
+                activeOpacity={0.85}
+              >
+                {saving
+                  ? <ActivityIndicator color={colors.primary} />
+                  : <Text style={styles.saveBtnText}>Save Changes</Text>}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Layout>
   );
@@ -234,27 +291,19 @@ const styles = StyleSheet.create({
   fieldLabel: { ...typography.small, color: colors.textSecondary, marginBottom: 2 },
   fieldValue: { ...typography.body, color: colors.textPrimary },
 
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    margin: spacing.md,
-    marginTop: spacing.lg,
-    paddingVertical: 14,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.error,
-    backgroundColor: 'rgba(239,68,68,0.05)',
-  },
-  signOutText: { ...typography.h4, color: colors.error },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: spacing.lg, paddingBottom: 40,
+    maxHeight: '90%',
   },
+  addressHeading: {
+    ...typography.h4, color: colors.textPrimary,
+    marginTop: spacing.lg, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  optional: { ...typography.bodySmall, color: colors.textMuted, fontWeight: '400' },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: spacing.lg,

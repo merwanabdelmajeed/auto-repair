@@ -7,7 +7,10 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '../api/appointments';
-import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
+import { listVehicles, type Vehicle } from '../api/vehicles';
+import { useVehicleEdit } from '../hooks/useVehicleEdit';
+import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AddVehicleForm from '../components/AddVehicleForm';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
 import { fetchAllPages } from '../utils/fetchAllPages';
@@ -64,11 +67,8 @@ export default function Bookings() {
   const [errorDialog, setErrorDialog] = useState<string | null>(null);
   const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
   const [showVehicleDetail, setShowVehicleDetail] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState(false);
-  const [editPlate, setEditPlate] = useState('');
-  const [editVin, setEditVin] = useState('');
-  const [savingVehicle, setSavingVehicle] = useState(false);
-  const [vehicleEditError, setVehicleEditError] = useState('');
+  // Plate/VIN edit for the selected booking's vehicle (shared flow — see hook).
+  const vehicleEdit = useVehicleEdit(updated => setVehicleMap(prev => ({ ...prev, [updated.vehicleId]: updated })));
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -255,7 +255,7 @@ export default function Bookings() {
               return (
                 <tr
                   key={appt.appointmentId}
-                  onClick={() => { setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? null : appt); setShowVehicleDetail(false); setEditingVehicle(false); setVehicleEditError(''); }}
+                  onClick={() => { setDetailAppt(prev => prev?.appointmentId === appt.appointmentId ? null : appt); setShowVehicleDetail(false); vehicleEdit.cancel(); }}
                   style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--color-divider)' : 'none', verticalAlign: 'middle', cursor: 'pointer', backgroundColor: isDetail ? 'rgba(15,32,68,0.04)' : 'transparent', transition: 'background-color 0.1s' }}
                   onMouseEnter={e => { if (!isDetail) e.currentTarget.style.backgroundColor = 'rgba(15,32,68,0.025)'; }}
                   onMouseLeave={e => { if (!isDetail) e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -370,8 +370,8 @@ export default function Bookings() {
                       <div style={{ padding: '10px 14px 12px', borderBottom: '1px solid var(--color-divider)', backgroundColor: 'rgba(15,32,68,0.02)', display: 'flex', flexDirection: 'column', gap: '7px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '52px', flexShrink: 0 }}>Plate</span>
-                          {editingVehicle
-                            ? <input style={inlineInput} value={editPlate} onChange={e => setEditPlate(e.target.value.toUpperCase())} placeholder="e.g. ABC1234" />
+                          {vehicleEdit.editing
+                            ? <input aria-label="License plate" style={inlineInput} value={vehicleEdit.plate} onChange={e => vehicleEdit.setPlate(e.target.value)} placeholder="e.g. ABC1234" />
                             : <span style={{ fontSize: '13px', fontWeight: veh.licensePlate ? 700 : 400, color: veh.licensePlate ? 'var(--color-text-primary)' : 'var(--color-text-muted)', fontFamily: 'monospace' }}>{veh.licensePlate ?? '—'}</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -380,40 +380,46 @@ export default function Bookings() {
                         </div>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '52px', flexShrink: 0 }}>VIN</span>
-                          {editingVehicle
-                            ? <input style={inlineInput} value={editVin} onChange={e => setEditVin(e.target.value.toUpperCase())} placeholder="17-char VIN" />
+                          {vehicleEdit.editing
+                            ? <input aria-label="VIN" style={inlineInput} value={vehicleEdit.vin} onChange={e => vehicleEdit.setVin(e.target.value)} placeholder="17-char VIN" />
                             : <span style={{ fontSize: '13px', color: veh.vin ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontFamily: 'monospace' }}>{veh.vin ?? '—'}</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '52px', flexShrink: 0 }}>Added</span>
                           <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{fmtDate(veh.createdAt)}</span>
                         </div>
-                        {vehicleEditError && <span style={{ fontSize: '12px', color: 'var(--color-error)' }}>{vehicleEditError}</span>}
-                        {editingVehicle ? (
+                        {vehicleEdit.error && <span style={{ fontSize: '12px', color: 'var(--color-error)' }}>{vehicleEdit.error}</span>}
+                        {vehicleEdit.editing && (
+                          <VinDetailsPrompt lookup={vehicleEdit.lookup} onAddAsNew={vehicleEdit.startAddAsNew} />
+                        )}
+                        {vehicleEdit.editing ? (
                           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                             <button
-                              onClick={async () => {
-                                setSavingVehicle(true); setVehicleEditError('');
-                                try {
-                                  const updated = await updateVehicle(veh.vehicleId, { licensePlate: editPlate.trim() || null, vin: editVin.trim() || null });
-                                  setVehicleMap(prev => ({ ...prev, [veh.vehicleId]: { ...veh, ...updated } }));
-                                  setEditingVehicle(false);
-                                } catch { setVehicleEditError('Failed to save.'); }
-                                finally { setSavingVehicle(false); }
-                              }}
-                              disabled={savingVehicle}
-                              style={{ flex: 1, padding: '6px', borderRadius: '6px', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', fontSize: '12px', fontWeight: 700, cursor: 'pointer', opacity: savingVehicle ? 0.6 : 1 }}
+                              onClick={() => void vehicleEdit.save()}
+                              disabled={!vehicleEdit.canSave}
+                              style={{ flex: 1, padding: '6px', borderRadius: '6px', border: 'none', backgroundColor: 'var(--color-primary)', color: 'white', fontSize: '12px', fontWeight: 700, cursor: vehicleEdit.canSave ? 'pointer' : 'not-allowed', opacity: vehicleEdit.canSave ? 1 : 0.6 }}
                             >
-                              {savingVehicle ? 'Saving…' : 'Save'}
+                              {vehicleEdit.saving ? 'Saving…' : 'Save'}
                             </button>
-                            <button onClick={() => { setEditingVehicle(false); setVehicleEditError(''); }} style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
+                            <button onClick={vehicleEdit.cancel} style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
                               Cancel
                             </button>
                           </div>
                         ) : (
-                          <button onClick={() => { setEditPlate(veh.licensePlate ?? ''); setEditVin(veh.vin ?? ''); setEditingVehicle(true); setVehicleEditError(''); }} style={{ alignSelf: 'flex-start', marginTop: '4px', padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(15,32,68,0.3)', backgroundColor: 'transparent', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: 'var(--color-primary)' }}>
+                          <button onClick={() => vehicleEdit.start(veh)} style={{ alignSelf: 'flex-start', marginTop: '4px', padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(15,32,68,0.3)', backgroundColor: 'transparent', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: 'var(--color-primary)' }}>
                             ✏️ Edit Plate / VIN
                           </button>
+                        )}
+                        {vehicleEdit.addNew && (
+                          <AddVehicleForm
+                            customerId={vehicleEdit.addNew.customerId}
+                            initialVin={vehicleEdit.addNew.vin}
+                            onCancel={vehicleEdit.closeAddAsNew}
+                            onAdded={v => {
+                              vehicleEdit.closeAddAsNew();
+                              setVehicleMap(prev => ({ ...prev, [v.vehicleId]: v }));
+                            }}
+                          />
                         )}
                       </div>
                     );

@@ -12,18 +12,6 @@ import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../consta
 export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuth();
 
-  function confirmLogout() {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => void handleLogout() },
-    ]);
-  }
-
-  async function handleLogout() {
-    await logout();
-    navigation.navigate('Home');
-  }
-
   function confirmDeleteAccount() {
     Alert.alert(
       'Delete Account',
@@ -96,12 +84,6 @@ export default function SettingsScreen({ navigation }: any) {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={confirmLogout} activeOpacity={0.85}>
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
 
         {/* Delete Account */}
         <TouchableOpacity
@@ -185,28 +167,13 @@ const styles = StyleSheet.create({
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   rowValue: { ...typography.bodySmall, color: colors.textSecondary },
 
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    margin: spacing.md,
-    marginTop: spacing.lg,
-    backgroundColor: 'rgba(239,68,68,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
-    borderRadius: borderRadius.xl,
-    paddingVertical: 14,
-  },
-  signOutText: { ...typography.h4, color: colors.error },
-
   deleteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
     paddingVertical: 12,
   },
   deleteBtnText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },

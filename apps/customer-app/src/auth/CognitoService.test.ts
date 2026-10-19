@@ -43,10 +43,10 @@ function fakeSession(payloadOverrides: Record<string, unknown> = {}) {
 }
 
 describe('register', () => {
-  it('signs up with the required attributes', async () => {
+  it('signs up with the required attributes, phone as custom:phone (not phone_number)', async () => {
     mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
 
-    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe');
+    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '(949) 555-1234');
 
     expect(mockPool.signUp).toHaveBeenCalled();
     const attrs = mockPool.signUp.mock.calls[0][2];
@@ -55,43 +55,27 @@ describe('register', () => {
       { Name: 'given_name', Value: 'Jane' },
       { Name: 'family_name', Value: 'Doe' },
       { Name: 'custom:tenantId', Value: 't1' },
+      { Name: 'custom:phone', Value: '(949) 555-1234' },
     ]));
-    expect(attrs.some((a: { Name: string }) => a.Name === 'custom:phone')).toBe(false);
-    expect(attrs.some((a: { Name: string }) => a.Name === 'custom:smsConsent')).toBe(false);
+    expect(attrs.some((a: { Name: string }) => a.Name === 'phone_number')).toBe(false);
+    expect(attrs.some((a: { Name: string }) => a.Name === 'address')).toBe(false);
   });
 
-  it('includes custom:phone when a phone is provided, without smsConsent when consent is false', async () => {
+  it('sends the address as a JSON string in the standard address attribute', async () => {
     mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
+    const address = { line1: '1 Main St', city: 'Irvine', state: 'CA', postalCode: '92618' };
 
-    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '5551234567', false);
+    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '(949) 555-1234', address);
 
     const attrs = mockPool.signUp.mock.calls[0][2];
-    expect(attrs).toEqual(expect.arrayContaining([{ Name: 'custom:phone', Value: '5551234567' }]));
-    expect(attrs.some((a: { Name: string }) => a.Name === 'custom:smsConsent')).toBe(false);
-  });
-
-  it('includes custom:smsConsent=true only when both a phone and consent are given', async () => {
-    mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
-
-    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '5551234567', true);
-
-    const attrs = mockPool.signUp.mock.calls[0][2];
-    expect(attrs).toEqual(expect.arrayContaining([{ Name: 'custom:smsConsent', Value: 'true' }]));
-  });
-
-  it('omits custom:smsConsent even when consent is true if no phone was given', async () => {
-    mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(null));
-
-    await CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', undefined, true);
-
-    const attrs = mockPool.signUp.mock.calls[0][2];
-    expect(attrs.some((a: { Name: string }) => a.Name === 'custom:smsConsent')).toBe(false);
+    const addr = attrs.find((a: { Name: string }) => a.Name === 'address');
+    expect(JSON.parse(addr.Value)).toEqual(address);
   });
 
   it('rejects when Cognito signUp fails', async () => {
     mockPool.signUp.mockImplementation((_e, _p, _attrs, _v, cb) => cb(new Error('email exists')));
 
-    await expect(CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe')).rejects.toThrow('email exists');
+    await expect(CognitoService.register('a@shop.com', 'pw', 't1', 'Jane', 'Doe', '555')).rejects.toThrow('email exists');
   });
 });
 

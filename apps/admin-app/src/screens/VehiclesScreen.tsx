@@ -7,7 +7,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
+import { listVehicles, type Vehicle } from '../api/vehicles';
+import { useVehicleEdit } from '../hooks/useVehicleEdit';
+import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AddVehicleForm from '../components/AddVehicleForm';
 import { listCustomers, type Customer } from '../api/customers';
 import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
@@ -35,11 +38,11 @@ export default function VehiclesScreen({ navigation, route }: any) {
   const [search, setSearch] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
-  // edit state
-  const [isEditing, setIsEditing] = useState(false);
-  const [editPlate, setEditPlate] = useState('');
-  const [editVin, setEditVin] = useState('');
-  const [saving, setSaving] = useState(false);
+  // plate/VIN edit (shared flow — see hook)
+  const vehicleEdit = useVehicleEdit(updated => {
+    setVehicles(prev => prev.map(v => (v.vehicleId === updated.vehicleId ? updated : v)));
+    setSelectedVehicle(updated);
+  });
 
   const customerIdFilter: string | undefined = route?.params?.customerId;
 
@@ -68,37 +71,7 @@ export default function VehiclesScreen({ navigation, route }: any) {
 
   function openDetail(v: Vehicle) {
     setSelectedVehicle(v);
-    setIsEditing(false);
-  }
-
-  function startEdit() {
-    if (!selectedVehicle) return;
-    setEditPlate(selectedVehicle.licensePlate ?? '');
-    setEditVin(selectedVehicle.vin ?? '');
-    setIsEditing(true);
-  }
-
-  function cancelEdit() {
-    setIsEditing(false);
-  }
-
-  async function saveEdit() {
-    if (!selectedVehicle) return;
-    setSaving(true);
-    try {
-      const updated = await updateVehicle(selectedVehicle.vehicleId, {
-        licensePlate: editPlate.trim() || undefined,
-        vin: editVin.trim() || undefined,
-      });
-      const merged = { ...selectedVehicle, ...updated };
-      setVehicles(prev => prev.map(v => v.vehicleId === selectedVehicle.vehicleId ? merged : v));
-      setSelectedVehicle(merged);
-      setIsEditing(false);
-    } catch {
-      Alert.alert('Error', 'Failed to save changes.');
-    } finally {
-      setSaving(false);
-    }
+    vehicleEdit.cancel();
   }
 
   const filtered = vehicles
@@ -215,13 +188,13 @@ export default function VehiclesScreen({ navigation, route }: any) {
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>Vehicle Details</Text>
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      {isEditing ? null : (
-                        <TouchableOpacity onPress={startEdit} style={styles.editHeaderBtn}>
+                      {vehicleEdit.editing ? null : (
+                        <TouchableOpacity onPress={() => vehicleEdit.start(selectedVehicle)} style={styles.editHeaderBtn}>
                           <Ionicons name="pencil-outline" size={16} color={colors.primary} />
                           <Text style={styles.editHeaderBtnText}>Edit</Text>
                         </TouchableOpacity>
                       )}
-                      <TouchableOpacity onPress={() => { setSelectedVehicle(null); setIsEditing(false); }}>
+                      <TouchableOpacity onPress={() => { setSelectedVehicle(null); vehicleEdit.cancel(); }}>
                         <Ionicons name="close" size={24} color={colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
@@ -243,13 +216,14 @@ export default function VehiclesScreen({ navigation, route }: any) {
                     <Text style={styles.sectionLabel}>Details</Text>
                     <View style={styles.infoCard}>
                       {/* License Plate - read or edit */}
-                      {isEditing ? (
+                      {vehicleEdit.editing ? (
                         <View style={styles.editRow}>
                           <Ionicons name="card-outline" size={15} color={colors.textMuted} />
                           <TextInput
+                            accessibilityLabel="License plate"
                             style={styles.editInput}
-                            value={editPlate}
-                            onChangeText={setEditPlate}
+                            value={vehicleEdit.plate}
+                            onChangeText={vehicleEdit.setPlate}
                             placeholder="License plate"
                             placeholderTextColor={colors.textMuted}
                             autoCapitalize="characters"
@@ -270,14 +244,15 @@ export default function VehiclesScreen({ navigation, route }: any) {
                       </View>
 
                       {/* VIN - read or edit */}
-                      {isEditing ? (
+                      {vehicleEdit.editing ? (
                         <View style={styles.editRow}>
                           <Ionicons name="barcode-outline" size={15} color={colors.textMuted} />
                           <TextInput
+                            accessibilityLabel="VIN"
                             style={styles.editInput}
-                            value={editVin}
-                            onChangeText={setEditVin}
-                            placeholder="VIN number"
+                            value={vehicleEdit.vin}
+                            onChangeText={vehicleEdit.setVin}
+                            placeholder="17-character VIN"
                             placeholderTextColor={colors.textMuted}
                             autoCapitalize="characters"
                           />
@@ -298,21 +273,40 @@ export default function VehiclesScreen({ navigation, route }: any) {
                     </View>
 
                     {/* Edit actions */}
-                    {isEditing && (
+                    {vehicleEdit.error ? <Text style={styles.editError}>{vehicleEdit.error}</Text> : null}
+                    {vehicleEdit.editing && (
+                      <VinDetailsPrompt lookup={vehicleEdit.lookup} onAddAsNew={vehicleEdit.startAddAsNew} style={{ marginTop: spacing.sm }} />
+                    )}
+                    {vehicleEdit.editing && (
                       <View style={styles.editActions}>
-                        <TouchableOpacity onPress={cancelEdit} style={styles.cancelBtn} activeOpacity={0.8}>
+                        <TouchableOpacity onPress={vehicleEdit.cancel} style={styles.cancelBtn} activeOpacity={0.8}>
                           <Text style={styles.cancelBtnText}>Cancel</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => void saveEdit()} style={styles.saveBtn} activeOpacity={0.8} disabled={saving}>
-                          {saving
+                        <TouchableOpacity onPress={() => void vehicleEdit.save()} style={[styles.saveBtn, !vehicleEdit.canSave && { opacity: 0.6 }]} activeOpacity={0.8} disabled={!vehicleEdit.canSave}>
+                          {vehicleEdit.saving
                             ? <ActivityIndicator size="small" color={colors.primary} />
                             : <Text style={styles.saveBtnText}>Save Changes</Text>}
                         </TouchableOpacity>
                       </View>
                     )}
 
+                    {vehicleEdit.addNew && (
+                      <View style={{ marginTop: spacing.sm }}>
+                        <AddVehicleForm
+                          customerId={vehicleEdit.addNew.customerId}
+                          initialVin={vehicleEdit.addNew.vin}
+                          onCancel={vehicleEdit.closeAddAsNew}
+                          onAdded={nv => {
+                            vehicleEdit.closeAddAsNew();
+                            setVehicles(prev => [nv, ...prev]);
+                            setSelectedVehicle(nv);
+                          }}
+                        />
+                      </View>
+                    )}
+
                     {/* Owner info */}
-                    {owner && !isEditing && (
+                    {owner && !vehicleEdit.editing && (
                       <>
                         <Text style={styles.sectionLabel}>Owner</Text>
                         <TouchableOpacity
@@ -339,7 +333,7 @@ export default function VehiclesScreen({ navigation, route }: any) {
 
                     {/* Service history — keyed by vehicleId, so this still
                         works even when the owning customer was deleted. */}
-                    {!isEditing && (
+                    {!vehicleEdit.editing && (
                       <>
                         <Text style={styles.sectionLabel}>Service History</Text>
                         {selectedVehicleHistory.length === 0 ? (
@@ -430,6 +424,7 @@ const styles = StyleSheet.create({
   editRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.divider },
   editInput: { flex: 1, ...typography.bodySmall, color: colors.textPrimary, borderWidth: 1, borderColor: colors.primary, borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 7, backgroundColor: colors.surface },
 
+  editError: { ...typography.bodySmall, color: colors.error, marginTop: spacing.sm },
   editActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   cancelBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.md, paddingVertical: 11, alignItems: 'center', backgroundColor: colors.background },
   cancelBtnText: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '600' },

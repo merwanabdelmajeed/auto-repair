@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listCustomers, type Customer } from '../api/customers';
+import { listCustomers, updateCustomer, type Customer, type CustomerAddress } from '../api/customers';
 import { listVehicles, type Vehicle } from '../api/vehicles';
 import { fetchAllPages } from '../utils/fetchAllPages';
+import AddVehicleForm from '../components/AddVehicleForm';
+import { matchesCustomerSearch } from '../utils/customerSearch';
+import { cleanAddress, formatAddress } from '../utils/address';
+import { formatPhone } from '../utils/phone';
+
+const ADDRESS_INPUTS: { key: keyof CustomerAddress; label: string; placeholder: string }[] = [
+  { key: 'line1', label: 'Street address', placeholder: '123 Main St' },
+  { key: 'line2', label: 'Apt, suite, unit', placeholder: 'Apt 4B' },
+  { key: 'city', label: 'City', placeholder: 'Lake Forest' },
+  { key: 'state', label: 'State', placeholder: 'CA' },
+  { key: 'postalCode', label: 'ZIP code', placeholder: '92630' },
+];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -29,6 +41,65 @@ export default function Customers() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
+  // null = not editing; a string = the phone input's current value.
+  const [phoneDraft, setPhoneDraft] = useState<string | null>(null);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  // null = not editing; otherwise the address form's current values.
+  const [addressDraft, setAddressDraft] = useState<CustomerAddress | null>(null);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressError, setAddressError] = useState('');
+  const [addingVehicle, setAddingVehicle] = useState(false);
+
+  // Opening a different customer (or closing the panel) drops any edit in progress.
+  useEffect(() => {
+    setPhoneDraft(null);
+    setPhoneError('');
+    setAddressDraft(null);
+    setAddressError('');
+    setAddingVehicle(false);
+  }, [detailCustomer?.userId]);
+
+  async function savePhone() {
+    if (!detailCustomer || phoneDraft === null) return;
+    const phone = phoneDraft.trim();
+    if (!phone) {
+      setPhoneError('Phone number is required.');
+      return;
+    }
+    setSavingPhone(true);
+    setPhoneError('');
+    try {
+      await updateCustomer(detailCustomer.userId, { phone });
+      const id = detailCustomer.userId;
+      setCustomers(prev => prev.map(c => (c.userId === id ? { ...c, phone } : c)));
+      setDetailCustomer(prev => (prev ? { ...prev, phone } : prev));
+      setPhoneDraft(null);
+    } catch {
+      setPhoneError('Failed to save phone number.');
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
+  async function saveAddress() {
+    if (!detailCustomer || addressDraft === null) return;
+    // Optional: an all-blank form clears the address.
+    const address = cleanAddress(addressDraft) ?? null;
+    setSavingAddress(true);
+    setAddressError('');
+    try {
+      await updateCustomer(detailCustomer.userId, { address });
+      const id = detailCustomer.userId;
+      setCustomers(prev => prev.map(c => (c.userId === id ? { ...c, address } : c)));
+      setDetailCustomer(prev => (prev ? { ...prev, address } : prev));
+      setAddressDraft(null);
+    } catch {
+      setAddressError('Failed to save address.');
+    } finally {
+      setSavingAddress(false);
+    }
+  }
 
   useEffect(() => { void load(); }, []);
 
@@ -58,12 +129,7 @@ export default function Customers() {
     ? customers.filter(c => c.userId === customerIdFilter)
     : customers;
 
-  const filtered = search.trim()
-    ? base.filter(c =>
-        c.email.toLowerCase().includes(search.toLowerCase()) ||
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase())
-      )
-    : base;
+  const filtered = base.filter(c => matchesCustomerSearch(c, search));
 
   return (
     <div style={{ maxWidth: '1100px' }}>
@@ -73,7 +139,7 @@ export default function Customers() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or email…"
+            placeholder="Search by name, email, or phone…"
             style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '14px', color: 'var(--color-text-primary)', width: '100%' }}
           />
         </div>
@@ -140,6 +206,7 @@ export default function Customers() {
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{displayName(c)}</div>
                     {(c.firstName || c.lastName) && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{c.email}</div>}
+                    {c.phone && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{c.phone}</div>}
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                     {vehicles.length > 0
@@ -190,13 +257,99 @@ export default function Customers() {
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{c.email}</span>
                   </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📞</span>
+                    {phoneDraft === null ? (
+                      <>
+                        <span style={{ flex: 1, fontSize: '13px', color: c.phone ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{c.phone ?? 'No phone number'}</span>
+                        <button onClick={() => setPhoneDraft(c.phone ?? '')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0 }}>
+                          {c.phone ? 'Edit' : 'Add'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          aria-label="Phone number"
+                          value={phoneDraft}
+                          onChange={e => setPhoneDraft(formatPhone(e.target.value))}
+                          onKeyDown={e => { if (e.key === 'Enter') void savePhone(); if (e.key === 'Escape') setPhoneDraft(null); }}
+                          placeholder="(555) 555-5555"
+                          autoFocus
+                          style={{ flex: 1, minWidth: 0, fontSize: '13px', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-surface)' }}
+                        />
+                        <button onClick={() => { setPhoneDraft(null); setPhoneError(''); }} disabled={savingPhone} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', padding: 0 }}>
+                          Cancel
+                        </button>
+                        <button onClick={() => void savePhone()} disabled={savingPhone} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: savingPhone ? 'default' : 'pointer', padding: 0, opacity: savingPhone ? 0.6 : 1 }}>
+                          {savingPhone ? 'Saving…' : 'Save'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: addressDraft ? 'flex-start' : 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📍</span>
+                    {addressDraft === null ? (
+                      <>
+                        <span style={{ flex: 1, fontSize: '13px', color: formatAddress(c.address) ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{formatAddress(c.address) ?? 'No address'}</span>
+                        <button aria-label={formatAddress(c.address) ? 'Edit address' : 'Add address'} onClick={() => setAddressDraft({ ...(c.address ?? {}) })} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0 }}>
+                          {formatAddress(c.address) ? 'Edit' : 'Add'}
+                        </button>
+                      </>
+                    ) : (
+                      <form
+                        onSubmit={e => { e.preventDefault(); void saveAddress(); }}
+                        onKeyDown={e => { if (e.key === 'Escape') setAddressDraft(null); }}
+                        style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}
+                      >
+                        {ADDRESS_INPUTS.map((f, i) => (
+                          <input
+                            key={f.key}
+                            aria-label={f.label}
+                            value={addressDraft[f.key] ?? ''}
+                            onChange={e => { const v = e.target.value; setAddressDraft(d => ({ ...d, [f.key]: v })); }}
+                            placeholder={f.placeholder}
+                            autoFocus={i === 0}
+                            style={{ fontSize: '13px', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-surface)', minWidth: 0 }}
+                          />
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '14px', marginTop: '2px' }}>
+                          <button type="button" onClick={() => { setAddressDraft(null); setAddressError(''); }} disabled={savingAddress} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', padding: 0 }}>
+                            Cancel
+                          </button>
+                          <button type="submit" disabled={savingAddress} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: savingAddress ? 'default' : 'pointer', padding: 0, opacity: savingAddress ? 0.6 : 1 }}>
+                            {savingAddress ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>📅</span>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Joined {fmtDate(c.createdAt)}</span>
                   </div>
                 </div>
 
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Vehicles ({vehicles.length})</div>
+                {phoneError && <div role="alert" style={{ fontSize: '13px', color: 'var(--color-error)', marginTop: '-8px', marginBottom: '12px' }}>{phoneError}</div>}
+                {addressError && <div role="alert" style={{ fontSize: '13px', color: 'var(--color-error)', marginTop: '-8px', marginBottom: '12px' }}>{addressError}</div>}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Vehicles ({vehicles.length})</div>
+                  {!addingVehicle && (
+                    <button onClick={() => setAddingVehicle(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0 }}>
+                      + Add vehicle
+                    </button>
+                  )}
+                </div>
+                {addingVehicle && (
+                  <AddVehicleForm
+                    customerId={c.userId}
+                    onCancel={() => setAddingVehicle(false)}
+                    onAdded={v => {
+                      setVehicleMap(prev => ({ ...prev, [c.userId]: [v, ...(prev[c.userId] ?? [])] }));
+                      setAddingVehicle(false);
+                    }}
+                  />
+                )}
                 {vehicles.length === 0 ? (
                   <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>🚗</span>

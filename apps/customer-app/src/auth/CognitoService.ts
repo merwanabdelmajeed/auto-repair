@@ -5,6 +5,7 @@ import {
   CognitoUserAttribute,
   type CognitoUserSession,
 } from 'amazon-cognito-identity-js';
+import type { Address } from '../utils/address';
 
 // @ts-ignore's below: see the identical note in ../api/client.ts. Do not wrap
 // these in a cast/alias: that breaks Expo's Babel EXPO_PUBLIC_* inlining.
@@ -63,8 +64,8 @@ export async function register(
   tenantId: string,
   firstName: string,
   lastName: string,
-  phone?: string,
-  smsConsent?: boolean,
+  phone: string,
+  address?: Address,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const attributes = [
@@ -72,8 +73,13 @@ export async function register(
       new CognitoUserAttribute({ Name: 'given_name', Value: firstName }),
       new CognitoUserAttribute({ Name: 'family_name', Value: lastName }),
       new CognitoUserAttribute({ Name: 'custom:tenantId', Value: tenantId }),
-      ...(phone ? [new CognitoUserAttribute({ Name: 'custom:phone', Value: phone })] : []),
-      ...(phone && smsConsent ? [new CognitoUserAttribute({ Name: 'custom:smsConsent', Value: 'true' })] : []),
+      // custom:phone, deliberately NOT the standard phone_number attribute:
+      // this is contact info only — never verified, never used for MFA.
+      new CognitoUserAttribute({ Name: 'custom:phone', Value: phone }),
+      // Cognito's standard `address` attribute is a single string; the
+      // PostConfirmation trigger parses this JSON back into separate fields
+      // on the DynamoDB USERS record.
+      ...(address ? [new CognitoUserAttribute({ Name: 'address', Value: JSON.stringify(address) })] : []),
     ];
     pool.signUp(email, password, attributes, [], (err) => {
       if (err) return reject(err);

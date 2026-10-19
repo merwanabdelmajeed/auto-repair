@@ -14,10 +14,11 @@ beforeEach(() => {
   (useAuth as jest.Mock).mockReturnValue({ register: mockRegister });
 });
 
-function fillRequiredFields(overrides: Partial<Record<'first' | 'last' | 'email' | 'password' | 'confirm', string>> = {}) {
+function fillRequiredFields(overrides: Partial<Record<'first' | 'last' | 'email' | 'phone' | 'password' | 'confirm', string>> = {}) {
   fireEvent.changeText(screen.getByPlaceholderText('Jane'), overrides.first ?? 'Jane');
   fireEvent.changeText(screen.getByPlaceholderText('Smith'), overrides.last ?? 'Doe');
   fireEvent.changeText(screen.getByPlaceholderText('your@email.com'), overrides.email ?? 'jane@shop.com');
+  fireEvent.changeText(screen.getByPlaceholderText('(555) 555-5555'), overrides.phone ?? '9495551234');
   fireEvent.changeText(screen.getByPlaceholderText('At least 8 characters'), overrides.password ?? 'password1');
   fireEvent.changeText(screen.getByPlaceholderText('Repeat password'), overrides.confirm ?? 'password1');
 }
@@ -26,8 +27,40 @@ describe('RegisterScreen', () => {
   it('requires all fields', () => {
     render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
     fireEvent.press(screen.getByTestId('register-submit-btn'));
-    expect(screen.getByText('All fields are required.')).toBeTruthy();
+    expect(screen.getByText('Please fill in all required fields.')).toBeTruthy();
     expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('requires a phone number', () => {
+    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
+    fillRequiredFields({ phone: '' });
+    fireEvent.press(screen.getByTestId('register-submit-btn'));
+    expect(screen.getByText('Please fill in all required fields.')).toBeTruthy();
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('formats the phone number as it is typed', () => {
+    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
+    fireEvent.changeText(screen.getByPlaceholderText('(555) 555-5555'), '9495551234');
+    expect(screen.getByPlaceholderText('(555) 555-5555').props.value).toBe('(949) 555-1234');
+  });
+
+  it('registers with the address split into fields when one is entered', async () => {
+    mockRegister.mockResolvedValue(undefined);
+    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
+    fillRequiredFields();
+    fireEvent.changeText(screen.getByPlaceholderText('123 Main St'), ' 1 Main St ');
+    fireEvent.changeText(screen.getByPlaceholderText('Apt 4B'), 'Apt 2');
+    fireEvent.changeText(screen.getByPlaceholderText('Lake Forest'), 'Irvine');
+    fireEvent.changeText(screen.getByPlaceholderText('CA'), 'CA');
+    fireEvent.changeText(screen.getByPlaceholderText('92630'), '92618');
+
+    fireEvent.press(screen.getByTestId('register-submit-btn'));
+
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
+      'jane@shop.com', 'password1', 'purrfect-17', 'Jane', 'Doe', '(949) 555-1234',
+      { line1: '1 Main St', line2: 'Apt 2', city: 'Irvine', state: 'CA', postalCode: '92618' },
+    ));
   });
 
   it('requires matching passwords', () => {
@@ -52,14 +85,9 @@ describe('RegisterScreen', () => {
     fireEvent.press(screen.getByTestId('register-submit-btn'));
 
     await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(
-      'jane@shop.com', 'password1', 'purrfect-17', 'Jane', 'Doe',
+      'jane@shop.com', 'password1', 'purrfect-17', 'Jane', 'Doe', '(949) 555-1234', undefined,
     ));
     expect(mockOnRegistered).toHaveBeenCalledWith('jane@shop.com', 'password1');
-  });
-
-  it('does not render a phone number field', () => {
-    render(<RegisterScreen onNavigateToLogin={mockOnNavigateToLogin} onRegistered={mockOnRegistered} />);
-    expect(screen.queryByPlaceholderText('(555) 123-4567')).toBeNull();
   });
 
   it('shows the Cognito error message on failure', async () => {

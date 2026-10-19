@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { UserRole } from '../../shared/types/index.js';
 import { handler } from './handler';
@@ -30,15 +30,54 @@ function fakeEvent(overrides: Partial<APIGatewayProxyEvent> & { claims?: Record<
   } as unknown as APIGatewayProxyEvent;
 }
 
+// GET is a public route (Auth: NONE): no authorizer claims, tenant from the
+// bearer token or ?tenantId=.
+function bearer(tenantId: string) {
+  const payload = Buffer.from(JSON.stringify({ 'custom:tenantId': tenantId })).toString('base64url');
+  return `h.${payload}.s`;
+}
+function publicGet(query: Record<string, string> | null, headers: Record<string, string> = {}): APIGatewayProxyEvent {
+  return { httpMethod: 'GET', body: null, queryStringParameters: query, headers, requestContext: {} } as unknown as APIGatewayProxyEvent;
+}
+
 describe('GET /capacity', () => {
-  it('rejects a missing locationId', async () => {
-    const result = await handler(fakeEvent({ queryStringParameters: null }));
+  it('rejects a request with no tenant (no token, no ?tenantId=)', async () => {
+    const result = await handler(publicGet({ locationId: 'loc1' }));
+    expect(result.statusCode).toBe(400);
+  });
+
+  it('serves a guest via ?tenantId=, defaulting to the tenant\'s first location', async () => {
+    ddbMock.on(QueryCommand).resolves({
+      Items: [
+        { locationId: 'loc-new', createdAt: '2026-02-01' },
+        { locationId: 'loc-old', createdAt: '2026-01-01' },
+      ],
+    });
+    ddbMock.on(GetCommand).resolves({
+      Item: { tenantId: 't1', locationId: 'loc-old', slotDurationMinutes: 30, maxConcurrent: 2, operatingHours: { monday: { open: '07:00', close: '17:30' } }, updatedAt: 'u' },
+    });
+    const result = await handler(publicGet({ tenantId: 't1' }));
+    expect(result.statusCode).toBe(200);
+    expect(ddbMock.commandCalls(GetCommand)[0]!.args[0].input.Key).toEqual({ PK: 'TENANT#t1', SK: 'CAPACITY#loc-old' });
+    expect(JSON.parse(result.body).data.operatingHours.monday).toEqual({ open: '07:00', close: '17:30' });
+  });
+
+  it('prefers the caller\'s token tenant over ?tenantId=, and honors an explicit locationId', async () => {
+    ddbMock.on(GetCommand).resolves({});
+    await handler(publicGet({ tenantId: 'other', locationId: 'loc1' }, { Authorization: bearer('t1') }));
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(0);
+    expect(ddbMock.commandCalls(GetCommand)[0]!.args[0].input.Key).toEqual({ PK: 'TENANT#t1', SK: 'CAPACITY#loc1' });
+  });
+
+  it('rejects when the tenant has no locations and none was given', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    const result = await handler(publicGet({ tenantId: 't1' }));
     expect(result.statusCode).toBe(400);
   });
 
   it('returns default capacity when no settings are stored yet', async () => {
     ddbMock.on(GetCommand).resolves({});
-    const result = await handler(fakeEvent());
+    const result = await handler(publicGet({ locationId: 'loc1' }, { Authorization: bearer('t1') }));
     const body = JSON.parse(result.body).data;
     expect(body.slotDurationMinutes).toBe(30);
     expect(body.maxConcurrent).toBe(2);
@@ -48,7 +87,7 @@ describe('GET /capacity', () => {
     ddbMock.on(GetCommand).resolves({
       Item: { tenantId: 't1', locationId: 'loc1', slotDurationMinutes: 45, maxConcurrent: 3, operatingHours: {}, updatedAt: 'u' },
     });
-    const result = await handler(fakeEvent());
+    const result = await handler(publicGet({ locationId: 'loc1' }, { authorization: `Bearer ${bearer('t1')}` }));
     expect(JSON.parse(result.body).data.slotDurationMinutes).toBe(45);
   });
 });

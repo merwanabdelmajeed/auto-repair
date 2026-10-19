@@ -163,31 +163,6 @@ export default function HomeScreen({ navigation }: any) {
           ))}
         </View>
 
-        {/* Services — guest-only; signed-in customers pick a service inside
-            the booking flow instead, so this would just be a duplicate. */}
-        {!isAuthenticated && (
-          <>
-            <Text style={styles.sectionTitle}>Our Services</Text>
-            {loadingServices ? (
-              <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
-            ) : services.length === 0 ? (
-              <View style={styles.emptyPromos}>
-                <Text style={styles.emptyPromosText}>No services listed right now.</Text>
-              </View>
-            ) : services.map((service) => (
-              <View key={service.serviceId} style={styles.serviceCard}>
-                <View style={styles.serviceIconBox}>
-                  <Ionicons name="construct-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.serviceContent}>
-                  <Text style={styles.serviceName}>{service.name}</Text>
-                  {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
-                </View>
-              </View>
-            ))}
-          </>
-        )}
-
         {/* Location */}
         {SHOP_ADDRESS ? (
           <>
@@ -226,6 +201,31 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </>
         ) : null}
+
+        {/* Services — guest-only; signed-in customers pick a service inside
+            the booking flow instead, so this would just be a duplicate. */}
+        {!isAuthenticated && (
+          <>
+            <Text style={styles.sectionTitle}>Our Services</Text>
+            {loadingServices ? (
+              <ActivityIndicator size="small" color={colors.secondary} style={{ marginVertical: spacing.md }} />
+            ) : services.length === 0 ? (
+              <View style={styles.emptyPromos}>
+                <Text style={styles.emptyPromosText}>No services listed right now.</Text>
+              </View>
+            ) : services.map((service) => (
+              <View key={service.serviceId} style={styles.serviceCard}>
+                <View style={styles.serviceIconBox}>
+                  <Ionicons name="construct-outline" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.serviceContent}>
+                  <Text style={styles.serviceName}>{service.name}</Text>
+                  {service.description ? <Text style={styles.serviceDesc}>{service.description}</Text> : null}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
 
         {/* Active Promotions — account-based, hidden from guests */}
         <View style={styles.sectionHeader}>

@@ -36,29 +36,9 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('?')).toBeTruthy();
   });
 
-  it('confirms before signing out, and logs out only when confirmed', () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const signOut = buttons?.find(b => b.text === 'Sign Out');
-      signOut?.onPress?.();
-    });
-
+  it('has no Sign Out button (it lives in the side menu)', () => {
     renderScreen();
-    fireEvent.press(screen.getByText('Sign Out'));
-
-    expect(alertSpy).toHaveBeenCalledWith('Sign Out', 'Are you sure you want to sign out?', expect.any(Array));
-    expect(mockLogout).toHaveBeenCalled();
-  });
-
-  it('does not log out when the alert is cancelled', () => {
-    jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const cancel = buttons?.find(b => b.text === 'Cancel');
-      cancel?.onPress?.();
-    });
-
-    renderScreen();
-    fireEvent.press(screen.getByText('Sign Out'));
-
-    expect(mockLogout).not.toHaveBeenCalled();
+    expect(screen.queryByText('Sign Out')).toBeNull();
   });
 
   it('opens the privacy policy URL when tapped', () => {

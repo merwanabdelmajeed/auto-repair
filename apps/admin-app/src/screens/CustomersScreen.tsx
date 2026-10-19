@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, TextInput,
@@ -6,10 +6,22 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Layout from '../components/Layout';
+import AddVehicleForm from '../components/AddVehicleForm';
 import { colors, spacing, typography, borderRadius, shadows } from '../theme';
-import { listCustomers, type Customer } from '../api/customers';
+import { listCustomers, updateCustomer, type Customer, type CustomerAddress } from '../api/customers';
 import { listVehicles, type Vehicle } from '../api/vehicles';
 import { fetchAllPages } from '../utils/fetchAllPages';
+import { matchesCustomerSearch } from '../utils/customerSearch';
+import { cleanAddress, formatAddress } from '../utils/address';
+import { formatPhone } from '../utils/phone';
+
+const ADDRESS_INPUTS: { key: keyof CustomerAddress; placeholder: string; numeric?: boolean }[] = [
+  { key: 'line1', placeholder: 'Street address' },
+  { key: 'line2', placeholder: 'Apt, suite, unit' },
+  { key: 'city', placeholder: 'City' },
+  { key: 'state', placeholder: 'State' },
+  { key: 'postalCode', placeholder: 'ZIP code', numeric: true },
+];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -32,6 +44,65 @@ export default function CustomersScreen({ navigation, route }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  // null = not editing; a string = the phone input's current value.
+  const [phoneDraft, setPhoneDraft] = useState<string | null>(null);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  // null = not editing; otherwise the address form's current values.
+  const [addressDraft, setAddressDraft] = useState<CustomerAddress | null>(null);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressError, setAddressError] = useState('');
+  const [addingVehicle, setAddingVehicle] = useState(false);
+
+  // Opening a different customer (or closing the modal) drops any edit in progress.
+  useEffect(() => {
+    setPhoneDraft(null);
+    setPhoneError('');
+    setAddressDraft(null);
+    setAddressError('');
+    setAddingVehicle(false);
+  }, [selectedCustomer?.userId]);
+
+  async function savePhone() {
+    if (!selectedCustomer || phoneDraft === null) return;
+    const phone = phoneDraft.trim();
+    if (!phone) {
+      setPhoneError('Phone number is required.');
+      return;
+    }
+    setSavingPhone(true);
+    setPhoneError('');
+    try {
+      await updateCustomer(selectedCustomer.userId, { phone });
+      const id = selectedCustomer.userId;
+      setCustomers(prev => prev.map(c => (c.userId === id ? { ...c, phone } : c)));
+      setSelectedCustomer(prev => (prev ? { ...prev, phone } : prev));
+      setPhoneDraft(null);
+    } catch {
+      setPhoneError('Failed to save phone number.');
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
+  async function saveAddress() {
+    if (!selectedCustomer || addressDraft === null) return;
+    // Optional: an all-blank form clears the address.
+    const address = cleanAddress(addressDraft) ?? null;
+    setSavingAddress(true);
+    setAddressError('');
+    try {
+      await updateCustomer(selectedCustomer.userId, { address });
+      const id = selectedCustomer.userId;
+      setCustomers(prev => prev.map(c => (c.userId === id ? { ...c, address } : c)));
+      setSelectedCustomer(prev => (prev ? { ...prev, address } : prev));
+      setAddressDraft(null);
+    } catch {
+      setAddressError('Failed to save address.');
+    } finally {
+      setSavingAddress(false);
+    }
+  }
 
   const customerIdFilter: string | undefined = route?.params?.customerId;
 
@@ -63,12 +134,7 @@ export default function CustomersScreen({ navigation, route }: any) {
     ? customers.filter(c => c.userId === customerIdFilter)
     : customers;
 
-  const filtered = search.trim()
-    ? base.filter(c =>
-        c.email.toLowerCase().includes(search.toLowerCase()) ||
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase())
-      )
-    : base;
+  const filtered = base.filter(c => matchesCustomerSearch(c, search));
 
   return (
     <Layout>
@@ -78,7 +144,7 @@ export default function CustomersScreen({ navigation, route }: any) {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name or email…"
+          placeholder="Search by name, email, or phone…"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
         />
@@ -134,6 +200,7 @@ export default function CustomersScreen({ navigation, route }: any) {
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{displayName(c)}</Text>
                 {(c.firstName || c.lastName) && <Text style={styles.cardEmail}>{c.email}</Text>}
+                {c.phone ? <Text style={styles.cardEmail}>{c.phone}</Text> : null}
                 <Text style={styles.cardDate}>Joined {fmtDate(c.createdAt)}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -174,11 +241,92 @@ export default function CustomersScreen({ navigation, route }: any) {
                     {/* Contact info */}
                     <Text style={styles.sectionLabel}>Contact</Text>
                     <View style={styles.infoCard}>
-                      <View style={[styles.infoRow, styles.infoRowLast]}>
+                      <View style={styles.infoRow}>
                         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
                         <Text style={styles.infoValue}>{selectedCustomer.email}</Text>
                       </View>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="call-outline" size={15} color={colors.textMuted} />
+                        {phoneDraft === null ? (
+                          <>
+                            <Text style={[styles.infoValue, !selectedCustomer.phone && styles.infoMuted]}>
+                              {selectedCustomer.phone ?? 'No phone number'}
+                            </Text>
+                            <TouchableOpacity
+                              testID="edit-phone-btn"
+                              onPress={() => setPhoneDraft(selectedCustomer.phone ?? '')}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                              <Text style={styles.linkText}>{selectedCustomer.phone ? 'Edit' : 'Add'}</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <>
+                            <TextInput
+                              style={styles.phoneInput}
+                              value={phoneDraft}
+                              onChangeText={t => setPhoneDraft(formatPhone(t))}
+                              placeholder="(555) 555-5555"
+                              placeholderTextColor={colors.textMuted}
+                              keyboardType="phone-pad"
+                              autoFocus
+                            />
+                            <TouchableOpacity testID="cancel-phone-btn" onPress={() => { setPhoneDraft(null); setPhoneError(''); }} disabled={savingPhone}>
+                              <Text style={styles.linkMuted}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity testID="save-phone-btn" onPress={() => void savePhone()} disabled={savingPhone}>
+                              {savingPhone
+                                ? <ActivityIndicator size="small" color={colors.primary} />
+                                : <Text style={styles.linkText}>Save</Text>}
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                      <View style={[styles.infoRow, styles.infoRowLast, addressDraft !== null && styles.infoRowTop]}>
+                        <Ionicons name="location-outline" size={15} color={colors.textMuted} />
+                        {addressDraft === null ? (
+                          <>
+                            <Text style={[styles.infoValue, !formatAddress(selectedCustomer.address) && styles.infoMuted]}>
+                              {formatAddress(selectedCustomer.address) ?? 'No address'}
+                            </Text>
+                            <TouchableOpacity
+                              testID="edit-address-btn"
+                              onPress={() => setAddressDraft({ ...(selectedCustomer.address ?? {}) })}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                              <Text style={styles.linkText}>{formatAddress(selectedCustomer.address) ? 'Edit' : 'Add'}</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <View style={styles.addressForm}>
+                            {ADDRESS_INPUTS.map(f => (
+                              <TextInput
+                                key={f.key}
+                                style={styles.addressInput}
+                                value={addressDraft[f.key] ?? ''}
+                                onChangeText={t => setAddressDraft(d => ({ ...d, [f.key]: t }))}
+                                placeholder={f.placeholder}
+                                placeholderTextColor={colors.textMuted}
+                                autoCapitalize={f.key === 'state' ? 'characters' : 'words'}
+                                keyboardType={f.numeric ? 'number-pad' : 'default'}
+                              />
+                            ))}
+                            <View style={styles.addressActions}>
+                              <TouchableOpacity testID="cancel-address-btn" onPress={() => { setAddressDraft(null); setAddressError(''); }} disabled={savingAddress}>
+                                <Text style={styles.linkMuted}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity testID="save-address-btn" onPress={() => void saveAddress()} disabled={savingAddress}>
+                                {savingAddress
+                                  ? <ActivityIndicator size="small" color={colors.primary} />
+                                  : <Text style={styles.linkText}>Save</Text>}
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     </View>
+                    {phoneError ? <Text style={styles.phoneError}>{phoneError}</Text> : null}
+                    {addressError ? <Text style={styles.phoneError}>{addressError}</Text> : null}
 
                     {/* Account */}
                     <Text style={styles.sectionLabel}>Account</Text>
@@ -190,9 +338,27 @@ export default function CustomersScreen({ navigation, route }: any) {
                     </View>
 
                     {/* Vehicles */}
-                    <Text style={styles.sectionLabel}>
-                      Vehicles ({vehicles.length})
-                    </Text>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionLabel}>
+                        Vehicles ({vehicles.length})
+                      </Text>
+                      {!addingVehicle && (
+                        <TouchableOpacity testID="add-vehicle-btn" onPress={() => setAddingVehicle(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                          <Text style={styles.linkText}>+ Add vehicle</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {addingVehicle && (
+                      <AddVehicleForm
+                        customerId={selectedCustomer.userId}
+                        onCancel={() => setAddingVehicle(false)}
+                        onAdded={v => {
+                          const id = selectedCustomer.userId;
+                          setVehicleMap(prev => ({ ...prev, [id]: [v, ...(prev[id] ?? [])] }));
+                          setAddingVehicle(false);
+                        }}
+                      />
+                    )}
                     {vehicles.length === 0 ? (
                       <View style={styles.noVehicles}>
                         <Ionicons name="car-outline" size={22} color={colors.textMuted} />
@@ -283,6 +449,19 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
   infoRowLast: { borderBottomWidth: 0 },
   infoValue: { ...typography.bodySmall, color: colors.textPrimary, flex: 1 },
+  infoMuted: { color: colors.textMuted },
+  linkText: { ...typography.bodySmall, color: colors.primary, fontWeight: '700' },
+  linkMuted: { ...typography.bodySmall, color: colors.textMuted, fontWeight: '600' },
+  phoneInput: { flex: 1, ...typography.bodySmall, color: colors.textPrimary, paddingVertical: 0 },
+  phoneError: { ...typography.bodySmall, color: colors.error, marginTop: 6 },
+  infoRowTop: { alignItems: 'flex-start' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  addressForm: { flex: 1, gap: spacing.xs },
+  addressInput: {
+    ...typography.bodySmall, color: colors.textPrimary, borderWidth: 1, borderColor: colors.border,
+    borderRadius: borderRadius.md, paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.surface,
+  },
+  addressActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
 
   noVehicles: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border },
   noVehiclesText: { ...typography.bodySmall, color: colors.textMuted },

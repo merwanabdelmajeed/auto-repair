@@ -2,19 +2,25 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import * as CognitoService from './CognitoService';
 import type { AuthUser } from './CognitoService';
+import type { Address } from '../utils/address';
+
+export type AuthPromptScreen = 'Login' | 'Register';
 
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone?: string, smsConsent?: boolean) => Promise<void>;
+  register: (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone: string, address?: Address) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => void;
   // Guest browsing: Home and the drawer are visible without an account, but
   // account-based actions (booking, vehicles, promotions, notifications,
   // profile, settings) go through this gate instead of navigating directly.
   authPromptVisible: boolean;
+  // Which screen the auth overlay opens on — chosen by the button the user
+  // tapped in the "account required" prompt.
+  authPromptScreen: AuthPromptScreen;
   requireAuth: (action: () => void) => void;
   hideAuthPrompt: () => void;
 }
@@ -25,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authPromptVisible, setAuthPromptVisible] = useState(false);
+  const [authPromptScreen, setAuthPromptScreen] = useState<AuthPromptScreen>('Login');
 
   useEffect(() => {
     CognitoService.getSessionUser()
@@ -43,12 +50,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       action();
       return;
     }
+    const open = (screen: AuthPromptScreen) => {
+      setAuthPromptScreen(screen);
+      setAuthPromptVisible(true);
+    };
+    // New users go straight to sign-up from here, instead of having to tap
+    // Sign In first and find "Create account" on the login screen.
     Alert.alert(
-      'Sign In Required',
-      'This feature requires an account. Would you like to sign in?',
+      'Account Required',
+      'Sign in or create an account to use this feature.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => setAuthPromptVisible(true) },
+        { text: 'Sign In', onPress: () => open('Login') },
+        { text: 'Create Account', onPress: () => open('Register') },
       ],
     );
   }
@@ -62,8 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(authUser);
   };
 
-  const register = async (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone?: string, smsConsent?: boolean) => {
-    await CognitoService.register(email, password, tenantId, firstName, lastName, phone, smsConsent);
+  const register = async (email: string, password: string, tenantId: string, firstName: string, lastName: string, phone: string, address?: Address) => {
+    await CognitoService.register(email, password, tenantId, firstName, lastName, phone, address);
   };
 
   const logout = async () => {
@@ -78,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user, isAuthenticated: !!user, isLoading, login, register, logout, updateUser,
-        authPromptVisible, requireAuth, hideAuthPrompt,
+        authPromptVisible, authPromptScreen, requireAuth, hideAuthPrompt,
       }}
     >
       {children}

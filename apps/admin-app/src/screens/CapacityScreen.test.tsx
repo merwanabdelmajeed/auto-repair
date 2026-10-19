@@ -72,7 +72,10 @@ describe('CapacityScreen', () => {
     (getCapacity as jest.Mock).mockResolvedValue(capacity());
     render(<CapacityScreen />);
 
-    await waitFor(() => expect(screen.getByText('Second St')).toBeTruthy());
+    // Wait for the first location's settings to finish loading: the location
+    // chips render briefly, then the screen swaps to a spinner while capacity
+    // loads, so pressing a chip as soon as it first appears is racy.
+    await waitFor(() => expect(screen.getByText(/^Last saved /)).toBeTruthy());
     fireEvent.press(screen.getByText('Second St'));
 
     await waitFor(() => expect(getCapacity).toHaveBeenCalledWith('loc2'));

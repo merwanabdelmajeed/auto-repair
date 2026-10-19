@@ -116,6 +116,12 @@ describe('customers api', () => {
     customers.listCustomers('cur1', 50);
     expect(api.get).toHaveBeenCalledWith('/customers?limit=50&cursor=cur1');
   });
+  it('updateCustomer PATCHes the customer with only the given fields', () => {
+    customers.updateCustomer('c 1', { phone: '(949) 555-1234' });
+    expect(api.patch).toHaveBeenCalledWith('/customers/c%201', { phone: '(949) 555-1234' });
+    customers.updateCustomer('c1', { address: null });
+    expect(api.patch).toHaveBeenCalledWith('/customers/c1', { address: null });
+  });
 });
 
 describe('dashboard api', () => {
@@ -225,5 +231,10 @@ describe('vehicles api', () => {
   it('updateVehicle', () => {
     vehicles.updateVehicle('v1', { licensePlate: 'ABC123' });
     expect(api.put).toHaveBeenCalledWith('/vehicles/v1', { licensePlate: 'ABC123' });
+  });
+  it('addVehicleForCustomer POSTs /vehicles with the customerId', () => {
+    const input = { customerId: 'c1', vin: '1HGCM82633A004352', year: 2003, make: 'HONDA', model: 'Accord', color: 'Silver' };
+    vehicles.addVehicleForCustomer(input);
+    expect(api.post).toHaveBeenCalledWith('/vehicles', input);
   });
 });

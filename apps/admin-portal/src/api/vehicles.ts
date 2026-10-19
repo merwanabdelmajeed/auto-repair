@@ -18,6 +18,19 @@ export interface UpdateVehicleInput {
   vin?: string | null;
 }
 
+// Admin adds a vehicle for a customer. VIN is required on this path (admins
+// add by VIN only — the paid plate lookup is customer-only).
+export interface AdminCreateVehicleInput {
+  customerId: string;
+  vin: string;
+  year: number;
+  make: string;
+  model: string;
+  trim?: string;
+  color: string;
+  licensePlate?: string;
+}
+
 export interface Page<T> {
   items: T[];
   nextCursor: string | null;
@@ -27,3 +40,5 @@ export const listVehicles = (cursor?: string | null, limit = 25) =>
   api.get<Page<Vehicle>>(`/vehicles?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
 export const updateVehicle = (vehicleId: string, data: UpdateVehicleInput) =>
   api.put<Vehicle>(`/vehicles/${vehicleId}`, data);
+export const addVehicleForCustomer = (data: AdminCreateVehicleInput) =>
+  api.post<Vehicle>('/vehicles', data);

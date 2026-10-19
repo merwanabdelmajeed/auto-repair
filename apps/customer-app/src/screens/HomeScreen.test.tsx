@@ -156,6 +156,16 @@ describe('HomeScreen — our services (guest-only)', () => {
 describe('HomeScreen — location card', () => {
   beforeEach(() => mockAuthed());
 
+  it('sits above the services list for guests', async () => {
+    mockGuest();
+    (listServices as jest.Mock).mockResolvedValue([service()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    // getAllByText returns matches in render-tree order.
+    const titles = screen.getAllByText(/^Our (Location|Services)$/).map(n => n.props.children);
+    expect(titles).toEqual(['Our Location', 'Our Services']);
+  });
+
   it('shows open hours for today', async () => {
     (getCapacity as jest.Mock).mockResolvedValue(capacitySettings({ open: '07:00', close: '17:30' }));
     renderScreen();

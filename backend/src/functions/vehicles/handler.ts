@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE, queryAll, queryPage } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, paginated, created, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
@@ -42,11 +42,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
-    // POST /vehicles — customers register their own vehicles
+    // POST /vehicles — a customer registers their own vehicle, or an admin
+    // adds one for a customer (body.customerId). Admins add by VIN only — the
+    // paid plate lookup is customer-only — so a VIN is required on that path.
     if (method === 'POST') {
-      requireRole(claims, UserRole.CUSTOMER);
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;
       const { make, model, year, licensePlate, color, vin, trim } = body;
+      let ownerId: string;
+      if (isAdmin) {
+        const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : '';
+        if (!customerId) return badRequest('customerId is required');
+        if (typeof vin !== 'string' || !vin.trim()) return badRequest('vin is required');
+        // Must be a customer in the admin's own tenant — the key is built from
+        // the admin's tenantId, so another tenant's customer is simply not found.
+        const { Item: owner } = await db.send(new GetCommand({
+          TableName: TABLE.USERS,
+          Key: { PK: `TENANT#${tenantId}`, SK: `USER#${customerId}` },
+        }));
+        if (!owner || owner.role !== 'CUSTOMER') return notFound('Customer not found');
+        ownerId = customerId;
+      } else {
+        requireRole(claims, UserRole.CUSTOMER);
+        ownerId = userId;
+      }
       if (!make || !model || !year || !color) {
         return badRequest('make, model, year, and color are required');
       }
@@ -55,11 +73,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const item = {
         PK: `TENANT#${tenantId}`,
         SK: `VEHICLE#${id}`,
-        GSI1PK: `CUSTOMER#${userId}`,
+        GSI1PK: `CUSTOMER#${ownerId}`,
         GSI1SK: `VEHICLE#${id}`,
         vehicleId: id,
         tenantId,
-        customerId: userId,
+        customerId: ownerId,
         make,
         model,
         year: Number(year),
@@ -74,7 +92,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return created(toVehicle(item));
     }
 
-    // PUT /vehicles/{vehicleId} — admins update licensePlate and/or VIN
+    // PUT /vehicles/{vehicleId} — admins update licensePlate and/or VIN.
+    // Year/make/model are deliberately not editable here: a VIN that decodes
+    // to a different car is added as a new vehicle instead (so the old car's
+    // service history stays attached to the right vehicle).
     if (method === 'PUT' && vehicleId) {
       if (!isAdmin) return forbidden('Admin access required');
       const body = JSON.parse(event.body ?? '{}') as Record<string, unknown>;

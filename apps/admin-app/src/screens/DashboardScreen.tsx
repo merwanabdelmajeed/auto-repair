@@ -11,7 +11,10 @@ import { colors, spacing, typography, borderRadius, shadows } from '../theme';
 import { getDashboardSummary, type DashboardSummary } from '../api/dashboard';
 import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
-import { listVehicles, updateVehicle, type Vehicle } from '../api/vehicles';
+import { listVehicles, type Vehicle } from '../api/vehicles';
+import { useVehicleEdit } from '../hooks/useVehicleEdit';
+import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AddVehicleForm from '../components/AddVehicleForm';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
 import { fetchAllPages } from '../utils/fetchAllPages';
 
@@ -44,18 +47,15 @@ export default function DashboardScreen({ navigation }: any) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [todaysAppointments, setTodaysAppointments] = useState<Appointment[]>([]);
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
+  // Plate/VIN edit for the selected booking's vehicle (shared flow — see hook).
+  const vehicleEdit = useVehicleEdit(updated => setVehicleMap(prev => ({ ...prev, [updated.vehicleId]: updated })));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingAppt, setUpdatingAppt] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<Appointment | null>(null);
   const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
   const [showVehicleDetail, setShowVehicleDetail] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState(false);
-  const [editPlate, setEditPlate] = useState('');
-  const [editVin, setEditVin] = useState('');
-  const [savingVehicle, setSavingVehicle] = useState(false);
   const [dashSearch, setDashSearch] = useState('');
-  const [vehicleEditError, setVehicleEditError] = useState('');
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -86,8 +86,7 @@ export default function DashboardScreen({ navigation }: any) {
   function openDetail(appt: Appointment) {
     setDetailAppt(appt);
     setShowVehicleDetail(false);
-    setEditingVehicle(false);
-    setVehicleEditError('');
+    vehicleEdit.cancel();
   }
 
   async function handleStatus(appt: Appointment, status: AppointmentStatus) {
@@ -144,23 +143,6 @@ export default function DashboardScreen({ navigation }: any) {
         },
       },
     ]);
-  }
-
-  async function saveVehicleEdit(veh: Vehicle) {
-    setSavingVehicle(true);
-    setVehicleEditError('');
-    try {
-      const updated = await updateVehicle(veh.vehicleId, {
-        licensePlate: editPlate.trim() || undefined,
-        vin: editVin.trim() || undefined,
-      });
-      setVehicleMap(prev => ({ ...prev, [veh.vehicleId]: { ...veh, ...updated } }));
-      setEditingVehicle(false);
-    } catch {
-      setVehicleEditError('Failed to save.');
-    } finally {
-      setSavingVehicle(false);
-    }
   }
 
   const kpis = [
@@ -376,8 +358,8 @@ export default function DashboardScreen({ navigation }: any) {
                         <View style={styles.vehicleExpanded}>
                           <View style={styles.vehicleFieldRow}>
                             <Text style={styles.vehicleFieldLabel}>Plate</Text>
-                            {editingVehicle
-                              ? <TextInput style={styles.vehicleInput} value={editPlate} onChangeText={t => setEditPlate(t.toUpperCase())} placeholder="e.g. ABC1234" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
+                            {vehicleEdit.editing
+                              ? <TextInput accessibilityLabel="License plate" style={styles.vehicleInput} value={vehicleEdit.plate} onChangeText={vehicleEdit.setPlate} placeholder="e.g. ABC1234" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
                               : <Text selectable style={[styles.vehicleFieldValue, styles.vehicleMonoValue, !veh.licensePlate && { color: colors.textMuted }]}>{veh.licensePlate || '—'}</Text>}
                           </View>
                           <View style={styles.vehicleFieldRow}>
@@ -386,31 +368,45 @@ export default function DashboardScreen({ navigation }: any) {
                           </View>
                           <View style={styles.vehicleFieldRow}>
                             <Text style={styles.vehicleFieldLabel}>VIN</Text>
-                            {editingVehicle
-                              ? <TextInput style={styles.vehicleInput} value={editVin} onChangeText={t => setEditVin(t.toUpperCase())} placeholder="17-char VIN" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
+                            {vehicleEdit.editing
+                              ? <TextInput accessibilityLabel="VIN" style={styles.vehicleInput} value={vehicleEdit.vin} onChangeText={vehicleEdit.setVin} placeholder="17-char VIN" placeholderTextColor={colors.textMuted} autoCapitalize="characters" />
                               : <Text selectable style={[styles.vehicleFieldValue, styles.vehicleMonoValue, !veh.vin && { color: colors.textMuted }]}>{veh.vin || '—'}</Text>}
                           </View>
                           <View style={styles.vehicleFieldRow}>
                             <Text style={styles.vehicleFieldLabel}>Added</Text>
                             <Text selectable style={styles.vehicleFieldValue}>{fmtDateOnly(veh.createdAt)}</Text>
                           </View>
-                          {vehicleEditError ? <Text style={styles.vehicleEditError}>{vehicleEditError}</Text> : null}
-                          {editingVehicle ? (
+                          {vehicleEdit.error ? <Text style={styles.vehicleEditError}>{vehicleEdit.error}</Text> : null}
+                          {vehicleEdit.editing && (
+                            <VinDetailsPrompt lookup={vehicleEdit.lookup} onAddAsNew={vehicleEdit.startAddAsNew} />
+                          )}
+                          {vehicleEdit.editing ? (
                             <View style={styles.vehicleEditActions}>
-                              <TouchableOpacity onPress={() => void saveVehicleEdit(veh)} disabled={savingVehicle} style={styles.vehicleSaveBtn} activeOpacity={0.8}>
-                                {savingVehicle
+                              <TouchableOpacity onPress={() => void vehicleEdit.save()} disabled={!vehicleEdit.canSave} style={[styles.vehicleSaveBtn, !vehicleEdit.canSave && { opacity: 0.6 }]} activeOpacity={0.8}>
+                                {vehicleEdit.saving
                                   ? <ActivityIndicator size="small" color={colors.white} />
                                   : <Text style={styles.vehicleSaveBtnText}>Save</Text>}
                               </TouchableOpacity>
-                              <TouchableOpacity onPress={() => { setEditingVehicle(false); setVehicleEditError(''); }} style={styles.vehicleCancelBtn} activeOpacity={0.8}>
+                              <TouchableOpacity onPress={vehicleEdit.cancel} style={styles.vehicleCancelBtn} activeOpacity={0.8}>
                                 <Text style={styles.vehicleCancelBtnText}>Cancel</Text>
                               </TouchableOpacity>
                             </View>
                           ) : (
-                            <TouchableOpacity onPress={() => { setEditPlate(veh.licensePlate || ''); setEditVin(veh.vin || ''); setEditingVehicle(true); setVehicleEditError(''); }} style={styles.vehicleEditBtn} activeOpacity={0.8}>
+                            <TouchableOpacity onPress={() => vehicleEdit.start(veh)} style={styles.vehicleEditBtn} activeOpacity={0.8}>
                               <Ionicons name="pencil-outline" size={13} color={colors.primary} />
                               <Text style={styles.vehicleEditBtnText}>Edit Plate / VIN</Text>
                             </TouchableOpacity>
+                          )}
+                          {vehicleEdit.addNew && (
+                            <AddVehicleForm
+                              customerId={vehicleEdit.addNew.customerId}
+                              initialVin={vehicleEdit.addNew.vin}
+                              onCancel={vehicleEdit.closeAddAsNew}
+                              onAdded={v => {
+                                vehicleEdit.closeAddAsNew();
+                                setVehicleMap(prev => ({ ...prev, [v.vehicleId]: v }));
+                              }}
+                            />
                           )}
                         </View>
                       )}

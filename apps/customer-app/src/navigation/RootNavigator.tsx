@@ -103,16 +103,16 @@ function AppNavigator() {
 }
 
 export default function RootNavigator() {
-  const { isLoading, authPromptVisible, hideAuthPrompt } = useAuth();
+  const { isLoading, authPromptVisible, authPromptScreen, hideAuthPrompt } = useAuth();
   const [authScreen, setAuthScreen] = useState<'Login' | 'Register' | 'VerifyEmail'>('Login');
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingPassword, setPendingPassword] = useState('');
 
-  // Always start a freshly-opened prompt on Login, not wherever a previously
-  // cancelled attempt left off.
+  // Start a freshly-opened prompt on the screen the user picked (Sign In or
+  // Create Account), not wherever a previously cancelled attempt left off.
   useEffect(() => {
-    if (authPromptVisible) setAuthScreen('Login');
-  }, [authPromptVisible]);
+    if (authPromptVisible) setAuthScreen(authPromptScreen ?? 'Login');
+  }, [authPromptVisible, authPromptScreen]);
 
   if (isLoading) {
     return (

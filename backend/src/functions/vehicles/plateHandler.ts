@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-import { extractTenantClaims, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { UserRole } from '../../shared/types/index.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -87,7 +88,9 @@ async function decodeVin(vin: string): Promise<{ make: string; model: string; ye
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    extractTenantClaims(event);
+    // Each lookup is a paid CarAPI call — customers only. Admins add vehicles
+    // by VIN, which is decoded for free via NHTSA.
+    requireRole(extractTenantClaims(event), UserRole.CUSTOMER);
 
     const plate = event.queryStringParameters?.plate?.trim().toUpperCase();
     const state = event.queryStringParameters?.state?.trim().toUpperCase();

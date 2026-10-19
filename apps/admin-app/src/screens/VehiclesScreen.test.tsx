@@ -5,6 +5,7 @@ import VehiclesScreen from './VehiclesScreen';
 import { listVehicles, updateVehicle } from '../api/vehicles';
 import { listCustomers } from '../api/customers';
 import { listAppointments } from '../api/appointments';
+import { decodeVin } from '../utils/vin';
 
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
@@ -12,8 +13,19 @@ jest.mock('@react-navigation/native', () => {
   return { ...actual, useFocusEffect: (effect: () => void) => React.useEffect(effect, [effect]) };
 });
 jest.mock('../api/vehicles', () => ({ listVehicles: jest.fn(), updateVehicle: jest.fn() }));
+jest.mock('../components/AddVehicleForm', () => {
+  const { Text, View } = require('react-native');
+  return ({ customerId, initialVin, onAdded, onCancel }: { customerId: string; initialVin?: string; onAdded: (v: unknown) => void; onCancel: () => void }) => (
+    <View>
+      <Text>AddVehicleForm:{customerId}:{initialVin}</Text>
+      <Text onPress={() => onAdded({ vehicleId: 'v2', customerId, make: 'TOYOTA', model: 'Camry', trim: 'LE', year: 2019, licensePlate: '', color: 'Red', vin: initialVin, createdAt: '2026-01-02T00:00:00.000Z' })}>form-add</Text>
+      <Text onPress={onCancel}>form-cancel</Text>
+    </View>
+  );
+});
 jest.mock('../api/customers', () => ({ listCustomers: jest.fn() }));
 jest.mock('../api/appointments', () => ({ listAppointments: jest.fn() }));
+jest.mock('../utils/vin', () => ({ ...jest.requireActual('../utils/vin'), decodeVin: jest.fn() }));
 
 function vehicle(overrides: Record<string, unknown> = {}) {
   return {
@@ -164,20 +176,22 @@ describe('VehiclesScreen', () => {
     expect(screen.getByText('No VIN on file')).toBeTruthy();
   });
 
-  it('edits and saves the plate and VIN', async () => {
+  it('edits and saves the plate and VIN (VIN lookup unavailable)', async () => {
     setupApis();
-    (updateVehicle as jest.Mock).mockResolvedValue({ licensePlate: 'XYZ999', vin: 'NEWVIN123' });
+    (decodeVin as jest.Mock).mockResolvedValue({ status: 'unavailable' });
+    (updateVehicle as jest.Mock).mockResolvedValue({ licensePlate: 'XYZ999', vin: '2HGFC2F59JH000000' });
     render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
 
     fireEvent.press(screen.getByText('2020 Honda Civic'));
     fireEvent.press(screen.getByText('Edit'));
 
-    fireEvent.changeText(screen.getByDisplayValue('ABC123'), 'XYZ999');
-    fireEvent.changeText(screen.getByDisplayValue('1HGCM82633A123456'), 'NEWVIN123');
+    fireEvent.changeText(screen.getByDisplayValue('ABC123'), 'xyz999');
+    fireEvent.changeText(screen.getByDisplayValue('1HGCM82633A123456'), '2hgfc2f59jh000000');
+    await waitFor(() => expect(screen.getByText('VIN lookup is unavailable right now — it will be saved as entered.')).toBeTruthy());
     fireEvent.press(screen.getByText('Save Changes'));
 
-    await waitFor(() => expect(updateVehicle).toHaveBeenCalledWith('v1', { licensePlate: 'XYZ999', vin: 'NEWVIN123' }));
+    await waitFor(() => expect(updateVehicle).toHaveBeenCalledWith('v1', { licensePlate: 'XYZ999', vin: '2HGFC2F59JH000000' }));
     // Renders both in the card's plate badge and the now-read-only modal detail row.
     await waitFor(() => expect(screen.getAllByText('XYZ999').length).toBe(2));
   });
@@ -198,10 +212,9 @@ describe('VehiclesScreen', () => {
     expect(screen.getAllByText('ABC123').length).toBe(2);
   });
 
-  it('shows an error alert when saving the edit fails', async () => {
+  it('shows an inline error and stays editing when saving the edit fails', async () => {
     setupApis();
     (updateVehicle as jest.Mock).mockRejectedValue(new Error('boom'));
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
 
@@ -209,9 +222,68 @@ describe('VehiclesScreen', () => {
     fireEvent.press(screen.getByText('Edit'));
     fireEvent.press(screen.getByText('Save Changes'));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to save changes.'));
+    await waitFor(() => expect(screen.getByText('Failed to save.')).toBeTruthy());
+    expect(screen.getByText('Save Changes')).toBeTruthy();
   });
 
+  it('rejects a changed VIN that is not 17 characters', async () => {
+    setupApis();
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('2020 Honda Civic'));
+    fireEvent.press(screen.getByText('Edit'));
+    fireEvent.changeText(screen.getByLabelText('VIN'), 'NEWVIN123');
+    fireEvent.press(screen.getByText('Save Changes'));
+
+    await waitFor(() => expect(screen.getByText('VIN must be 17 characters.')).toBeTruthy());
+    expect(updateVehicle).not.toHaveBeenCalled();
+  });
+
+  it('blocks a VIN for a different car and offers to add it as a new vehicle instead', async () => {
+    setupApis();
+    (decodeVin as jest.Mock).mockResolvedValue({ status: 'ok', vehicle: { make: 'TOYOTA', model: 'Camry', year: '2019', trim: 'LE' } });
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('2020 Honda Civic'));
+    fireEvent.press(screen.getByText('Edit'));
+    fireEvent.changeText(screen.getByLabelText('VIN'), '4T1B11HK5KU000000');
+
+    await waitFor(() => expect(screen.getByText('2019 TOYOTA Camry LE')).toBeTruthy());
+    fireEvent.press(screen.getByText('Save Changes'));
+    expect(updateVehicle).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('vin-add-as-new'));
+    expect(screen.getByText('AddVehicleForm:u1:4T1B11HK5KU000000')).toBeTruthy();
+    fireEvent.press(screen.getByText('form-add'));
+
+    expect(updateVehicle).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('AddVehicleForm:u1:4T1B11HK5KU000000')).toBeNull());
+    expect(screen.getAllByText(/2019 TOYOTA Camry/).length).toBeGreaterThan(0);
+  });
+  it('backs out of a wrong-car VIN with Cancel, or cancels the add form — nothing saved', async () => {
+    setupApis();
+    (decodeVin as jest.Mock).mockResolvedValue({ status: 'ok', vehicle: { make: 'TOYOTA', model: 'Camry', year: '2019' } });
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('2020 Honda Civic'));
+    fireEvent.press(screen.getByText('Edit'));
+    fireEvent.changeText(screen.getByLabelText('VIN'), '4T1B11HK5KU000000');
+    await waitFor(() => expect(screen.getByTestId('vin-add-as-new')).toBeTruthy());
+    fireEvent.press(screen.getByText('Cancel'));
+    expect(screen.queryByTestId('vin-add-as-new')).toBeNull();
+
+    fireEvent.press(screen.getByText('Edit'));
+    fireEvent.changeText(screen.getByLabelText('VIN'), '4T1B11HK5KU000000');
+    await waitFor(() => expect(screen.getByTestId('vin-add-as-new')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('vin-add-as-new'));
+    fireEvent.press(screen.getByText('form-cancel'));
+
+    expect(updateVehicle).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^AddVehicleForm:/)).toBeNull();
+  });
   it('closes the detail modal via the close icon', async () => {
     setupApis();
     render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);

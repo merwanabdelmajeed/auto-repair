@@ -2,7 +2,7 @@ import type { PostConfirmationTriggerEvent } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../../shared/utils/dynamodb.js';
-import { handler } from './handler';
+import { handler, parseAddress } from './handler';
 
 const ddbMock = mockClient(db);
 
@@ -112,5 +112,51 @@ describe('PostConfirmation trigger', () => {
 
     const event = fakeEvent();
     await expect(handler(event)).resolves.toBe(event);
+  });
+
+  it('stores the signup address as separate string fields', async () => {
+    ddbMock.on(PutCommand).resolves({});
+
+    await handler(fakeEvent({
+      request: {
+        userAttributes: {
+          sub: 'user-3', email: 'x@shop.com', 'custom:tenantId': 't1', 'custom:phone': '(949) 555-1234',
+          address: JSON.stringify({ line1: '1 Main St', line2: 'Apt 2', city: 'Irvine', state: 'CA', postalCode: '92618' }),
+        },
+      } as never,
+    }));
+
+    const call = ddbMock.commandCalls(PutCommand)[0]?.args[0].input;
+    expect(call?.Item).toMatchObject({
+      phone: '(949) 555-1234',
+      address: { line1: '1 Main St', line2: 'Apt 2', city: 'Irvine', state: 'CA', postalCode: '92618' },
+    });
+  });
+
+  it('omits address when none was given', async () => {
+    ddbMock.on(PutCommand).resolves({});
+
+    await handler(fakeEvent());
+
+    const call = ddbMock.commandCalls(PutCommand)[0]?.args[0].input;
+    expect(call?.Item).not.toHaveProperty('address');
+  });
+});
+
+describe('parseAddress', () => {
+  it('returns undefined for missing, malformed, or non-object input', () => {
+    expect(parseAddress(undefined)).toBeUndefined();
+    expect(parseAddress('not json')).toBeUndefined();
+    expect(parseAddress('"a string"')).toBeUndefined();
+    expect(parseAddress('null')).toBeUndefined();
+  });
+
+  it('keeps only known non-empty string fields, trimmed', () => {
+    expect(parseAddress(JSON.stringify({ line1: ' 1 Main St ', city: '', state: 5, extra: 'x', postalCode: '92618' })))
+      .toEqual({ line1: '1 Main St', postalCode: '92618' });
+  });
+
+  it('returns undefined when every field is empty', () => {
+    expect(parseAddress(JSON.stringify({ line1: '  ' }))).toBeUndefined();
   });
 });

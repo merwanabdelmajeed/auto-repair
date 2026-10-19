@@ -1,6 +1,6 @@
 import React from 'react';
 import { SHOP_NAME, SHOP_CITY } from '../constants';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../theme';
@@ -24,8 +24,24 @@ const DRAWER_ITEMS: DrawerItem[] = [
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { navigation, state } = props;
-  const { requireAuth } = useAuth();
+  const { requireAuth, isAuthenticated, logout } = useAuth();
   const activeRouteName = state.routes[state.index]?.name;
+
+  function confirmLogout() {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void handleLogout() },
+    ]);
+  }
+
+  // Reset the drawer to just Home so every other screen remounts fresh —
+  // nothing from the signed-out account is left on screen, and Home re-renders
+  // in guest mode.
+  async function handleLogout() {
+    await logout();
+    navigation.closeDrawer();
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+  }
 
   return (
     <DrawerContentScrollView
@@ -72,6 +88,14 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             </TouchableOpacity>
           );
         })}
+        {isAuthenticated && (
+          <TouchableOpacity testID="drawer-sign-out" style={styles.navItem} onPress={confirmLogout} activeOpacity={0.7}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="log-out-outline" size={21} color={colors.error} />
+            </View>
+            <Text style={[styles.navLabel, styles.signOutLabel]}>Sign Out</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.footer}>
@@ -148,6 +172,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     flex: 1,
   },
+  signOutLabel: { color: colors.error },
   navLabelActive: {
     color: colors.white,
     fontWeight: '600',

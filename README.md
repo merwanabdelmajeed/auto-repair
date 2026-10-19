@@ -23,7 +23,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 | Phase 5  | Promotions + Booking UX Polish                                        | ✅ Complete    |
 | Phase 6  | Customer Experience & Vehicle Intelligence                            | ✅ Complete    |
 | Phase 7  | Analytics & Reporting                                                 | ✅ Complete    |
-| Phase 8  | Notifications & Communication                                         | 🟡 In Progress |
+| Phase 8  | Notifications & Communication                                         | ✅ Complete    |
 | Phase 9  | Admin & Multi-Location Management                                     | ✅ Complete    |
 | Phase 10 | Unit Testing (Frontend & Backend)                                     | ✅ Complete    |
 | Phase 11 | Data Integrity, Scale & Production Hardening                          | 🟡 In Progress |
@@ -103,7 +103,7 @@ A production-grade, multi-tenant, multi-location Auto Repair Shop SaaS Platform 
 
 ---
 
-### Phase 8 — Notifications & Communication (In Progress)
+### Phase 8 — Notifications & Communication (Complete)
 
 Delivered:
 
@@ -118,12 +118,7 @@ Delivered:
 - **"Today's Bookings" now shows cancelled appointments** (both admin app and portal) with their Cancelled badge instead of silently hiding them — the KPI tile itself is unaffected, it comes from a separate backend-computed count that already excludes cancelled
 - **Removed SES customer status-change emails** — push + in-app notifications already cover this, and SES sandbox mode was blocking delivery to unverified test recipients anyway; deleted `shared/utils/ses.ts` and the now-unused `ses:SendEmail` IAM permission
 - **Push notifications (admin app, Android)** — confirmed working end-to-end on a physical device. Same `usePushNotifications` hook as the customer app, mirrored into admin-app; `notify.ts`'s `notifyAdmins()` no longer forces the push lookup to skip. Required its own native setup even though the Firebase project (`auto-repair-c4e99`) is shared with customer-app: registering `com.autorepair.admin` as a second Android app in that Firebase project + its own `google-services.json`/Gradle plugin wiring, a new EAS project (`eas init` — admin-app had none before), and its own FCM V1 service-account key uploaded via `eas credentials` for that project specifically (credentials are scoped per EAS project, not per Firebase project, so this step repeats even when reusing the same underlying key file). Debugging this surfaced a real observability gap: Expo's push API returns HTTP 200 for a request it *accepted*, not one it successfully *delivered* — the real per-notification result comes back as a "ticket" inside the response body (e.g. `DeviceNotRegistered`, `InvalidCredentials`), which `sendPush()` wasn't inspecting, so a bad send looked identical to a good one in the logs. Fixed by parsing the ticket status and logging ticket-level errors, not just HTTP-level ones
-- **Push notifications (iOS)** — not yet set up; Android is confirmed working but iOS needs its own native configuration:
-  - Apple Developer Program membership (paid) to generate an APNs authentication key
-  - Upload the APNs key to EAS via `eas credentials` (iOS → Push Notifications), separate from the Android FCM V1 key
-  - iOS push capability/entitlement (`aps-environment`) needs to be enabled — likely automatic via EAS Build, but unverified since this project has no native `ios/` directory yet (Android-only bare workflow so far)
-  - Requires a Mac (Xcode) or EAS Build's cloud iOS build service, since there's no local `ios/` project to build from directly
-  - Real push delivery can't be tested on the iOS Simulator — needs a physical iPhone/iPad
+- **Push notifications (iOS)** — confirmed working on a physical iPhone. Same Expo push pipeline as Android; iOS required its own APNs authentication key (Apple Developer Program) uploaded via `eas credentials` (iOS → Push Notifications), separate from the Android FCM V1 key, with the `aps-environment` entitlement applied through EAS Build
 
 ### Phase 9 — Admin & Multi-Location Management (Complete)
 

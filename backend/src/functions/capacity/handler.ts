@@ -1,20 +1,37 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { db, TABLE } from '../../shared/utils/dynamodb.js';
+import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
 import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, badRequest, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole, type CapacitySettings } from '../../shared/types/index.js';
 import { DEFAULT_CAPACITY } from '../../shared/utils/availability.js';
+import { publicTenantId } from '../../shared/utils/publicTenant.js';
+
+// The tenant's first (oldest) location — what the customer app's single
+// "Our Location" card represents when it doesn't name a location.
+async function defaultLocationId(tenantId: string): Promise<string | undefined> {
+  const items = await queryAll({
+    TableName: TABLE.LOCATIONS,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+    ExpressionAttributeValues: { ':pk': `TENANT#${tenantId}`, ':skPrefix': 'LOCATION#' },
+  });
+  const sorted = [...items].sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
+  return sorted[0]?.locationId as string | undefined;
+}
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = extractTenantClaims(event);
-    const { tenantId } = claims;
     const method = event.httpMethod;
 
+    // GET /capacity — public (Auth: NONE), so the customer app can show
+    // today's hours to guests. Operating hours aren't sensitive. Tenant comes
+    // from the caller's token or ?tenantId=; locationId is optional and
+    // defaults to the tenant's first location.
     if (method === 'GET') {
-      const locationId = event.queryStringParameters?.locationId;
+      const tenantId = publicTenantId(event);
+      if (!tenantId) return badRequest('tenantId is required');
+      const locationId = event.queryStringParameters?.locationId ?? await defaultLocationId(tenantId);
       if (!locationId) return badRequest('locationId query parameter is required');
 
       const result = await db.send(new GetCommand({
@@ -34,6 +51,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
       return ok(settings);
     }
+
+    const claims = extractTenantClaims(event);
+    const { tenantId } = claims;
 
     if (method === 'PUT') {
       requireRole(claims, UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER);

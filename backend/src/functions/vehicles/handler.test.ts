@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
-import { QueryCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { QueryCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { UserRole } from '../../shared/types/index.js';
 import { handler } from './handler';
@@ -58,9 +58,48 @@ describe('POST /vehicles', () => {
     return fakeEvent({ httpMethod: 'POST', body: JSON.stringify(body), claims });
   }
 
-  it('rejects admins from registering a vehicle (customer-only route)', async () => {
-    const result = await handler(postEvent({ make: 'Honda', model: 'Civic', year: 2020, color: 'blue' }, { 'custom:role': UserRole.TENANT_OWNER }));
-    expect(result.statusCode).toBe(403);
+  it('ignores a customerId sent by a customer — always their own vehicle', async () => {
+    ddbMock.on(PutCommand).resolves({});
+    await handler(postEvent({ make: 'Honda', model: 'Civic', year: 2020, color: 'blue', customerId: 'someone-else' }));
+    const item = ddbMock.commandCalls(PutCommand)[0]?.args[0].input.Item;
+    expect(item).toMatchObject({ customerId: 'customer-1', GSI1PK: 'CUSTOMER#customer-1' });
+  });
+
+  describe('as an admin, for a customer', () => {
+    const admin = { 'custom:role': UserRole.TENANT_OWNER, sub: 'owner-1' };
+    const car = { make: 'HONDA', model: 'Accord', year: 2003, color: 'Silver', vin: '1HGCM82633A004352' };
+
+    it('creates the vehicle under the customer, scoped to the admin tenant', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: { role: 'CUSTOMER' } });
+      ddbMock.on(PutCommand).resolves({});
+
+      const result = await handler(postEvent({ ...car, customerId: 'c9' }, admin));
+
+      expect(result.statusCode).toBe(201);
+      expect(ddbMock.commandCalls(GetCommand)[0]?.args[0].input.Key).toEqual({ PK: 'TENANT#t1', SK: 'USER#c9' });
+      const item = ddbMock.commandCalls(PutCommand)[0]?.args[0].input.Item;
+      expect(item).toMatchObject({ PK: 'TENANT#t1', customerId: 'c9', GSI1PK: 'CUSTOMER#c9', vin: car.vin });
+    });
+
+    it('requires a customerId and a VIN', async () => {
+      expect((await handler(postEvent(car, admin))).statusCode).toBe(400);
+      expect((await handler(postEvent({ ...car, vin: ' ', customerId: 'c9' }, admin))).statusCode).toBe(400);
+      expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
+    });
+
+    it('returns 404 for an unknown customer or a non-customer user', async () => {
+      ddbMock.on(GetCommand).resolvesOnce({}).resolvesOnce({ Item: { role: 'TENANT_OWNER' } });
+
+      expect((await handler(postEvent({ ...car, customerId: 'nope' }, admin))).statusCode).toBe(404);
+      expect((await handler(postEvent({ ...car, customerId: 'owner-2' }, admin))).statusCode).toBe(404);
+      expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
+    });
+
+    it('still requires make, model, year and color', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: { role: 'CUSTOMER' } });
+      const result = await handler(postEvent({ vin: car.vin, customerId: 'c9' }, admin));
+      expect(result.statusCode).toBe(400);
+    });
   });
 
   it('rejects missing required fields', async () => {
@@ -102,6 +141,18 @@ describe('PUT /vehicles/{vehicleId}', () => {
     }));
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).data.licensePlate).toBe('XYZ999');
+  });
+
+  it('ignores year/make/model/trim — only plate and VIN are editable', async () => {
+    ddbMock.on(UpdateCommand).resolves({ Attributes: {} });
+    await handler(fakeEvent({
+      httpMethod: 'PUT', pathParameters: { vehicleId: 'v1' },
+      body: JSON.stringify({ licensePlate: 'A', vin: 'B', year: 2019, make: 'TOYOTA', model: 'Camry' }),
+      claims: { 'custom:role': UserRole.TENANT_OWNER },
+    }));
+    const input = ddbMock.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(input?.UpdateExpression).toBe('SET licensePlate = :lp, vin = :vin, updatedAt = :now');
+    expect(input?.ExpressionAttributeValues).not.toHaveProperty(':make');
   });
 
   it('returns 404 when the vehicle does not exist', async () => {

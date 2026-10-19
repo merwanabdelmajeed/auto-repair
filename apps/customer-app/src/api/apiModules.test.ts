@@ -41,7 +41,7 @@ describe('availability api', () => {
 describe('capacity api', () => {
   it('getCapacity', () => {
     capacity.getCapacity();
-    expect(api.get).toHaveBeenCalledWith('/capacity');
+    expect(api.get).toHaveBeenCalledWith('/capacity?tenantId=purrfect-17');
   });
 });
 
@@ -90,9 +90,15 @@ describe('services api', () => {
 });
 
 describe('users api', () => {
-  it('updateProfileName PUTs /users/me with the name', () => {
-    users.updateProfileName('Jane', 'Doe');
-    expect(api.put).toHaveBeenCalledWith('/users/me', { firstName: 'Jane', lastName: 'Doe' });
+  it('getMyProfile GETs /users/me', () => {
+    users.getMyProfile();
+    expect(api.get).toHaveBeenCalledWith('/users/me');
+  });
+  it('updateMyProfile PUTs /users/me with name, phone and address', () => {
+    users.updateMyProfile('Jane', 'Doe', '(949) 555-1234', { city: 'Irvine' });
+    expect(api.put).toHaveBeenCalledWith('/users/me', {
+      firstName: 'Jane', lastName: 'Doe', phone: '(949) 555-1234', address: { city: 'Irvine' },
+    });
   });
 });
 
