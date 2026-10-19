@@ -75,7 +75,7 @@
         "buildType": "app-bundle"
       },
       "ios": {
-        "image": "latest"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "env": {
         "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_deO2X8ms2",
