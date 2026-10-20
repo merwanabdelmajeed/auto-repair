@@ -330,7 +330,7 @@ describe('VehiclesScreen — plate lookup', () => {
   });
 
   it.each([
-    [429, "You've used today's 5 plate lookups. Enter the VIN instead, or try again tomorrow."],
+    [429, "You've used today's 3 plate lookups. Enter the VIN instead, or try again tomorrow."],
     [503, 'Plate lookup is temporarily unavailable. Enter the VIN instead, or try again later.'],
   ])('shows the server message when the paid lookup returns %s', async (status, message) => {
     (lookupPlate as jest.Mock).mockRejectedValue(Object.assign(new Error(message), { statusCode: status }));

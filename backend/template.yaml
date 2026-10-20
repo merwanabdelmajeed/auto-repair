@@ -1082,7 +1082,7 @@ Resources:
           CARAPI_TOKEN_PARAM: /autorepair/carapi-token
           CARAPI_SECRET_PARAM: /autorepair/carapi-secret
           # Each CarAPI lookup is billed. Cached plates don't count.
-          PLATE_LOOKUP_USER_DAILY_LIMIT: '5'
+          PLATE_LOOKUP_USER_DAILY_LIMIT: '3'
           PLATE_LOOKUP_TENANT_DAILY_LIMIT: '50'
       Events:
         PlateLookup:

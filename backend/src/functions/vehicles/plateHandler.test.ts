@@ -129,7 +129,7 @@ describe('GET /vehicles/plate — daily quotas', () => {
 
     const [user, tenant] = ddbMock.commandCalls(TransactWriteCommand)[0]!.args[0].input.TransactItems!;
     expect(user!.Update!.Key).toEqual({ PK: 'TENANT#t1', SK: expect.stringMatching(/^USAGE#\d{4}-\d{2}-\d{2}#USER#u1$/) });
-    expect(user!.Update!.ExpressionAttributeValues![':limit']).toBe(5);
+    expect(user!.Update!.ExpressionAttributeValues![':limit']).toBe(3);
     expect(tenant!.Update!.Key).toEqual({ PK: 'TENANT#t1', SK: expect.stringMatching(/^USAGE#\d{4}-\d{2}-\d{2}$/) });
     expect(tenant!.Update!.ExpressionAttributeValues![':limit']).toBe(50);
 
@@ -143,7 +143,7 @@ describe('GET /vehicles/plate — daily quotas', () => {
     ddbMock.on(TransactWriteCommand).rejects(cancelled(['ConditionalCheckFailed', 'None']));
     const result = await customer();
     expect(result.statusCode).toBe(429);
-    expect(JSON.parse(result.body).error).toBe("You've used today's 5 plate lookups. Enter the VIN instead, or try again tomorrow.");
+    expect(JSON.parse(result.body).error).toBe("You've used today's 3 plate lookups. Enter the VIN instead, or try again tomorrow.");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

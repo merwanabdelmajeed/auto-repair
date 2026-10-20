@@ -18,7 +18,7 @@ const ssm = new SSMClient({});
 //   3. each tenant gets TENANT_DAILY_LIMIT paid lookups per UTC day — a hard
 //      ceiling on spend no matter how many customers there are
 // (API Gateway also throttles this route — see template.yaml.)
-const USER_DAILY_LIMIT = Number(process.env.PLATE_LOOKUP_USER_DAILY_LIMIT ?? 5);
+const USER_DAILY_LIMIT = Number(process.env.PLATE_LOOKUP_USER_DAILY_LIMIT ?? 3);
 const TENANT_DAILY_LIMIT = Number(process.env.PLATE_LOOKUP_TENANT_DAILY_LIMIT ?? 50);
 const DAY_SECONDS = 24 * 60 * 60;
 const FOUND_CACHE_DAYS = 365;   // a plate→VIN match rarely changes
