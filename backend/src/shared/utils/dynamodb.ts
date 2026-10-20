@@ -86,4 +86,5 @@ export const TABLE = {
   BLOCKED_TIMES: `autorepair-blocked-times${suffix}`,
   NOTIFICATIONS: `autorepair-notifications${suffix}`,
   ANALYTICS: `autorepair-analytics${suffix}`,
+  PLATE_LOOKUPS: `autorepair-plate-lookups${suffix}`,
 } as const;

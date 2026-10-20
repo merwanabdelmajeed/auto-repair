@@ -328,6 +328,21 @@ describe('VehiclesScreen — plate lookup', () => {
 
     await waitFor(() => expect(screen.getByText('Could not find vehicle for that plate and state. Check the plate and try again.')).toBeTruthy());
   });
+
+  it.each([
+    [429, "You've used today's 5 plate lookups. Enter the VIN instead, or try again tomorrow."],
+    [503, 'Plate lookup is temporarily unavailable. Enter the VIN instead, or try again later.'],
+  ])('shows the server message when the paid lookup returns %s', async (status, message) => {
+    (lookupPlate as jest.Mock).mockRejectedValue(Object.assign(new Error(message), { statusCode: status }));
+    await openAddModal();
+
+    fireEvent.press(screen.getByText('State'));
+    fireEvent.press(screen.getByText('California'));
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. ABC1234'), 'xyz999');
+    fireEvent.press(screen.getByTestId('vehicle-plate-lookup-btn'));
+
+    await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+  });
 });
 
 describe('VehiclesScreen — VIN lookup', () => {

@@ -276,8 +276,13 @@ export default function VehiclesScreen() {
         setTrimSuggestions(trims);
         setTrimsFetched(true);
       });
-    } catch {
-      setPlateError('Could not find vehicle for that plate and state. Check the plate and try again.');
+    } catch (e) {
+      // Plate lookups are a paid service with daily limits; when the server
+      // says the limit is reached or the service is down, show that message.
+      const status = (e as { statusCode?: number }).statusCode;
+      setPlateError(status === 429 || status === 503
+        ? (e as Error).message
+        : 'Could not find vehicle for that plate and state. Check the plate and try again.');
     } finally {
       setPlateLooking(false);
     }

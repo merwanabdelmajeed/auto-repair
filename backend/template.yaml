@@ -746,6 +746,30 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # Paid plate-lookup guard: per-tenant result cache + daily usage counters.
+  # Items expire via TTL (expiresAt), so the table stays small.
+  PlateLookupsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub
+        - 'autorepair-plate-lookups${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
   # ── S3 BUCKETS ────────────────────────────────────────────
   UploadsBucket:
     Type: AWS::S3::Bucket
@@ -799,6 +823,13 @@ Resources:
         AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization,X-Amz-Date'"
         AllowOrigin: "'*'"
+      # The paid plate lookup gets its own low throttle (all callers combined),
+      # on top of the per-customer/per-tenant daily quotas in its handler.
+      MethodSettings:
+        - ResourcePath: /~1vehicles~1plate
+          HttpMethod: GET
+          ThrottlingRateLimit: 1
+          ThrottlingBurstLimit: 5
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
@@ -1050,6 +1081,9 @@ Resources:
         Variables:
           CARAPI_TOKEN_PARAM: /autorepair/carapi-token
           CARAPI_SECRET_PARAM: /autorepair/carapi-secret
+          # Each CarAPI lookup is billed. Cached plates don't count.
+          PLATE_LOOKUP_USER_DAILY_LIMIT: '5'
+          PLATE_LOOKUP_TENANT_DAILY_LIMIT: '50'
       Events:
         PlateLookup:
           Type: Api
