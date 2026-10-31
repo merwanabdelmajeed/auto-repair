@@ -25,7 +25,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const pk = `TENANT#${tenantId}`;
 
-    const [allAppts, services] = await Promise.all([
+    const [allAppts, services, customers] = await Promise.all([
       queryAll({
         TableName: TABLE.APPOINTMENTS,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
@@ -35,6 +35,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         TableName: TABLE.SERVICES,
         KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
         ExpressionAttributeValues: { ':pk': pk, ':prefix': 'SERVICE#' },
+      }),
+      // Registered customers, independent of bookings — admins have USER#
+      // rows too, so filter on role (same as the dashboard count).
+      queryAll({
+        TableName: TABLE.USERS,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+        FilterExpression: '#role = :customer',
+        ProjectionExpression: 'createdAt',
+        ExpressionAttributeNames: { '#role': 'role' },
+        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'USER#', ':customer': 'CUSTOMER' },
       }),
     ]);
 
@@ -66,6 +76,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const uniqueCustomerIds = new Set(periodAppts.map(a => a.customerId as string));
     const newCustomers = [...uniqueCustomerIds].filter(id => !historicalCustomerIds.has(id)).length;
+    const newSignups = customers.filter(c => {
+      const d = (c.createdAt as string | undefined)?.slice(0, 10) ?? '';
+      return d >= startDate && d <= endDate;
+    }).length;
 
     // Daily breakdown — one entry per calendar day in the range
     const byDay: Array<{ date: string; bookings: number; completed: number; revenue: number }> = [];
@@ -124,6 +138,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         uniqueCustomers: uniqueCustomerIds.size,
         newCustomers,
         returningCustomers: uniqueCustomerIds.size - newCustomers,
+        totalCustomers: customers.length,
+        newSignups,
       },
       byDay,
       byService,

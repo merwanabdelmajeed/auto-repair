@@ -6,7 +6,7 @@ vi.mock('../api/analytics', () => ({ getAnalytics: vi.fn() }));
 
 function analyticsResponse(overrides: Partial<Awaited<ReturnType<typeof getAnalytics>>> = {}) {
   return {
-    summary: { totalBookings: 10, completedBookings: 6, cancelledBookings: 2, pendingBookings: 2, totalRevenue: 500, uniqueCustomers: 5, newCustomers: 2, returningCustomers: 3 },
+    summary: { totalBookings: 10, completedBookings: 6, cancelledBookings: 2, pendingBookings: 2, totalRevenue: 500, uniqueCustomers: 5, newCustomers: 2, returningCustomers: 3, totalCustomers: 7, newSignups: 1 },
     byDay: [{ date: '2026-01-01', bookings: 3, completed: 2, revenue: 100 }],
     byService: [{ serviceId: 's1', serviceName: 'Oil Change', bookings: 6, completed: 4, revenue: 300 }],
     byStatus: { completed: 6, pending: 2, cancelled: 2 },
@@ -24,6 +24,9 @@ describe('Statistics', () => {
 
     await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
     expect(screen.getByText('Oil Change')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('1 new this period')).toBeInTheDocument();
+    expect(screen.getByText('of 5 who booked')).toBeInTheDocument();
     // Revenue is not shown in the admin — no dollar amount should render.
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
     expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
@@ -47,13 +50,16 @@ describe('Statistics', () => {
 
   it('shows empty-state messages when there are no bookings in the period', async () => {
     vi.mocked(getAnalytics).mockResolvedValue(analyticsResponse({
-      summary: { totalBookings: 0, completedBookings: 0, cancelledBookings: 0, pendingBookings: 0, totalRevenue: 0, uniqueCustomers: 0, newCustomers: 0, returningCustomers: 0 },
+      summary: { totalBookings: 0, completedBookings: 0, cancelledBookings: 0, pendingBookings: 0, totalRevenue: 0, uniqueCustomers: 0, newCustomers: 0, returningCustomers: 0, totalCustomers: 1, newSignups: 0 },
       byDay: [], byService: [], byStatus: {},
     }));
 
     render(<Statistics />);
 
     await waitFor(() => expect(screen.getAllByText('No bookings in this period')).toHaveLength(2));
+    // Registered customers still count with no bookings in the period.
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('0 new this period')).toBeInTheDocument();
   });
 
   it('triggers a CSV download when Export CSV is clicked', async () => {

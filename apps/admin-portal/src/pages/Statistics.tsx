@@ -83,8 +83,8 @@ export default function Statistics() {
 
   const kpis = data ? [
     { label: 'Total Bookings', value: String(data.summary.totalBookings), sub: `${data.summary.completedBookings} completed` },
-    { label: 'Customers', value: String(data.summary.uniqueCustomers), sub: `${data.summary.newCustomers} new` },
-    { label: 'Returning Customers', value: String(data.summary.returningCustomers), sub: `of ${data.summary.uniqueCustomers} total` },
+    { label: 'Customers', value: String(data.summary.totalCustomers), sub: `${data.summary.newSignups} new this period` },
+    { label: 'Returning Customers', value: String(data.summary.returningCustomers), sub: `of ${data.summary.uniqueCustomers} who booked` },
   ] : [];
 
   const PERIODS: { key: Period; label: string }[] = [

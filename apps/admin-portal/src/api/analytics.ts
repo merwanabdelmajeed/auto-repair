@@ -9,6 +9,9 @@ export interface AnalyticsSummary {
   uniqueCustomers: number;
   newCustomers: number;
   returningCustomers: number;
+  // Registered customers (whether or not they booked), and how many signed up in the period.
+  totalCustomers: number;
+  newSignups: number;
 }
 
 export interface DayData {
