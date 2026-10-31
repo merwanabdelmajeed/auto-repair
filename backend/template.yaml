@@ -17,7 +17,7 @@ Mappings:
     dev:
       Suffix: '-dev'
       PortalUrl: 'https://dev.d3ux26fye73l96.amplifyapp.com'
-      StripePriceId: 'price_REPLACE_WITH_TEST_PRICE_ID'
+      StripePriceId: 'price_1UWkKJBDZOaATiSi2kZXtic3'  # test mode
     staging:
       Suffix: '-staging'
       PortalUrl: 'https://staging.example.invalid'
