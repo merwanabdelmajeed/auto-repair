@@ -7,6 +7,7 @@ import { listCustomers, type Customer } from '../api/customers';
 import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
 import AppointmentCustomerCard from '../components/AppointmentCustomerCard';
+import SubscriptionCard from '../components/SubscriptionCard';
 import AddVehicleForm from '../components/AddVehicleForm';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
@@ -141,6 +142,8 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: '1200px' }}>
+      <SubscriptionCard />
+
       {/* KPI Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
         {kpis.map(card => (

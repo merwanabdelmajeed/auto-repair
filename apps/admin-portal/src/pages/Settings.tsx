@@ -5,6 +5,7 @@ import { listLocations, createLocation, updateLocation, deleteLocation, type Loc
 import { listAdminUsers, inviteAdminUser, updateAdminUser, deleteAdminUser, type AdminUser, type AdminRole, type InviteAdminUserInput } from '../api/adminUsers';
 import { ApiError } from '../api/client';
 import { getBilling, startCheckout, openBillingPortal, type BillingStatus } from '../api/billing';
+import { LIVE_BILLING, statusDisplay, isPaymentProblem, fmtBillingDate, billingDetail, subscribeLabel } from '../utils/billingStatus';
 
 const OWNER_ROLES = new Set(['SUPER_ADMIN', 'TENANT_OWNER']);
 const EMPTY_TENANT_FORM: TenantInput = { name: '', address: '', phone: '', contactEmail: '' };
@@ -153,24 +154,6 @@ function BusinessProfileSection({ isOwner }: { isOwner: boolean }) {
 
 // ── Billing ────────────────────────────────────────────────────
 
-const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
-  none:               { label: 'Not subscribed',     color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
-  active:             { label: 'Active',             color: '#16A34A',                 bg: 'rgba(34,197,94,0.1)' },
-  trialing:           { label: 'Free trial',         color: '#2563EB',                 bg: 'rgba(59,130,246,0.1)' },
-  past_due:           { label: 'Payment failed',     color: 'var(--color-error)',      bg: 'rgba(239,68,68,0.08)' },
-  unpaid:             { label: 'Unpaid',             color: 'var(--color-error)',      bg: 'rgba(239,68,68,0.08)' },
-  paused:             { label: 'Paused',             color: '#D97706',                 bg: 'rgba(245,158,11,0.1)' },
-  incomplete:         { label: 'Payment incomplete', color: '#D97706',                 bg: 'rgba(245,158,11,0.1)' },
-  incomplete_expired: { label: 'Not subscribed',     color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
-  canceled:           { label: 'Canceled',           color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
-};
-// Statuses with a live subscription — mirrors the backend; Subscribe is hidden for these.
-const LIVE_BILLING = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
-
-function fmtBillingDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
-
 function BillingSection({ isOwner }: { isOwner: boolean }) {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -205,17 +188,11 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
 
   const status = billing?.status ?? 'none';
   const trialDays = billing?.trialDays ?? 0;
-  const display = STATUS_DISPLAY[status] ?? { label: status, color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' };
+  const display = statusDisplay(status);
   const live = LIVE_BILLING.has(status);
   const btn: React.CSSProperties = { padding: '10px 20px', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: redirecting ? 'not-allowed' : 'pointer', opacity: redirecting ? 0.7 : 1 };
 
-  let detail = '';
-  if (billing?.currentPeriodEnd && live) {
-    const date = fmtBillingDate(billing.currentPeriodEnd);
-    if (billing.cancelAtPeriodEnd) detail = `Cancels on ${date}`;
-    else if (status === 'trialing') detail = `Trial ends ${date}`;
-    else if (status === 'active') detail = `Renews on ${date}`;
-  }
+  const detail = billingDetail(billing);
 
   return (
     <div style={{ marginBottom: '20px' }}>
@@ -231,7 +208,7 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
                 ✓ Payment received — your subscription will show as active in a moment. Refresh the page if it doesn't.
               </div>
             )}
-            {(status === 'past_due' || status === 'unpaid') && (
+            {isPaymentProblem(status) && (
               <ErrorBanner message="The last payment didn't go through. Update the payment method to keep your subscription." />
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
@@ -246,7 +223,7 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   {!live && (
                     <button onClick={() => void goTo(startCheckout, 'Could not start checkout. Please try again.')} disabled={redirecting} style={{ ...btn, backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)' }}>
-                      {redirecting ? 'Opening…' : trialDays > 0 ? `Start ${trialDays}-day free trial` : status === 'canceled' ? 'Subscribe again' : 'Subscribe'}
+                      {redirecting ? 'Opening…' : subscribeLabel(billing)}
                     </button>
                   )}
                   {billing?.hasBillingAccount && (live || status === 'canceled') && (

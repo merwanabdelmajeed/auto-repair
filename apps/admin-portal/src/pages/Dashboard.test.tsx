@@ -10,6 +10,8 @@ vi.mock('../api/dashboard', () => ({ getDashboardSummary: vi.fn() }));
 vi.mock('../api/appointments', () => ({ listAppointments: vi.fn(), updateAppointmentStatus: vi.fn(), applyPromo: vi.fn() }));
 vi.mock('../api/customers', () => ({ listCustomers: vi.fn() }));
 vi.mock('../api/vehicles', () => ({ listVehicles: vi.fn(), updateVehicle: vi.fn() }));
+// The subscription card has its own tests (SubscriptionCard.test.tsx).
+vi.mock('../components/SubscriptionCard', () => ({ default: () => null }));
 
 function todayLocalDate() {
   const d = new Date();
