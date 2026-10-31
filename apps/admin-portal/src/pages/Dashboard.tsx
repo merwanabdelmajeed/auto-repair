@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { getDashboardSummary, type DashboardSummary } from '../api/dashboard';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
 import { listVehicles, type Vehicle } from '../api/vehicles';
+import { listCustomers, type Customer } from '../api/customers';
 import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AppointmentCustomerCard from '../components/AppointmentCustomerCard';
 import AddVehicleForm from '../components/AddVehicleForm';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
@@ -41,6 +43,8 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [todaysAppointments, setTodaysAppointments] = useState<Appointment[]>([]);
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
+  // Phone lives on the customer record (appointments only snapshot name/email).
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<{ appt: Appointment; rect: DOMRect } | null>(null);
@@ -59,7 +63,8 @@ export default function Dashboard() {
       getDashboardSummary().catch(() => null),
       fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
       fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
-    ]).then(([sum, appts, vehicles]) => {
+      fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
+    ]).then(([sum, appts, vehicles, customers]) => {
       setSummary(sum);
       setTodaysAppointments(
         appts
@@ -69,6 +74,9 @@ export default function Dashboard() {
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
+      const cmap: Record<string, Customer> = {};
+      customers.forEach(c => { cmap[c.userId] = c; });
+      setCustomerMap(cmap);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -181,6 +189,7 @@ export default function Dashboard() {
                   a.serviceName.toLowerCase().includes(q) ||
                   (a.customerName ?? '').toLowerCase().includes(q) ||
                   (a.customerEmail ?? '').toLowerCase().includes(q) ||
+                  (a.customerId ? customerMap[a.customerId]?.phone ?? '' : '').toLowerCase().includes(q) ||
                   (a.vehicleSummary ?? '').toLowerCase().includes(q)
                 );
               })
@@ -227,7 +236,7 @@ export default function Dashboard() {
                     <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.serviceName}</td>
                     <td style={{ padding: '14px 16px', overflow: 'hidden' }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.customerName || a.customerEmail}</div>
-                      {a.customerName && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.customerEmail}</div>}
+                      {a.customerId && customerMap[a.customerId]?.phone && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customerMap[a.customerId].phone}</div>}
                     </td>
                     <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.vehicleSummary}</td>
                     <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{fmtDateTime(a.scheduledAt)}</td>
@@ -320,18 +329,7 @@ export default function Dashboard() {
 
               <div style={{ padding: '16px 20px', flex: 1 }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Customer</div>
-                <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>
-                  {a.customerName && (
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>👤</span>
-                      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{a.customerName}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail || '—'}</span>
-                  </div>
-                </div>
+                <AppointmentCustomerCard appt={a} phone={a.customerId ? customerMap[a.customerId]?.phone : null} />
 
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Appointment</div>
                 <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>

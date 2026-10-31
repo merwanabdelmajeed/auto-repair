@@ -8,8 +8,10 @@ import {
   type AppointmentStatus,
 } from '../api/appointments';
 import { listVehicles, type Vehicle } from '../api/vehicles';
+import { listCustomers, type Customer } from '../api/customers';
 import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
+import AppointmentCustomerCard from '../components/AppointmentCustomerCard';
 import AddVehicleForm from '../components/AddVehicleForm';
 import StatusPickerModal from '../components/StatusPickerModal';
 import { VALID_NEXT } from '../utils/appointmentTransitions';
@@ -56,6 +58,8 @@ function fmt(iso: string) {
 export default function Bookings() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
+  // Phone lives on the customer record (appointments only snapshot name/email).
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<BookingsTab>('current');
@@ -92,14 +96,18 @@ export default function Bookings() {
     try {
       setLoading(true);
       setError('');
-      const [data, vehicles] = await Promise.all([
+      const [data, vehicles, customers] = await Promise.all([
         fetchAllPages(cursor => listAppointments(cursor)),
         fetchAllPages(cursor => listVehicles(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
       ]);
       setAppointments(data);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
+      const cmap: Record<string, Customer> = {};
+      customers.forEach(c => { cmap[c.userId] = c; });
+      setCustomerMap(cmap);
     } catch {
       setError('Failed to load appointments.');
     } finally {
@@ -171,6 +179,7 @@ export default function Bookings() {
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
       (appt.customerEmail ?? '').toLowerCase().includes(q) ||
+      (appt.customerId ? customerMap[appt.customerId]?.phone ?? '' : '').toLowerCase().includes(q) ||
       (appt.vehicleSummary ?? '').toLowerCase().includes(q)
     );
   }
@@ -263,7 +272,7 @@ export default function Bookings() {
                   <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{appt.serviceName}</td>
                   <td style={{ padding: '14px 16px', overflow: 'hidden' }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{appt.customerName || appt.customerEmail}</div>
-                    {appt.customerName && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{appt.customerEmail}</div>}
+                    {appt.customerId && customerMap[appt.customerId]?.phone && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customerMap[appt.customerId].phone}</div>}
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{appt.vehicleSummary}</td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{fmt(appt.scheduledAt)}</td>
@@ -341,18 +350,7 @@ export default function Bookings() {
 
               <div style={{ padding: '16px 20px', flex: 1 }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Customer</div>
-                <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>
-                  {a.customerName && (
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--color-divider)' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>👤</span>
-                      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{a.customerName}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 14px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>✉️</span>
-                    <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{a.customerEmail || '—'}</span>
-                  </div>
-                </div>
+                <AppointmentCustomerCard appt={a} phone={a.customerId ? customerMap[a.customerId]?.phone : null} />
 
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Appointment</div>
                 <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '16px', overflow: 'hidden' }}>

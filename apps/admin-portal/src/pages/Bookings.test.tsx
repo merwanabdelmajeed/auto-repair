@@ -88,6 +88,42 @@ describe('Bookings — loading and tabs', () => {
   });
 });
 
+describe('Bookings — customer phone', () => {
+  it('shows the customer phone (not email) under the name in the table', async () => {
+    mockLoad();
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+    expect(screen.getByText('555-1234')).toBeInTheDocument();
+    expect(screen.queryByText('jane@shop.com')).not.toBeInTheDocument();
+  });
+
+  it('finds appointments by customer phone in search', async () => {
+    mockLoad();
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+    fireEvent.change(screen.getByPlaceholderText('Search service, customer, vehicle…'), { target: { value: '555-12' } });
+    expect(screen.getByText('Oil Change')).toBeInTheDocument();
+  });
+
+  it('shows phone and email in the detail panel, with a clickable name', async () => {
+    mockLoad();
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+    fireEvent.click(screen.getByText('Oil Change'));
+    expect(screen.getAllByText('555-1234')).toHaveLength(2);
+    expect(screen.getByText('jane@shop.com')).toBeInTheDocument();
+    expect(screen.getByRole('link')).toHaveTextContent('Jane Doe');
+  });
+
+  it('still loads appointments when the customers fetch fails', async () => {
+    mockLoad();
+    vi.mocked(listCustomers).mockRejectedValue(new Error('down'));
+    renderPage();
+    await waitFor(() => screen.getByText('Oil Change'));
+    expect(screen.queryByText('555-1234')).not.toBeInTheDocument();
+  });
+});
+
 describe('Bookings — URL appointmentId auto-open', () => {
   it('opens the detail panel for the matching appointment and strips the query param', async () => {
     mockLoad();

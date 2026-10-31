@@ -266,6 +266,29 @@ describe('Customers', () => {
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument());
   });
 
+  it('opens the customer details from an ?open=1 deep link, and closing does not reopen it', async () => {
+    vi.mocked(listCustomers).mockResolvedValue({
+      items: [customer(), customer({ userId: 'c2', firstName: 'Bob', lastName: 'Smith' })],
+      nextCursor: null,
+    });
+    vi.mocked(listVehicles).mockResolvedValue({ items: [], nextCursor: null });
+    renderPage(['/customers?customerId=c2&open=1']);
+
+    await waitFor(() => expect(screen.getByText('Customer Details')).toBeInTheDocument());
+    expect(screen.getAllByText('Bob Smith').length).toBeGreaterThan(1);
+
+    fireEvent.click(screen.getByText('✕'));
+    expect(screen.queryByText('Customer Details')).not.toBeInTheDocument();
+  });
+
+  it('ignores an ?open=1 deep link for an unknown customer', async () => {
+    vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+    vi.mocked(listVehicles).mockResolvedValue({ items: [], nextCursor: null });
+    renderPage(['/customers?customerId=nope&open=1']);
+    await waitFor(() => expect(screen.getByText('← Back to all customers')).toBeInTheDocument());
+    expect(screen.queryByText('Customer Details')).not.toBeInTheDocument();
+  });
+
   it('opens and closes the detail panel when a row is clicked', async () => {
     vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
     vi.mocked(listVehicles).mockResolvedValue({ items: [vehicle()], nextCursor: null });

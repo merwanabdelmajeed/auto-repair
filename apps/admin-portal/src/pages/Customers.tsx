@@ -103,6 +103,18 @@ export default function Customers() {
 
   useEffect(() => { void load(); }, []);
 
+  // Deep link from an appointment's detail panel (?customerId=…&open=1):
+  // open that customer's details once loaded, then drop `open` so closing
+  // the panel doesn't reopen it.
+  useEffect(() => {
+    if (loading || !customerIdFilter || searchParams.get('open') !== '1') return;
+    const match = customers.find(c => c.userId === customerIdFilter);
+    if (match) setDetailCustomer(match);
+    const next = new URLSearchParams(searchParams);
+    next.delete('open');
+    setSearchParams(next, { replace: true });
+  }, [loading, customers, customerIdFilter, searchParams]);
+
   async function load() {
     try {
       setLoading(true);
