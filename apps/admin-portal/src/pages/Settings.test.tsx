@@ -30,6 +30,12 @@ vi.mock('../api/locations', () => ({
   deleteLocation: vi.fn(),
 }));
 
+vi.mock('../api/billing', () => ({
+  getBilling: vi.fn().mockResolvedValue({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false }),
+  startCheckout: vi.fn(),
+  openBillingPortal: vi.fn(),
+}));
+
 vi.mock('../api/tenant', () => ({
   getTenant: vi.fn().mockResolvedValue({ tenantId: 't1', name: 'Shop', email: 'x@x.com', plan: 'STARTER', status: 'ACTIVE' }),
   updateTenant: vi.fn(),

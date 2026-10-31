@@ -4,6 +4,7 @@ import { getTenant, updateTenant, type Tenant, type TenantInput } from '../api/t
 import { listLocations, createLocation, updateLocation, deleteLocation, type Location, type LocationInput } from '../api/locations';
 import { listAdminUsers, inviteAdminUser, updateAdminUser, deleteAdminUser, type AdminUser, type AdminRole, type InviteAdminUserInput } from '../api/adminUsers';
 import { ApiError } from '../api/client';
+import { getBilling, startCheckout, openBillingPortal, type BillingStatus } from '../api/billing';
 
 const OWNER_ROLES = new Set(['SUPER_ADMIN', 'TENANT_OWNER']);
 const EMPTY_TENANT_FORM: TenantInput = { name: '', address: '', phone: '', contactEmail: '' };
@@ -30,6 +31,7 @@ export default function Settings() {
   return (
     <div style={{ maxWidth: '900px' }}>
       <BusinessProfileSection isOwner={isOwner} />
+      <BillingSection isOwner={isOwner} />
       <LocationsSection isOwner={isOwner} />
       <RolesSection isOwner={isOwner} currentUserId={user?.userId ?? ''} />
       <div style={{ textAlign: 'center', marginTop: '24px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
@@ -141,6 +143,125 @@ function BusinessProfileSection({ isOwner }: { isOwner: boolean }) {
               <button onClick={() => void save()} disabled={saving} style={{ padding: '10px 24px', backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Billing ────────────────────────────────────────────────────
+
+const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
+  none:               { label: 'Not subscribed',     color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
+  active:             { label: 'Active',             color: '#16A34A',                 bg: 'rgba(34,197,94,0.1)' },
+  trialing:           { label: 'Free trial',         color: '#2563EB',                 bg: 'rgba(59,130,246,0.1)' },
+  past_due:           { label: 'Payment failed',     color: 'var(--color-error)',      bg: 'rgba(239,68,68,0.08)' },
+  unpaid:             { label: 'Unpaid',             color: 'var(--color-error)',      bg: 'rgba(239,68,68,0.08)' },
+  paused:             { label: 'Paused',             color: '#D97706',                 bg: 'rgba(245,158,11,0.1)' },
+  incomplete:         { label: 'Payment incomplete', color: '#D97706',                 bg: 'rgba(245,158,11,0.1)' },
+  incomplete_expired: { label: 'Not subscribed',     color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
+  canceled:           { label: 'Canceled',           color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' },
+};
+// Statuses with a live subscription — mirrors the backend; Subscribe is hidden for these.
+const LIVE_BILLING = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
+
+function fmtBillingDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function BillingSection({ isOwner }: { isOwner: boolean }) {
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
+  const [error, setError] = useState('');
+  // Stripe sends the owner back to /settings?billing=success|cancelled.
+  const [returnState] = useState(() => new URLSearchParams(window.location.search).get('billing'));
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setBilling(await getBilling());
+      } catch {
+        setError('Failed to load billing.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function goTo(fetchUrl: () => Promise<{ url: string }>, failMessage: string) {
+    setRedirecting(true);
+    setError('');
+    try {
+      const { url } = await fetchUrl();
+      window.location.assign(url);
+    } catch {
+      setError(failMessage);
+      setRedirecting(false);
+    }
+  }
+
+  const status = billing?.status ?? 'none';
+  const display = STATUS_DISPLAY[status] ?? { label: status, color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' };
+  const live = LIVE_BILLING.has(status);
+  const btn: React.CSSProperties = { padding: '10px 20px', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: redirecting ? 'not-allowed' : 'pointer', opacity: redirecting ? 0.7 : 1 };
+
+  let detail = '';
+  if (billing?.currentPeriodEnd && live) {
+    const date = fmtBillingDate(billing.currentPeriodEnd);
+    if (billing.cancelAtPeriodEnd) detail = `Cancels on ${date}`;
+    else if (status === 'trialing') detail = `Trial ends ${date}`;
+    else if (status === 'active') detail = `Renews on ${date}`;
+  }
+
+  return (
+    <div style={{ marginBottom: '20px' }}>
+      <SectionHeader title="Billing" />
+      <div style={{ ...cardStyle, padding: '20px 24px' }}>
+        {loading ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
+        ) : (
+          <>
+            <ErrorBanner message={error} />
+            {returnState === 'success' && !live && (
+              <div style={{ backgroundColor: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', color: 'var(--color-success)', fontSize: '13px' }}>
+                ✓ Payment received — your subscription will show as active in a moment. Refresh the page if it doesn't.
+              </div>
+            )}
+            {(status === 'past_due' || status === 'unpaid') && (
+              <ErrorBanner message="The last payment didn't go through. Update the payment method to keep your subscription." />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>Platform subscription</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '100px', color: display.color, backgroundColor: display.bg }}>{display.label}</span>
+                  {detail && <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{detail}</span>}
+                </div>
+              </div>
+              {isOwner ? (
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {!live && (
+                    <button onClick={() => void goTo(startCheckout, 'Could not start checkout. Please try again.')} disabled={redirecting} style={{ ...btn, backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)' }}>
+                      {redirecting ? 'Opening…' : status === 'canceled' ? 'Subscribe again' : 'Subscribe'}
+                    </button>
+                  )}
+                  {billing?.hasBillingAccount && (live || status === 'canceled') && (
+                    <button onClick={() => void goTo(openBillingPortal, 'Could not open billing. Please try again.')} disabled={redirecting} style={{ ...btn, backgroundColor: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-border)' }}>
+                      Manage billing
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Only the shop owner can change billing.</div>
+              )}
+            </div>
+            {isOwner && (
+              <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                Payments are handled securely by Stripe. Card and bank details are never stored by this app.
+              </div>
             )}
           </>
         )}

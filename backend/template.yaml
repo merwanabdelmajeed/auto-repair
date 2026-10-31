@@ -11,12 +11,21 @@ Parameters:
 
 Mappings:
   EnvironmentMap:
+    # PortalUrl: where Stripe Checkout / Customer Portal send the shop owner
+    # back to. StripePriceId: the monthly platform price — PLACEHOLDERS until
+    # the Stripe account exists (see backend/docs/stripe-billing.md).
     dev:
       Suffix: '-dev'
+      PortalUrl: 'https://dev.d3ux26fye73l96.amplifyapp.com'
+      StripePriceId: 'price_REPLACE_WITH_TEST_PRICE_ID'
     staging:
       Suffix: '-staging'
+      PortalUrl: 'https://staging.example.invalid'
+      StripePriceId: 'price_REPLACE_WITH_TEST_PRICE_ID'
     prod:
       Suffix: ''
+      PortalUrl: 'https://main.d3erver6wxqmre.amplifyapp.com'
+      StripePriceId: 'price_REPLACE_WITH_LIVE_PRICE_ID'
 
 Conditions:
   # WAF (per-IP rate limiting) is only worth its ~$6/mo Web ACL floor on the
@@ -98,6 +107,13 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-token'
                   - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/carapi-secret'
+                  # Stripe keys ARE per environment (test keys for dev, live for prod).
+                  - !Sub
+                    - 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/stripe-secret-key${Suffix}'
+                    - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+                  - !Sub
+                    - 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/autorepair/stripe-webhook-secret${Suffix}'
+                    - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -1639,6 +1655,92 @@ Resources:
             Method: GET
 
 # ─────────────────────────────────────────────────────────────
+# BILLING (Stripe — the shop's platform subscription)
+# ─────────────────────────────────────────────────────────────
+  BillingFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/billing/handler.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-billing${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: handler.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          STRIPE_SECRET_KEY_PARAM: !Sub
+            - '/autorepair/stripe-secret-key${Suffix}'
+            - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+          STRIPE_PRICE_ID: !FindInMap [EnvironmentMap, !Ref Environment, StripePriceId]
+          PORTAL_URL: !FindInMap [EnvironmentMap, !Ref Environment, PortalUrl]
+      Events:
+        BillingGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /billing
+            Method: GET
+        BillingCheckout:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /billing/checkout
+            Method: POST
+        BillingPortal:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /billing/portal
+            Method: POST
+
+  BillingWebhookFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/functions/billing/webhook.ts]
+    Properties:
+      FunctionName: !Sub
+        - 'autorepair-billing-webhook${Suffix}'
+        - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Handler: webhook.handler
+      CodeUri: ./
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          STRIPE_SECRET_KEY_PARAM: !Sub
+            - '/autorepair/stripe-secret-key${Suffix}'
+            - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+          STRIPE_WEBHOOK_SECRET_PARAM: !Sub
+            - '/autorepair/stripe-webhook-secret${Suffix}'
+            - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+      Events:
+        BillingWebhook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AutoRepairApi
+            Path: /billing/webhook
+            Method: POST
+            # Called by Stripe, not users — authenticated by Stripe's
+            # signature (verified in the handler), not Cognito.
+            Auth:
+              Authorizer: NONE
+
+# ─────────────────────────────────────────────────────────────
 # OBSERVABILITY
 # ─────────────────────────────────────────────────────────────
   AlarmNotificationTopic:
@@ -2215,6 +2317,10 @@ Outputs:
       Name: !Sub
         - 'autorepair-AdminPortalClientId${Suffix}'
         - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+
+  BillingWebhookUrl:
+    Description: Paste into Stripe Dashboard → Developers → Webhooks as the endpoint URL
+    Value: !Sub 'https://${AutoRepairApi}.execute-api.${AWS::Region}.amazonaws.com/prod/billing/webhook'
 
   ApiBaseUrl:
     Description: API Gateway base URL

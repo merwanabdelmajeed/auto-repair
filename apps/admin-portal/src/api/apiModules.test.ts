@@ -12,6 +12,7 @@ import * as notifications from './notifications';
 import * as promotions from './promotions';
 import * as services from './services';
 import * as tenant from './tenant';
+import * as billing from './billing';
 import * as vehicles from './vehicles';
 
 vi.mock('./client', () => ({
@@ -236,5 +237,20 @@ describe('vehicles api', () => {
     const input = { customerId: 'c1', vin: '1HGCM82633A004352', year: 2003, make: 'HONDA', model: 'Accord', color: 'Silver' };
     vehicles.addVehicleForCustomer(input);
     expect(api.post).toHaveBeenCalledWith('/vehicles', input);
+  });
+});
+
+describe('billing api', () => {
+  it('getBilling', () => {
+    billing.getBilling();
+    expect(api.get).toHaveBeenCalledWith('/billing');
+  });
+  it('startCheckout', () => {
+    billing.startCheckout();
+    expect(api.post).toHaveBeenCalledWith('/billing/checkout', {});
+  });
+  it('openBillingPortal', () => {
+    billing.openBillingPortal();
+    expect(api.post).toHaveBeenCalledWith('/billing/portal', {});
   });
 });
