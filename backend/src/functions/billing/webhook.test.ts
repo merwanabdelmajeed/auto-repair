@@ -29,7 +29,7 @@ beforeEach(() => {
 function subscription(overrides: Record<string, unknown> = {}) {
   return {
     id: 'sub_1', object: 'subscription', customer: 'cus_1', status: 'active',
-    cancel_at_period_end: false, metadata: { tenantId: 't1' },
+    cancel_at_period_end: false, cancel_at: null, metadata: { tenantId: 't1' },
     items: { data: [{ current_period_end: 1796083200 }] }, // 2026-12-01T00:00:00Z
     ...overrides,
   };
@@ -86,6 +86,30 @@ describe('POST /billing/webhook', () => {
     const res = await handler(signedEvent('customer.subscription.updated', subscription({ status: 'active' })));
     expect(res.statusCode).toBe(200);
     expect(savedValues()).toMatchObject({ ':st': 'past_due' });
+  });
+
+  it('treats a cancel_at date (Stripe Dashboard "cancel at end of period") as a scheduled cancellation', async () => {
+    retrieve.mockResolvedValue(subscription({ cancel_at_period_end: false, cancel_at: 1796083200 }));
+    await handler(signedEvent('customer.subscription.updated', subscription()));
+    expect(savedValues()).toMatchObject({ ':st': 'active', ':cancel': true, ':cancelAt': '2026-12-01T00:00:00.000Z' });
+  });
+
+  it('records the period end as the cancel date for cancel_at_period_end', async () => {
+    retrieve.mockResolvedValue(subscription({ cancel_at_period_end: true, cancel_at: null }));
+    await handler(signedEvent('customer.subscription.updated', subscription()));
+    expect(savedValues()).toMatchObject({ ':cancel': true, ':cancelAt': '2026-12-01T00:00:00.000Z' });
+  });
+
+  it('emails when the Dashboard schedules a cancellation via cancel_at', async () => {
+    process.env.BILLING_ALERT_TOPIC_ARN = 'arn:aws:sns:us-east-1:123:autorepair-alarms-dev';
+    retrieve.mockResolvedValue(subscription({ cancel_at: 1796083200 }));
+    ddbMock.on(UpdateCommand).resolves({ Attributes: { status: 'active', cancelAtPeriodEnd: false } });
+    ddbMock.on(GetCommand).resolves({ Item: { name: 'Purrfect Auto' } });
+    await handler(signedEvent('customer.subscription.updated', subscription()));
+    const msg = snsMock.commandCalls(PublishCommand)[0].args[0].input;
+    expect(msg.Subject).toBe('[AutoRepair billing] Cancellation scheduled: Purrfect Auto');
+    expect(msg.Message).toContain('until December 1, 2026');
+    delete process.env.BILLING_ALERT_TOPIC_ARN;
   });
 
   it('records a cancellation and accepts a base64-encoded body', async () => {

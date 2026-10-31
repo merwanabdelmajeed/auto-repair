@@ -15,7 +15,7 @@ vi.mock('../api/tenant', () => ({
 vi.mock('../api/billing', () => ({ getBilling: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
 
 function billing(overrides: Record<string, unknown> = {}) {
-  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0, ...overrides };
+  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, cancelAt: null, hasBillingAccount: false, trialDays: 0, ...overrides };
 }
 
 const assign = vi.fn();

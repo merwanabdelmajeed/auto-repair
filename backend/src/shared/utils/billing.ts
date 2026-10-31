@@ -13,7 +13,10 @@ export interface BillingRecord {
   // canceled, incomplete, incomplete_expired, paused. 'none' = never subscribed.
   status: string;
   currentPeriodEnd?: string;
+  // True when the subscription is scheduled to end (not renew); cancelAt is
+  // the date it ends.
   cancelAtPeriodEnd?: boolean;
+  cancelAt?: string | null;
   updatedAt?: string;
 }
 
@@ -33,6 +36,7 @@ export async function getBilling(tenantId: string): Promise<BillingRecord> {
     status: (i.status as string | undefined) ?? 'none',
     currentPeriodEnd: i.currentPeriodEnd as string | undefined,
     cancelAtPeriodEnd: i.cancelAtPeriodEnd as boolean | undefined,
+    cancelAt: (i.cancelAt as string | null | undefined) ?? null,
     updatedAt: i.updatedAt as string | undefined,
   };
 }
@@ -57,17 +61,23 @@ export async function saveSubscription(
   const periodEnd = sub.items.data[0]?.current_period_end;
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
   const currentPeriodEnd = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
+  // A scheduled cancellation shows up as either cancel_at_period_end or a
+  // cancel_at date — the Stripe Dashboard's "cancel at end of period" sets
+  // cancel_at, not the flag.
+  const cancelScheduled = sub.cancel_at_period_end || sub.cancel_at != null;
+  const cancelAt = sub.cancel_at != null ? new Date(sub.cancel_at * 1000).toISOString() : (sub.cancel_at_period_end ? currentPeriodEnd : null);
   const res = await db.send(new UpdateCommand({
     TableName: TABLE.TENANTS,
     Key: key(tenantId),
-    UpdateExpression: 'SET stripeCustomerId = :c, stripeSubscriptionId = :s, #status = :st, currentPeriodEnd = :pe, cancelAtPeriodEnd = :cancel, updatedAt = :now',
+    UpdateExpression: 'SET stripeCustomerId = :c, stripeSubscriptionId = :s, #status = :st, currentPeriodEnd = :pe, cancelAtPeriodEnd = :cancel, cancelAt = :cancelAt, updatedAt = :now',
     ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: {
       ':c': customerId,
       ':s': sub.id,
       ':st': sub.status,
       ':pe': currentPeriodEnd,
-      ':cancel': sub.cancel_at_period_end,
+      ':cancel': cancelScheduled,
+      ':cancelAt': cancelAt,
       ':now': new Date().toISOString(),
     },
     ReturnValues: 'UPDATED_OLD',
@@ -75,6 +85,6 @@ export async function saveSubscription(
   const old = res?.Attributes;
   return {
     before: old ? { status: old.status as string | undefined, cancelAtPeriodEnd: old.cancelAtPeriodEnd as boolean | undefined } : undefined,
-    after: { status: sub.status, cancelAtPeriodEnd: sub.cancel_at_period_end, currentPeriodEnd },
+    after: { status: sub.status, cancelAtPeriodEnd: cancelScheduled, currentPeriodEnd: cancelAt ?? currentPeriodEnd },
   };
 }

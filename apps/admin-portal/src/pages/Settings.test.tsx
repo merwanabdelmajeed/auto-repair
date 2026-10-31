@@ -31,7 +31,7 @@ vi.mock('../api/locations', () => ({
 }));
 
 vi.mock('../api/billing', () => ({
-  getBilling: vi.fn().mockResolvedValue({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0 }),
+  getBilling: vi.fn().mockResolvedValue({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, cancelAt: null, hasBillingAccount: false, trialDays: 0 }),
   startCheckout: vi.fn(),
   openBillingPortal: vi.fn(),
 }));

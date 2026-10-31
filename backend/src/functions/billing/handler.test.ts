@@ -46,13 +46,13 @@ describe('GET /billing', () => {
     billingRow(undefined);
     const res = await handler(fakeEvent('GET', '/billing', UserRole.LOCATION_MANAGER));
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body).data).toEqual({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0 });
+    expect(JSON.parse(res.body).data).toEqual({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, cancelAt: null, hasBillingAccount: false, trialDays: 0 });
   });
 
   it('reports the saved subscription state', async () => {
     billingRow({ stripeCustomerId: 'cus_1', status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true });
     const res = await handler(fakeEvent('GET', '/billing'));
-    expect(JSON.parse(res.body).data).toEqual({ status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true, hasBillingAccount: true, trialDays: 0 });
+    expect(JSON.parse(res.body).data).toEqual({ status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true, cancelAt: null, hasBillingAccount: true, trialDays: 0 });
   });
 
   it('rejects customers', async () => {

@@ -5,7 +5,9 @@ import { api } from './client';
 export interface BillingStatus {
   status: string;
   currentPeriodEnd: string | null;
+  // True when the subscription won't renew; cancelAt is the date it ends.
   cancelAtPeriodEnd: boolean;
+  cancelAt: string | null;
   hasBillingAccount: boolean;
   // Free days the shop would get by subscribing now (0 = no trial; only a
   // shop's first subscription gets one).

@@ -35,6 +35,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         status: billing.status,
         currentPeriodEnd: billing.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: billing.cancelAtPeriodEnd ?? false,
+        cancelAt: billing.cancelAt ?? null,
         hasBillingAccount: !!billing.stripeCustomerId,
         trialDays: trialEligible ? trialDays : 0,
       });

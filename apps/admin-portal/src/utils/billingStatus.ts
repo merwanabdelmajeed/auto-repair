@@ -30,9 +30,13 @@ export function fmtBillingDate(iso: string) {
 
 // "Renews on …" / "Cancels on …" / "Trial ends …", or '' when there's no date to show.
 export function billingDetail(billing: BillingStatus | null): string {
-  if (!billing?.currentPeriodEnd || !LIVE_BILLING.has(billing.status)) return '';
+  if (!billing || !LIVE_BILLING.has(billing.status)) return '';
+  if (billing.cancelAtPeriodEnd) {
+    const end = billing.cancelAt ?? billing.currentPeriodEnd;
+    return end ? `Cancels on ${fmtBillingDate(end)}` : '';
+  }
+  if (!billing.currentPeriodEnd) return '';
   const date = fmtBillingDate(billing.currentPeriodEnd);
-  if (billing.cancelAtPeriodEnd) return `Cancels on ${date}`;
   if (billing.status === 'trialing') return `Trial ends ${date}`;
   if (billing.status === 'active') return `Renews on ${date}`;
   return '';

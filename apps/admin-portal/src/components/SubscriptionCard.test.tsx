@@ -7,7 +7,7 @@ vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
 vi.mock('../api/billing', () => ({ getBilling: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
 
 function billing(overrides: Record<string, unknown> = {}) {
-  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0, ...overrides };
+  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, cancelAt: null, hasBillingAccount: false, trialDays: 0, ...overrides };
 }
 
 const assign = vi.fn();
@@ -38,6 +38,13 @@ describe('SubscriptionCard', () => {
     expect(screen.getByText(/^Renews on November 30, 2026$/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('Manage billing'));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://billing.stripe.test/p/1'));
+  });
+
+  it('shows the scheduled cancel date (cancel_at) instead of a renewal', async () => {
+    vi.mocked(getBilling).mockResolvedValue(billing({ status: 'active', currentPeriodEnd: '2026-11-30T22:25:56.000Z', cancelAtPeriodEnd: true, cancelAt: '2026-11-30T22:25:56.000Z', hasBillingAccount: true }));
+    render(<SubscriptionCard />);
+    await waitFor(() => expect(screen.getByText(/^Cancels on November 30, 2026$/)).toBeInTheDocument());
+    expect(screen.queryByText(/Renews on/)).not.toBeInTheDocument();
   });
 
   it('shows the trial end date during a trial', async () => {
