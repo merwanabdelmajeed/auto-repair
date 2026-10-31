@@ -312,3 +312,40 @@ describe('BookingsScreen', () => {
     });
   });
 });
+
+describe('BookingsScreen — customer phone and link', () => {
+  it('shows the customer phone under the name on the card', async () => {
+    setupApis();
+    render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    expect(screen.getByText('5551234567')).toBeTruthy();
+  });
+
+  it('finds appointments by customer phone in search', async () => {
+    setupApis();
+    render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    fireEvent.changeText(screen.getByPlaceholderText(/Search/), '555123');
+    expect(screen.getByText('Oil Change')).toBeTruthy();
+  });
+
+  it('shows phone + email in the detail sheet and opens the customer from the name', async () => {
+    setupApis();
+    render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    fireEvent.press(screen.getByText('Oil Change'));
+
+    expect(screen.getAllByText('5551234567')).toHaveLength(2);
+    expect(screen.getByText('jane@shop.com')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('appt-customer-link'));
+    expect(mockNavigate).toHaveBeenCalledWith('Customers', { customerId: 'u1', open: true });
+  });
+
+  it('still loads appointments when the customers fetch fails', async () => {
+    setupApis();
+    (listCustomers as jest.Mock).mockRejectedValue(new Error('down'));
+    render(<BookingsScreen navigation={nav()} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    expect(screen.queryByText('5551234567')).toBeNull();
+  });
+});

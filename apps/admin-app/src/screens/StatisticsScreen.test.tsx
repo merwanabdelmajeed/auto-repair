@@ -14,7 +14,7 @@ function analytics(overrides: Record<string, unknown> = {}) {
   return {
     summary: {
       totalBookings: 20, completedBookings: 15, cancelledBookings: 2, pendingBookings: 3,
-      totalRevenue: 2500, uniqueCustomers: 12, newCustomers: 4, returningCustomers: 8,
+      totalRevenue: 2500, uniqueCustomers: 12, newCustomers: 4, returningCustomers: 8, totalCustomers: 30, newSignups: 3,
     },
     byDay: [],
     byService: [
@@ -43,8 +43,8 @@ describe('StatisticsScreen', () => {
     await waitFor(() => expect(screen.getByText('Total Bookings')).toBeTruthy());
     expect(screen.getByText('20')).toBeTruthy();
     expect(screen.getByText('15 completed')).toBeTruthy();
-    expect(screen.getByText('12')).toBeTruthy();
-    expect(screen.getByText('4 new')).toBeTruthy();
+    expect(screen.getByText('30')).toBeTruthy(); // registered customers, not just those who booked
+    expect(screen.getByText('3 new this period')).toBeTruthy();
     expect(screen.getByText('8')).toBeTruthy();
     expect(screen.queryByText('Revenue')).toBeNull();
     expect(screen.queryByText('$2.5k')).toBeNull();

@@ -12,6 +12,8 @@ import { getDashboardSummary, type DashboardSummary } from '../api/dashboard';
 import { SHOP_NAME, SHOP_CITY } from '../constants';
 import { listAppointments, updateAppointmentStatus, applyPromo, type Appointment, type AppointmentStatus } from '../api/appointments';
 import { listVehicles, type Vehicle } from '../api/vehicles';
+import { listCustomers, type Customer } from '../api/customers';
+import AppointmentCustomerCard from '../components/AppointmentCustomerCard';
 import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
 import AddVehicleForm from '../components/AddVehicleForm';
@@ -47,6 +49,8 @@ export default function DashboardScreen({ navigation }: any) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [todaysAppointments, setTodaysAppointments] = useState<Appointment[]>([]);
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
+  // Phone lives on the customer record (appointments only snapshot name/email).
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   // Plate/VIN edit for the selected booking's vehicle (shared flow — see hook).
   const vehicleEdit = useVehicleEdit(updated => setVehicleMap(prev => ({ ...prev, [updated.vehicleId]: updated })));
   const [loading, setLoading] = useState(true);
@@ -61,10 +65,11 @@ export default function DashboardScreen({ navigation }: any) {
     if (!isRefresh) setLoading(true);
     const today = todayLocalDate();
     try {
-      const [sum, appts, vehicles] = await Promise.all([
+      const [sum, appts, vehicles, customers] = await Promise.all([
         getDashboardSummary().catch(() => null as DashboardSummary | null),
         fetchAllPages(cursor => listAppointments(cursor)).catch(() => [] as Appointment[]),
         fetchAllPages(cursor => listVehicles(cursor)).catch(() => [] as Vehicle[]),
+        fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
       ]);
       setSummary(sum);
       setTodaysAppointments(
@@ -75,6 +80,9 @@ export default function DashboardScreen({ navigation }: any) {
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
+      const cmap: Record<string, Customer> = {};
+      customers.forEach(c => { cmap[c.userId] = c; });
+      setCustomerMap(cmap);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -82,6 +90,11 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  function openCustomer(customerId: string) {
+    setDetailAppt(null);
+    navigation?.navigate('Customers', { customerId, open: true });
+  }
 
   function openDetail(appt: Appointment) {
     setDetailAppt(appt);
@@ -225,6 +238,7 @@ export default function DashboardScreen({ navigation }: any) {
                   a.serviceName.toLowerCase().includes(q) ||
                   (a.customerName ?? '').toLowerCase().includes(q) ||
                   (a.customerEmail ?? '').toLowerCase().includes(q) ||
+                  (a.customerId ? customerMap[a.customerId]?.phone ?? '' : '').toLowerCase().includes(q) ||
                   (a.vehicleSummary ?? '').toLowerCase().includes(q)
                 );
               })
@@ -256,6 +270,9 @@ export default function DashboardScreen({ navigation }: any) {
                 )}
               </View>
               <Text style={styles.customerName} numberOfLines={1}>{a.customerName || a.customerEmail}</Text>
+              {a.customerId && customerMap[a.customerId]?.phone ? (
+                <Text style={styles.customerName} numberOfLines={1}>{customerMap[a.customerId].phone}</Text>
+              ) : null}
               <View style={styles.detailRow}>
                 <Ionicons name="car-outline" size={13} color={colors.textMuted} />
                 <Text style={styles.detailText} numberOfLines={1}>{a.vehicleSummary}</Text>
@@ -327,18 +344,11 @@ export default function DashboardScreen({ navigation }: any) {
 
                   <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
                     <Text style={styles.sectionLabel}>Customer</Text>
-                    <View style={styles.infoCard}>
-                      {detailAppt.customerName ? (
-                        <View style={styles.infoRow}>
-                          <Ionicons name="person-outline" size={15} color={colors.textMuted} />
-                          <Text style={styles.infoValue}>{detailAppt.customerName}</Text>
-                        </View>
-                      ) : null}
-                      <View style={[styles.infoRow, styles.infoRowLast]}>
-                        <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
-                        <Text style={styles.infoValue}>{detailAppt.customerEmail || '—'}</Text>
-                      </View>
-                    </View>
+                    <AppointmentCustomerCard
+                      appt={detailAppt}
+                      phone={detailAppt.customerId ? customerMap[detailAppt.customerId]?.phone : null}
+                      onOpenCustomer={openCustomer}
+                    />
 
                     <Text style={styles.sectionLabel}>Appointment</Text>
                     <View style={styles.infoCard}>

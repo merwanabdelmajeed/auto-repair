@@ -104,8 +104,8 @@ export default function StatisticsScreen() {
               </View>
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Customers</Text>
-                <Text style={styles.kpiValue}>{data.summary.uniqueCustomers}</Text>
-                <Text style={styles.kpiSub}>{data.summary.newCustomers} new</Text>
+                <Text style={styles.kpiValue}>{data.summary.totalCustomers}</Text>
+                <Text style={styles.kpiSub}>{data.summary.newSignups} new this period</Text>
               </View>
               <View style={styles.kpiCard}>
                 <Text style={styles.kpiLabel}>Returning</Text>

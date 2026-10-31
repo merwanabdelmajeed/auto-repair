@@ -261,3 +261,41 @@ describe('DashboardScreen', () => {
     fireEvent.press(screen.getByText('close'));
   });
 });
+
+describe('DashboardScreen — customer phone and link', () => {
+  it('shows the customer phone under the name on the card', async () => {
+    setupApis();
+    render(<DashboardScreen navigation={{ navigate: mockNavigate }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    expect(screen.getByText('5551234567')).toBeTruthy();
+  });
+
+  it('finds bookings by customer phone in search', async () => {
+    setupApis();
+    render(<DashboardScreen navigation={{ navigate: mockNavigate }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    fireEvent.changeText(screen.getByPlaceholderText(/Search/), '555123');
+    expect(screen.getByText('Oil Change')).toBeTruthy();
+  });
+
+  it('shows phone + email in the detail sheet and opens the customer from the name', async () => {
+    setupApis();
+    render(<DashboardScreen navigation={{ navigate: mockNavigate }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    fireEvent.press(screen.getByText('Oil Change'));
+
+    expect(screen.getAllByText('5551234567')).toHaveLength(2);
+    expect(screen.getByText('jane@shop.com')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('appt-customer-link'));
+    expect(mockNavigate).toHaveBeenCalledWith('Customers', { customerId: 'u1', open: true });
+  });
+
+  it('shows the name as plain text (no link) for a deleted customer', async () => {
+    setupApis({ appts: [appt({ customerId: undefined, customerName: 'Deleted Customer' })] });
+    render(<DashboardScreen navigation={{ navigate: mockNavigate }} />);
+    await waitFor(() => expect(screen.getByText('Oil Change')).toBeTruthy());
+    fireEvent.press(screen.getByText('Oil Change'));
+    expect(screen.queryByTestId('appt-customer-link')).toBeNull();
+    expect(screen.getByText('—')).toBeTruthy(); // no phone
+  });
+});

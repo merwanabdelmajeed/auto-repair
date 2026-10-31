@@ -345,3 +345,24 @@ describe('CustomersScreen', () => {
     fireEvent.press(screen.getByText('close'));
   });
 });
+
+describe('CustomersScreen — open from an appointment', () => {
+  it('opens the customer details when routed with open: true, then clears the param', async () => {
+    setupApis([customer(), customer({ userId: 'u2', firstName: 'Bob', lastName: 'Smith', email: 'bob@shop.com' })]);
+    const setParams = jest.fn();
+    render(<CustomersScreen navigation={{ navigate: mockNavigate, setParams }} route={{ params: { customerId: 'u2', open: true } }} />);
+
+    await waitFor(() => expect(setParams).toHaveBeenCalledWith({ open: undefined }));
+    expect(screen.getAllByText('Bob Smith').length).toBeGreaterThan(1); // list card + detail sheet
+  });
+
+  it('does not open anything without open: true', async () => {
+    setupApis([customer(), customer({ userId: 'u2', firstName: 'Bob', lastName: 'Smith', email: 'bob@shop.com' })]);
+    const setParams = jest.fn();
+    render(<CustomersScreen navigation={{ navigate: mockNavigate, setParams }} route={{ params: { customerId: 'u2' } }} />);
+
+    await waitFor(() => expect(screen.getByText('Bob Smith')).toBeTruthy());
+    expect(screen.getAllByText('Bob Smith')).toHaveLength(1);
+    expect(setParams).not.toHaveBeenCalled();
+  });
+});

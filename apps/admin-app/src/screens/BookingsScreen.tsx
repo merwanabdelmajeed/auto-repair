@@ -16,6 +16,8 @@ import {
   type AppointmentStatus,
 } from '../api/appointments';
 import { listVehicles, type Vehicle } from '../api/vehicles';
+import { listCustomers, type Customer } from '../api/customers';
+import AppointmentCustomerCard from '../components/AppointmentCustomerCard';
 import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
 import AddVehicleForm from '../components/AddVehicleForm';
@@ -62,6 +64,8 @@ function fmtDateOnly(iso: string) {
 export default function BookingsScreen({ route, navigation }: any) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicleMap, setVehicleMap] = useState<Record<string, Vehicle>>({});
+  // Phone lives on the customer record (appointments only snapshot name/email).
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
   // Plate/VIN edit for the selected booking's vehicle (shared flow — see hook).
   const vehicleEdit = useVehicleEdit(updated => setVehicleMap(prev => ({ ...prev, [updated.vehicleId]: updated })));
   const [loading, setLoading] = useState(true);
@@ -76,14 +80,18 @@ export default function BookingsScreen({ route, navigation }: any) {
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [appts, vehicles] = await Promise.all([
+      const [appts, vehicles, customers] = await Promise.all([
         fetchAllPages(cursor => listAppointments(cursor)),
         fetchAllPages(cursor => listVehicles(cursor)),
+        fetchAllPages(cursor => listCustomers(cursor)).catch(() => [] as Customer[]),
       ]);
       setAppointments(appts);
       const vmap: Record<string, Vehicle> = {};
       vehicles.forEach(v => { vmap[v.vehicleId] = v; });
       setVehicleMap(vmap);
+      const cmap: Record<string, Customer> = {};
+      customers.forEach(c => { cmap[c.userId] = c; });
+      setCustomerMap(cmap);
     } catch {
       Alert.alert('Error', 'Failed to load appointments.');
     } finally {
@@ -105,6 +113,11 @@ export default function BookingsScreen({ route, navigation }: any) {
       navigation.setParams({ appointmentId: undefined });
     }
   }, [appointments, route?.params?.appointmentId]);
+
+  function openCustomer(customerId: string) {
+    setDetailAppt(null);
+    navigation?.navigate('Customers', { customerId, open: true });
+  }
 
   function openDetail(appt: Appointment) {
     setDetailAppt(appt);
@@ -189,6 +202,7 @@ export default function BookingsScreen({ route, navigation }: any) {
       appt.serviceName.toLowerCase().includes(q) ||
       (appt.customerName ?? '').toLowerCase().includes(q) ||
       (appt.customerEmail ?? '').toLowerCase().includes(q) ||
+      (appt.customerId ? customerMap[appt.customerId]?.phone ?? '' : '').toLowerCase().includes(q) ||
       (appt.vehicleSummary ?? '').toLowerCase().includes(q)
     );
   }
@@ -270,6 +284,9 @@ export default function BookingsScreen({ route, navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.serviceName}>{appt.serviceName}</Text>
                     <Text style={styles.customerEmail}>{appt.customerName || appt.customerEmail}</Text>
+                    {appt.customerId && customerMap[appt.customerId]?.phone ? (
+                      <Text style={styles.customerEmail}>{customerMap[appt.customerId].phone}</Text>
+                    ) : null}
                   </View>
                   {isUpdating ? (
                     <ActivityIndicator size="small" color={colors.primary} />
@@ -340,18 +357,11 @@ export default function BookingsScreen({ route, navigation }: any) {
                   <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
                     {/* Customer section */}
                     <Text style={styles.sectionLabel}>Customer</Text>
-                    <View style={styles.infoCard}>
-                      {detailAppt.customerName ? (
-                        <View style={styles.infoRow}>
-                          <Ionicons name="person-outline" size={15} color={colors.textMuted} />
-                          <Text style={styles.infoValue}>{detailAppt.customerName}</Text>
-                        </View>
-                      ) : null}
-                      <View style={[styles.infoRow, styles.infoRowLast]}>
-                        <Ionicons name="mail-outline" size={15} color={colors.textMuted} />
-                        <Text style={styles.infoValue}>{detailAppt.customerEmail || '—'}</Text>
-                      </View>
-                    </View>
+                    <AppointmentCustomerCard
+                      appt={detailAppt}
+                      phone={detailAppt.customerId ? customerMap[detailAppt.customerId]?.phone : null}
+                      onOpenCustomer={openCustomer}
+                    />
 
                     {/* Appointment section */}
                     <Text style={styles.sectionLabel}>Appointment</Text>

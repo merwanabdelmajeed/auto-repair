@@ -343,3 +343,45 @@ describe('VehiclesScreen', () => {
     });
   });
 });
+
+describe('VehiclesScreen — owner phone and other vehicles', () => {
+  const camry = vehicle({ vehicleId: 'v2', make: 'Toyota', model: 'Camry', year: 2019, licensePlate: 'XYZ789' });
+  const othersCar = vehicle({ vehicleId: 'v3', customerId: 'u2', make: 'Ford', model: 'F-150', year: 2018, licensePlate: 'FRD1' });
+
+  it('shows the owner phone on the vehicle card', async () => {
+    setupApis();
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+    expect(screen.getByText(/5551234567/)).toBeTruthy();
+  });
+
+  it('shows the owner phone in the detail sheet and an empty other-vehicles state', async () => {
+    setupApis();
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+    fireEvent.press(screen.getByText('2020 Honda Civic'));
+
+    expect(screen.getByText('5551234567')).toBeTruthy(); // owner card (the list one has an icon prefix)
+    expect(screen.getByText('Other Vehicles (0)')).toBeTruthy();
+    expect(screen.getByText('No other vehicles for this owner.')).toBeTruthy();
+  });
+
+  it("lists only the same owner's other vehicles before service history, and opens one on tap", async () => {
+    setupApis([vehicle(), camry, othersCar], [customer(), customer({ userId: 'u2', firstName: 'Bob', lastName: 'Smith', phone: null })]);
+    render(<VehiclesScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('2020 Honda Civic')).toBeTruthy());
+    fireEvent.press(screen.getByText('2020 Honda Civic'));
+
+    expect(screen.getByText('Other Vehicles (1)')).toBeTruthy();
+    expect(screen.getByTestId('other-vehicle-v2')).toBeTruthy();
+    expect(screen.queryByTestId('other-vehicle-v3')).toBeNull();
+    // Matches come back in tree order.
+    const headings = screen.getAllByText(/^(Other Vehicles \(1\)|Service History)$/).map(n => n.props.children);
+    expect(headings).toEqual([['Other Vehicles (', 1, ')'], 'Service History']);
+
+    fireEvent.press(screen.getByTestId('other-vehicle-v2'));
+    // Now viewing the Camry: the Civic is its "other" vehicle.
+    expect(screen.getByTestId('other-vehicle-v1')).toBeTruthy();
+    expect(screen.queryByTestId('other-vehicle-v2')).toBeNull();
+  });
+});

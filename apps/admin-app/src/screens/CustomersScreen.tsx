@@ -130,6 +130,16 @@ export default function CustomersScreen({ navigation, route }: any) {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+  // Arriving from an appointment's detail sheet ({ customerId, open: true }):
+  // open that customer's details once loaded, then clear `open` so closing
+  // the sheet doesn't reopen it on a later focus.
+  useEffect(() => {
+    if (loading || !customerIdFilter || !route?.params?.open) return;
+    const match = customers.find(c => c.userId === customerIdFilter);
+    if (match) setSelectedCustomer(match);
+    navigation.setParams({ open: undefined });
+  }, [loading, customers, customerIdFilter, route?.params?.open]);
+
   const base = customerIdFilter
     ? customers.filter(c => c.userId === customerIdFilter)
     : customers;

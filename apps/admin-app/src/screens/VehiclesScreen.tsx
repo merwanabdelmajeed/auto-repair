@@ -169,6 +169,11 @@ export default function VehiclesScreen({ navigation, route }: any) {
                       <Ionicons name="person-outline" size={11} color={colors.textMuted} /> {displayName(owner)}
                     </Text>
                   )}
+                  {owner?.phone ? (
+                    <Text style={styles.ownerText}>
+                      <Ionicons name="call-outline" size={11} color={colors.textMuted} /> {owner.phone}
+                    </Text>
+                  ) : null}
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </TouchableOpacity>
@@ -183,6 +188,9 @@ export default function VehiclesScreen({ navigation, route }: any) {
           <View style={styles.modalSheet}>
             {selectedVehicle && (() => {
               const owner = customerMap[selectedVehicle.customerId];
+              const otherVehicles = owner
+                ? vehicles.filter(o => o.customerId === selectedVehicle.customerId && o.vehicleId !== selectedVehicle.vehicleId)
+                : [];
               return (
                 <>
                   <View style={styles.modalHeader}>
@@ -324,10 +332,40 @@ export default function VehiclesScreen({ navigation, route }: any) {
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.ownerName}>{displayName(owner)}</Text>
+                            {owner.phone ? <Text style={[styles.ownerEmail, { marginBottom: 2 }]}>{owner.phone}</Text> : null}
                             <Text style={styles.ownerEmail}>{owner.email}</Text>
                           </View>
                           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
+                      </>
+                    )}
+
+                    {/* The owner's other vehicles — above service history, which can get long. */}
+                    {owner && !vehicleEdit.editing && (
+                      <>
+                        <Text style={styles.sectionLabel}>Other Vehicles ({otherVehicles.length})</Text>
+                        {otherVehicles.length === 0 ? (
+                          <View style={styles.historyEmpty}>
+                            <Text style={styles.historyEmptyText}>No other vehicles for this owner.</Text>
+                          </View>
+                        ) : (
+                          otherVehicles.map((o, i) => (
+                            <TouchableOpacity
+                              key={o.vehicleId}
+                              testID={`other-vehicle-${o.vehicleId}`}
+                              style={[styles.otherVehicleCard, i === otherVehicles.length - 1 && styles.historyCardLast]}
+                              onPress={() => openDetail(o)}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="car-outline" size={16} color={colors.primary} />
+                              <Text style={styles.otherVehicleTitle} numberOfLines={1}>
+                                {o.year} {o.make} {o.model}{o.trim ? ' ' + o.trim : ''}
+                              </Text>
+                              {o.licensePlate ? <View style={styles.plateBadge}><Text style={styles.plateText}>{o.licensePlate}</Text></View> : null}
+                              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                            </TouchableOpacity>
+                          ))
+                        )}
                       </>
                     )}
 
@@ -441,6 +479,8 @@ const styles = StyleSheet.create({
   historyEmptyText: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   historyCard: { backgroundColor: colors.background, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: spacing.sm },
   historyCardLast: { marginBottom: 0 },
+  otherVehicleCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.background, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: spacing.sm },
+  otherVehicleTitle: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', flex: 1 },
   historyCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   historyService: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', flex: 1, marginRight: spacing.sm },
   historyBadge: { borderWidth: 1, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 2 },
