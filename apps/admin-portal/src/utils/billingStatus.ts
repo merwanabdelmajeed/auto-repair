@@ -28,7 +28,7 @@ export function fmtBillingDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-// "Renews on …" / "Cancels on …" / "Trial ends …", or '' when there's no date to show.
+// "Renews on …" / "Cancels on …" / "Free until …, then renews monthly", or '' when there's no date to show.
 export function billingDetail(billing: BillingStatus | null): string {
   if (!billing || !LIVE_BILLING.has(billing.status)) return '';
   if (billing.cancelAtPeriodEnd) {
@@ -37,7 +37,7 @@ export function billingDetail(billing: BillingStatus | null): string {
   }
   if (!billing.currentPeriodEnd) return '';
   const date = fmtBillingDate(billing.currentPeriodEnd);
-  if (billing.status === 'trialing') return `Trial ends ${date}`;
+  if (billing.status === 'trialing') return `Free until ${date}, then renews monthly`;
   if (billing.status === 'active') return `Renews on ${date}`;
   return '';
 }

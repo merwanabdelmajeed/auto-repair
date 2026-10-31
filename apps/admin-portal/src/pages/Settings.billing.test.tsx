@@ -60,7 +60,7 @@ describe('Settings > Billing', () => {
 
     vi.mocked(getBilling).mockResolvedValue(billing({ status: 'trialing', currentPeriodEnd: '2026-12-01T12:00:00.000Z', hasBillingAccount: true }));
     render(<Settings />);
-    await waitFor(() => expect(screen.getByText('Trial ends December 1, 2026')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Free until December 1, 2026, then renews monthly')).toBeInTheDocument());
     expect(screen.getByText('Free trial')).toBeInTheDocument();
   });
 

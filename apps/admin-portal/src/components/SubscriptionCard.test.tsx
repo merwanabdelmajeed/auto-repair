@@ -51,7 +51,7 @@ describe('SubscriptionCard', () => {
     vi.mocked(getBilling).mockResolvedValue(billing({ status: 'trialing', currentPeriodEnd: '2026-11-30T22:25:56.000Z', hasBillingAccount: true }));
     render(<SubscriptionCard />);
     await waitFor(() => expect(screen.getByText('Free trial')).toBeInTheDocument());
-    expect(screen.getByText(/^Trial ends November 30, 2026$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Free until November 30, 2026, then renews monthly$/)).toBeInTheDocument();
   });
 
   it('highlights a failed payment with an Update payment method action', async () => {
