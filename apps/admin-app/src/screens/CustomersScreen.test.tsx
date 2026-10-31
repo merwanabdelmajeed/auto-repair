@@ -366,3 +366,24 @@ describe('CustomersScreen — open from an appointment', () => {
     expect(setParams).not.toHaveBeenCalled();
   });
 });
+
+describe('CustomersScreen — copy phone', () => {
+  it('shows a copy button next to the phone in the detail sheet', async () => {
+    setupApis();
+    render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
+    fireEvent.press(screen.getByText('Jane Doe'));
+
+    fireEvent.press(screen.getByLabelText('Copy phone number'));
+    await waitFor(() => expect(require('expo-clipboard').setStringAsync).toHaveBeenCalledWith('5551234567'));
+  });
+
+  it('has no copy button when the customer has no phone', async () => {
+    setupApis([customer({ phone: null })]);
+    render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
+    fireEvent.press(screen.getByText('Jane Doe'));
+    expect(screen.getByText('No phone number')).toBeTruthy();
+    expect(screen.queryByTestId('copy-btn')).toBeNull();
+  });
+});

@@ -362,6 +362,7 @@ describe('VehiclesScreen — owner phone and other vehicles', () => {
     fireEvent.press(screen.getByText('2020 Honda Civic'));
 
     expect(screen.getByText('5551234567')).toBeTruthy(); // owner card (the list one has an icon prefix)
+    expect(screen.getByLabelText('Copy phone number')).toBeTruthy();
     expect(screen.getByText('Other Vehicles (0)')).toBeTruthy();
     expect(screen.getByText('No other vehicles for this owner.')).toBeTruthy();
   });

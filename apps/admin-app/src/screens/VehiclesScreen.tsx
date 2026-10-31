@@ -12,6 +12,7 @@ import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
 import AddVehicleForm from '../components/AddVehicleForm';
 import { listCustomers, type Customer } from '../api/customers';
+import CopyButton from '../components/CopyButton';
 import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
 
@@ -332,7 +333,12 @@ export default function VehiclesScreen({ navigation, route }: any) {
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.ownerName}>{displayName(owner)}</Text>
-                            {owner.phone ? <Text style={[styles.ownerEmail, { marginBottom: 2 }]}>{owner.phone}</Text> : null}
+                            {owner.phone ? (
+                              <View style={styles.ownerPhoneRow}>
+                                <Text style={styles.ownerEmail}>{owner.phone}</Text>
+                                <CopyButton value={owner.phone} label="Copy phone number" />
+                              </View>
+                            ) : null}
                             <Text style={styles.ownerEmail}>{owner.email}</Text>
                           </View>
                           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -474,6 +480,7 @@ const styles = StyleSheet.create({
   ownerAvatarText: { ...typography.h4, color: colors.white, fontSize: 15 },
   ownerName: { ...typography.bodySmall, color: colors.textPrimary, fontWeight: '700', marginBottom: 2 },
   ownerEmail: { ...typography.small, color: colors.textSecondary },
+  ownerPhoneRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
 
   historyEmpty: { backgroundColor: colors.background, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, alignItems: 'center' },
   historyEmptyText: { ...typography.small, color: colors.textMuted, textAlign: 'center' },

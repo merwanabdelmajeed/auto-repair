@@ -14,6 +14,7 @@ import { fetchAllPages } from '../utils/fetchAllPages';
 import { matchesCustomerSearch } from '../utils/customerSearch';
 import { cleanAddress, formatAddress } from '../utils/address';
 import { formatPhone } from '../utils/phone';
+import CopyButton from '../components/CopyButton';
 
 const ADDRESS_INPUTS: { key: keyof CustomerAddress; placeholder: string; numeric?: boolean }[] = [
   { key: 'line1', placeholder: 'Street address' },
@@ -262,6 +263,7 @@ export default function CustomersScreen({ navigation, route }: any) {
                             <Text style={[styles.infoValue, !selectedCustomer.phone && styles.infoMuted]}>
                               {selectedCustomer.phone ?? 'No phone number'}
                             </Text>
+                            {selectedCustomer.phone ? <CopyButton value={selectedCustomer.phone} label="Copy phone number" /> : null}
                             <TouchableOpacity
                               testID="edit-phone-btn"
                               onPress={() => setPhoneDraft(selectedCustomer.phone ?? '')}

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import type { Appointment } from '../api/appointments';
+import CopyButton from './CopyButton';
 
 // Customer section of the appointment detail sheet (Dashboard + Bookings).
 // The name opens the customer's details on the Customers screen — unless the
@@ -39,6 +40,7 @@ export default function AppointmentCustomerCard({ appt, phone, onOpenCustomer }:
       <View style={styles.infoRow}>
         <Ionicons name="call-outline" size={15} color={colors.textMuted} />
         <Text style={styles.infoValue}>{phone || '—'}</Text>
+        {phone ? <CopyButton value={phone} label="Copy phone number" /> : null}
       </View>
       <View style={[styles.infoRow, styles.infoRowLast]}>
         <Ionicons name="mail-outline" size={15} color={colors.textMuted} />

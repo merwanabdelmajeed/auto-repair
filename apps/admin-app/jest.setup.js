@@ -18,3 +18,6 @@ jest.mock('@expo/vector-icons', () => {
     glyphMap: {},
   };
 });
+
+// expo-clipboard is a native module — stub it so screens with a CopyButton render.
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
