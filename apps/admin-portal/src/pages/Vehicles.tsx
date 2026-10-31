@@ -184,6 +184,7 @@ export default function Vehicles() {
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                     {owner ? displayName(owner) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                    {owner?.phone && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{owner.phone}</div>}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     {v.licensePlate
@@ -204,6 +205,7 @@ export default function Vehicles() {
       {detailVehicle && (() => {
         const v = detailVehicle;
         const owner = customerMap[v.customerId];
+        const otherVehicles = owner ? vehicles.filter(o => o.customerId === v.customerId && o.vehicleId !== v.vehicleId) : [];
         return (
           <>
             <div onClick={() => { setDetailVehicle(null); vehicleEdit.cancel(); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 200 }} />
@@ -340,10 +342,44 @@ export default function Vehicles() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '2px' }}>{displayName(owner)}</div>
+                        {owner.phone && <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>{owner.phone}</div>}
                         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{owner.email}</div>
                       </div>
                       <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>›</span>
                     </div>
+                  </>
+                )}
+
+                {/* The owner's other vehicles — above service history, which can get long. */}
+                {owner && !vehicleEdit.editing && (
+                  <>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', marginTop: '16px' }}>Other Vehicles ({otherVehicles.length})</div>
+                    {otherVehicles.length === 0 ? (
+                      <div style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                        No other vehicles for this owner.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {otherVehicles.map(o => (
+                          <div
+                            key={o.vehicleId}
+                            onClick={() => openDetail(o)}
+                            style={{ backgroundColor: 'var(--color-background)', borderRadius: '10px', border: '1px solid var(--color-border)', padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', cursor: 'pointer' }}
+                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+                            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                              <span style={{ fontSize: '14px', color: 'var(--color-primary)' }}>🚗</span>
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{o.year} {o.make} {o.model}{o.trim ? ' ' + o.trim : ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                              {o.licensePlate && <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', backgroundColor: 'var(--color-primary)', color: 'white', letterSpacing: '1px' }}>{o.licensePlate}</span>}
+                              <span style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>›</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
 

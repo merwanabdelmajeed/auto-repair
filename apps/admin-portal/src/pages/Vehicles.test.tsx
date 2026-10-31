@@ -187,7 +187,8 @@ describe('Vehicles', () => {
     expect(updateVehicle).not.toHaveBeenCalled();
     // The new car is listed and opened; the original Civic is untouched.
     await waitFor(() => expect(screen.getAllByText('2019 TOYOTA Camry LE').length).toBeGreaterThan(0));
-    expect(screen.getByText('2020 Honda Civic')).toBeInTheDocument();
+    // Civic: its table row + the new car's "Other Vehicles" list (same owner).
+    expect(screen.getAllByText('2020 Honda Civic')).toHaveLength(2);
     expect(screen.queryByText(/^AddVehicleForm:/)).not.toBeInTheDocument();
   });
   it('backs out of a wrong-car VIN with Cancel — nothing saved, and the add form can be cancelled too', async () => {
@@ -284,6 +285,54 @@ describe('Vehicles', () => {
     fireEvent.click(screen.getByText('jane@shop.com'));
 
     await waitFor(() => expect(screen.queryByText('Vehicle Details')).not.toBeInTheDocument());
+  });
+
+  describe('owner phone and other vehicles', () => {
+    const civic = vehicle();
+    const camry = vehicle({ vehicleId: 'v2', make: 'Toyota', model: 'Camry', year: 2019, licensePlate: 'XYZ789', vin: null });
+    const othersCar = vehicle({ vehicleId: 'v3', customerId: 'c2', make: 'Ford', model: 'F-150', year: 2018, licensePlate: 'FRD1' });
+
+    it('shows the owner phone under the owner name in the table', async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [civic], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+      expect(screen.getByText('555-1234')).toBeInTheDocument();
+    });
+
+    it('shows the owner phone in the detail panel and an empty state with no other vehicles', async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [civic], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({ items: [customer()], nextCursor: null });
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+      fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+      expect(screen.getAllByText('555-1234')).toHaveLength(2);
+      expect(screen.getByText('Other Vehicles (0)')).toBeInTheDocument();
+      expect(screen.getByText('No other vehicles for this owner.')).toBeInTheDocument();
+    });
+
+    it("lists only the same owner's other vehicles, above service history, and opens one on click", async () => {
+      vi.mocked(listVehicles).mockResolvedValue({ items: [civic, camry, othersCar], nextCursor: null });
+      vi.mocked(listCustomers).mockResolvedValue({
+        items: [customer(), customer({ userId: 'c2', firstName: 'Bob', lastName: 'Smith', phone: null })],
+        nextCursor: null,
+      });
+      renderPage();
+      await waitFor(() => screen.getByText('2020 Honda Civic'));
+      fireEvent.click(screen.getByText('2020 Honda Civic'));
+
+      const heading = screen.getByText('Other Vehicles (1)');
+      // Camry: table row + panel card. Ford (another owner): table row only.
+      expect(screen.getAllByText('2019 Toyota Camry')).toHaveLength(2);
+      expect(screen.getAllByText('2018 Ford F-150')).toHaveLength(1);
+      expect(heading.compareDocumentPosition(screen.getByText('Service History')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      fireEvent.click(screen.getAllByText('2019 Toyota Camry')[1]);
+      // Panel now shows the Camry, with the Civic listed as the other vehicle.
+      expect(screen.getByText('No VIN on file')).toBeInTheDocument();
+      expect(screen.getAllByText('2020 Honda Civic')).toHaveLength(2);
+    });
   });
 
   describe('service history', () => {
