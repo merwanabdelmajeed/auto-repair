@@ -4,6 +4,7 @@ import { QueryCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand, Bat
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { UserRole } from '../../shared/types/index.js';
 import * as notify from '../../shared/utils/notify.js';
+import { getUserRecord } from '../../shared/middleware/userRecord.js';
 import { handler } from './handler';
 
 const ddbMock = mockClient(db);
@@ -135,6 +136,15 @@ describe('POST /promotions', () => {
 
   it('rejects missing required fields', async () => {
     expect((await handler(postEvent({}))).statusCode).toBe(400);
+  });
+
+  // Regression: an admin deleted from the portal kept a valid ID token for up
+  // to an hour and could still create promotions with it.
+  it('rejects a deleted admin whose token is still valid, without writing anything', async () => {
+    jest.mocked(getUserRecord).mockResolvedValueOnce(undefined);
+    const result = await handler(postEvent({ code: 'X', type: 'fixed', value: 5 }));
+    expect(result.statusCode).toBe(401);
+    expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
   });
 
   it('rejects an invalid type', async () => {

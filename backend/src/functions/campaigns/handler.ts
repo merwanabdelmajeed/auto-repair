@@ -2,7 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { QueryCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
-import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { authenticate, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { UserRole, type Campaign } from '../../shared/types/index.js';
 
@@ -69,7 +69,7 @@ async function getTargetEmails(tenantId: string, audience: Campaign['targetAudie
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = extractTenantClaims(event);
+    const claims = await authenticate(event);
     requireRole(claims, ...ADMIN_ROLES);
     const { tenantId } = claims;
     const method = event.httpMethod;

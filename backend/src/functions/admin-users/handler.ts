@@ -7,9 +7,10 @@ import {
   AdminDisableUserCommand,
   AdminEnableUserCommand,
   AdminDeleteUserCommand,
+  AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { db, TABLE, queryAll } from '../../shared/utils/dynamodb.js';
-import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { authenticate, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
@@ -22,7 +23,7 @@ const cognito = new CognitoIdentityProviderClient({});
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = extractTenantClaims(event);
+    const claims = await authenticate(event);
     requireRole(claims, ...OWNER_ROLES);
     const { tenantId } = claims;
     const method = event.httpMethod;
@@ -157,6 +158,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         await cognito.send(status === 'INACTIVE'
           ? new AdminDisableUserCommand({ UserPoolId: userPoolId, Username: userId })
           : new AdminEnableUserCommand({ UserPoolId: userPoolId, Username: userId }));
+        // Revoke refresh tokens so the app can't mint new ID tokens; the ID
+        // token already in hand is rejected by authenticate() via the row's status.
+        if (status === 'INACTIVE') {
+          await cognito.send(new AdminUserGlobalSignOutCommand({ UserPoolId: userPoolId, Username: userId }));
+        }
       }
       if (role !== undefined || locationIds !== undefined) {
         const attrs: { Name: string; Value: string }[] = [];
@@ -218,6 +224,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       try {
+        // Revoke refresh tokens first (deleting alone leaves them usable until
+        // they're next presented); authenticate() rejects the outstanding ID
+        // token once the USERS row below is gone.
+        await cognito.send(new AdminUserGlobalSignOutCommand({ UserPoolId: userPoolId, Username: userId }));
         await cognito.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: userId }));
       } catch (e) {
         if (e instanceof Error && e.name === 'UserNotFoundException') return notFound('Admin user not found');

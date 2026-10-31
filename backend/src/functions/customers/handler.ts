@@ -3,7 +3,7 @@ import { DeleteCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { createHash } from 'node:crypto';
 import { db, TABLE, queryPage, queryAll } from '../../shared/utils/dynamodb.js';
-import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { authenticate, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, paginated, badRequest, unauthorized, forbidden, notFound, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { UserRole } from '../../shared/types/index.js';
@@ -21,7 +21,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // there is no target-user parameter, so this can never delete anyone
     // else's account.
     if (method === 'DELETE') {
-      const claims = extractTenantClaims(event);
+      const claims = await authenticate(event);
       requireRole(claims, UserRole.CUSTOMER);
       const { tenantId, userId, email } = claims;
 
@@ -104,7 +104,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return ok({ deleted: true });
     }
 
-    const claims = extractTenantClaims(event);
+    const claims = await authenticate(event);
     requireRole(claims, UserRole.SUPER_ADMIN, UserRole.TENANT_OWNER, UserRole.LOCATION_MANAGER);
 
     const { tenantId } = claims;

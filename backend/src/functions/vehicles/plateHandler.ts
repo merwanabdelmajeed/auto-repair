@@ -2,7 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { GetCommand, PutCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
-import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { authenticate, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { UserRole } from '../../shared/types/index.js';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { ok, badRequest, unauthorized, forbidden, serverError, tooManyRequests, serviceUnavailable } from '../../shared/utils/response.js';
@@ -173,7 +173,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   try {
     // Each lookup is a paid CarAPI call — customers only. Admins add vehicles
     // by VIN, which is decoded for free via NHTSA.
-    const claims = extractTenantClaims(event);
+    const claims = await authenticate(event);
     requireRole(claims, UserRole.CUSTOMER);
 
     const plate = event.queryStringParameters?.plate?.toUpperCase().replace(/[^A-Z0-9]/g, '');

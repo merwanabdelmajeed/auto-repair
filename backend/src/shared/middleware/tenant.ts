@@ -1,5 +1,6 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { UserRole, type ExtractedClaims, type UserType } from '../types/index.js';
+import { getUserRecord } from './userRecord.js';
 
 export class UnauthorizedError extends Error {
   constructor(message = 'Missing or invalid authentication') {
@@ -35,6 +36,28 @@ export function extractTenantClaims(event: APIGatewayProxyEvent): ExtractedClaim
   const locationIds = rawLocationIds ? rawLocationIds.split(',').filter(Boolean) : [];
 
   return { userId, email, firstName, lastName, tenantId, locationIds, role, userType };
+}
+
+// The API Gateway Cognito authorizer only checks the ID token's signature and
+// expiry — a token issued before an admin was deleted, deactivated or re-roled
+// stays valid for up to IdTokenValidity (1h). So for admin callers, the USERS
+// row (which admin-users DELETE/PATCH keep in step with Cognito) is the source
+// of truth: no ACTIVE row → 401, and role/locationIds come from the row, not
+// the possibly-stale token. Customers skip the lookup: they can only touch
+// their own data, and they delete themselves (which signs them out).
+export async function authenticate(event: APIGatewayProxyEvent): Promise<ExtractedClaims> {
+  const claims = extractTenantClaims(event);
+  if (claims.role === UserRole.CUSTOMER && claims.userType !== 'ADMIN') return claims;
+
+  const record = await getUserRecord(claims.tenantId, claims.userId);
+  if (!record || record.status !== 'ACTIVE') {
+    throw new UnauthorizedError('Account is no longer active');
+  }
+  return {
+    ...claims,
+    role: record.role ?? claims.role,
+    locationIds: record.locationIds ?? claims.locationIds,
+  };
 }
 
 export function requireRole(claims: ExtractedClaims, ...allowed: UserRole[]): void {

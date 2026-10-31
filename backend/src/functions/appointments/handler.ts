@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { QueryCommand, PutCommand, UpdateCommand, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE, queryAll, queryPage } from '../../shared/utils/dynamodb.js';
-import { extractTenantClaims, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
+import { authenticate, requireRole, UnauthorizedError, ForbiddenError } from '../../shared/middleware/tenant.js';
 import { ok, paginated, created, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../shared/utils/response.js';
 import { notifyUser, notifyAdmins } from '../../shared/utils/notify.js';
 import { UserRole, type AppointmentStatus, type CapacitySettings } from '../../shared/types/index.js';
@@ -13,7 +13,7 @@ const VALID_STATUSES: AppointmentStatus[] = ['pending', 'confirmed', 'in-progres
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = extractTenantClaims(event);
+    const claims = await authenticate(event);
     const { tenantId, userId, email, firstName, lastName, role } = claims;
     const method = event.httpMethod;
     const appointmentId = event.pathParameters?.appointmentId;

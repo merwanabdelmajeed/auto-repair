@@ -1,6 +1,9 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
-import { extractTenantClaims, requireRole, scopeToTenant, UnauthorizedError, ForbiddenError } from './tenant';
+import { extractTenantClaims, authenticate, requireRole, scopeToTenant, UnauthorizedError, ForbiddenError } from './tenant';
+import { getUserRecord } from './userRecord';
 import { UserRole } from '../types/index.js';
+
+const mockGetUserRecord = jest.mocked(getUserRecord);
 
 function fakeEvent(claims: Record<string, string> | undefined): APIGatewayProxyEvent {
   return {
@@ -80,5 +83,55 @@ describe('scopeToTenant', () => {
   it('throws UnauthorizedError on a tenant mismatch for a non-super-admin', () => {
     const claims = extractTenantClaims(fakeEvent({ 'custom:tenantId': 't1', sub: 'u1', 'custom:role': UserRole.TENANT_OWNER }));
     expect(() => scopeToTenant('other-tenant', claims)).toThrow(UnauthorizedError);
+  });
+});
+
+describe('authenticate', () => {
+  const adminClaims = {
+    'custom:tenantId': 't1', sub: 'admin-1', 'custom:userType': 'ADMIN',
+    'custom:role': UserRole.TENANT_OWNER, 'custom:locationIds': 'loc1',
+  };
+
+  it('skips the USERS lookup for customers', async () => {
+    const claims = await authenticate(fakeEvent({ 'custom:tenantId': 't1', sub: 'c1', 'custom:role': UserRole.CUSTOMER }));
+    expect(claims.userId).toBe('c1');
+    expect(mockGetUserRecord).not.toHaveBeenCalled();
+  });
+
+  it('looks up admins by their own tenant and sub and passes when the row is ACTIVE', async () => {
+    mockGetUserRecord.mockResolvedValueOnce({ status: 'ACTIVE', role: UserRole.TENANT_OWNER, locationIds: ['loc1'] });
+    const claims = await authenticate(fakeEvent(adminClaims));
+    expect(mockGetUserRecord).toHaveBeenCalledWith('t1', 'admin-1');
+    expect(claims.role).toBe(UserRole.TENANT_OWNER);
+  });
+
+  it('rejects an admin whose USERS row was deleted, even though the token is still valid', async () => {
+    mockGetUserRecord.mockResolvedValueOnce(undefined);
+    await expect(authenticate(fakeEvent(adminClaims))).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('rejects an admin whose USERS row is INACTIVE', async () => {
+    mockGetUserRecord.mockResolvedValueOnce({ status: 'INACTIVE', role: UserRole.TENANT_OWNER });
+    await expect(authenticate(fakeEvent(adminClaims))).rejects.toThrow('Account is no longer active');
+  });
+
+  it('also checks callers with an admin role but no userType claim', async () => {
+    mockGetUserRecord.mockResolvedValueOnce(undefined);
+    const { 'custom:userType': _omit, ...noUserType } = adminClaims;
+    await expect(authenticate(fakeEvent(noUserType))).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('takes role and locationIds from the row, not the possibly-stale token', async () => {
+    mockGetUserRecord.mockResolvedValueOnce({ status: 'ACTIVE', role: UserRole.LOCATION_MANAGER, locationIds: ['loc2'] });
+    const claims = await authenticate(fakeEvent(adminClaims));
+    expect(claims.role).toBe(UserRole.LOCATION_MANAGER);
+    expect(claims.locationIds).toEqual(['loc2']);
+  });
+
+  it("falls back to the token's role and locationIds when the row lacks them", async () => {
+    mockGetUserRecord.mockResolvedValueOnce({ status: 'ACTIVE' });
+    const claims = await authenticate(fakeEvent(adminClaims));
+    expect(claims.role).toBe(UserRole.TENANT_OWNER);
+    expect(claims.locationIds).toEqual(['loc1']);
   });
 });

@@ -6,6 +6,7 @@ import {
   AdminCreateUserCommand,
   AdminDisableUserCommand,
   AdminDeleteUserCommand,
+  AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { UserRole } from '../../shared/types/index.js';
@@ -152,6 +153,22 @@ describe('PATCH /admin-users/{userId}', () => {
 
     expect(result.statusCode).toBe(200);
     expect(cognitoMock.commandCalls(AdminDisableUserCommand)).toHaveLength(1);
+    // Deactivating must also revoke refresh tokens so the app can't renew its session.
+    expect(cognitoMock.commandCalls(AdminUserGlobalSignOutCommand)[0]?.args[0].input).toMatchObject({ UserPoolId: 'pool1', Username: 'mgr-1' });
+  });
+
+  it('re-activating does not sign the user out', async () => {
+    ddbMock.on(GetCommand).resolves({ Item: { userId: 'mgr-1', role: UserRole.LOCATION_MANAGER } });
+    ddbMock.on(UpdateCommand).resolves({});
+
+    const result = await handler(fakeEvent({
+      httpMethod: 'PATCH',
+      pathParameters: { userId: 'mgr-1' },
+      body: JSON.stringify({ status: 'ACTIVE' }),
+    }));
+
+    expect(result.statusCode).toBe(200);
+    expect(cognitoMock.commandCalls(AdminUserGlobalSignOutCommand)).toHaveLength(0);
   });
 
   // Regression tests for a real bug: DynamoDB's UpdateItem rejects the entire
@@ -265,6 +282,9 @@ describe('DELETE /admin-users/{userId}', () => {
 
     expect(result.statusCode).toBe(200);
     expect(cognitoMock.commandCalls(AdminDeleteUserCommand)[0]?.args[0].input).toMatchObject({ UserPoolId: 'pool1', Username: 'mgr-1' });
+    // Refresh tokens are revoked *before* the user is deleted.
+    const calls = cognitoMock.calls().map(c => c.args[0].constructor.name);
+    expect(calls).toEqual(['AdminUserGlobalSignOutCommand', 'AdminDeleteUserCommand']);
     expect(ddbMock.commandCalls(DeleteCommand)[0]?.args[0].input).toMatchObject({
       TableName: TABLE.USERS,
       Key: { PK: 'TENANT#t1', SK: 'USER#mgr-1' },
@@ -294,6 +314,20 @@ describe('DELETE /admin-users/{userId}', () => {
     }));
 
     expect(result.statusCode).toBe(404);
+    expect(ddbMock.commandCalls(DeleteCommand)).toHaveLength(0);
+  });
+
+  it('returns 404 without deleting anything when the sign-out finds no such Cognito user', async () => {
+    ddbMock.on(GetCommand).resolves({ Item: { userId: 'mgr-1', role: UserRole.LOCATION_MANAGER } });
+    cognitoMock.on(AdminUserGlobalSignOutCommand).rejects(Object.assign(new Error('User does not exist.'), { name: 'UserNotFoundException' }));
+
+    const result = await handler(fakeEvent({
+      httpMethod: 'DELETE',
+      pathParameters: { userId: 'mgr-1' },
+    }));
+
+    expect(result.statusCode).toBe(404);
+    expect(cognitoMock.commandCalls(AdminDeleteUserCommand)).toHaveLength(0);
     expect(ddbMock.commandCalls(DeleteCommand)).toHaveLength(0);
   });
 });

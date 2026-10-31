@@ -120,6 +120,7 @@ Resources:
                   - cognito-idp:AdminDisableUser
                   - cognito-idp:AdminEnableUser
                   - cognito-idp:AdminDeleteUser
+                  - cognito-idp:AdminUserGlobalSignOut
                 # Same circular-dependency reason as the ListUsers grant above —
                 # can't scope to !GetAtt UserPool.Arn.
                 Resource: '*'
