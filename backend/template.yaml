@@ -116,6 +116,10 @@ Resources:
                     - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
               - Effect: Allow
                 Action:
+                  - sns:Publish
+                Resource: !Ref AlarmNotificationTopic
+              - Effect: Allow
+                Action:
                   - kms:Decrypt
                 Resource: '*'
                 Condition:
@@ -1731,6 +1735,9 @@ Resources:
           STRIPE_WEBHOOK_SECRET_PARAM: !Sub
             - '/autorepair/stripe-webhook-secret${Suffix}'
             - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
+          # Emails the platform owner on payment failed / cancellation /
+          # subscription ended (the alarms topic already has their email).
+          BILLING_ALERT_TOPIC_ARN: !Ref AlarmNotificationTopic
       Events:
         BillingWebhook:
           Type: Api

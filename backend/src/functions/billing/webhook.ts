@@ -4,6 +4,7 @@ import { ok, badRequest, serverError } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 import { getStripe, getWebhookSecret } from '../../shared/utils/stripe.js';
 import { saveSubscription } from '../../shared/utils/billing.js';
+import { notifyBillingChange } from '../../shared/utils/billingAlerts.js';
 
 const SUBSCRIPTION_EVENTS = new Set([
   'customer.subscription.created',
@@ -59,7 +60,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         // Not one of ours (e.g. created by hand in the dashboard) — ack so Stripe stops retrying.
         logger.warn('Stripe subscription has no tenantId metadata', { subscriptionId, type: stripeEvent.type });
       } else {
-        await saveSubscription(tenantId, sub);
+        const { before, after } = await saveSubscription(tenantId, sub);
+        await notifyBillingChange(tenantId, before, after);
         logger.info('Saved subscription state', { tenantId, status: sub.status, type: stripeEvent.type });
       }
     }

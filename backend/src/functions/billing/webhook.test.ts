@@ -1,7 +1,8 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import Stripe from 'stripe';
 import { mockClient } from 'aws-sdk-client-mock';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { db, TABLE } from '../../shared/utils/dynamodb.js';
 import { getStripe, getWebhookSecret } from '../../shared/utils/stripe.js';
 import { handler } from './webhook';
@@ -9,6 +10,7 @@ import { handler } from './webhook';
 jest.mock('../../shared/utils/stripe', () => ({ getStripe: jest.fn(), getWebhookSecret: jest.fn() }));
 
 const ddbMock = mockClient(db);
+const snsMock = mockClient(SNSClient);
 const WEBHOOK_SECRET = 'whsec_test_dummy';
 // A real Stripe client (dummy key — nothing here hits the network) so the
 // real signature verification runs; only subscriptions.retrieve is stubbed.
@@ -17,6 +19,7 @@ const retrieve = jest.fn();
 
 beforeEach(() => {
   ddbMock.reset();
+  snsMock.reset();
   retrieve.mockReset();
   (stripe as unknown as { subscriptions: { retrieve: jest.Mock } }).subscriptions = { retrieve } as never;
   jest.mocked(getStripe).mockResolvedValue(stripe);
@@ -112,6 +115,19 @@ describe('POST /billing/webhook', () => {
     expect((await handler(signedEvent('checkout.session.completed', { object: 'checkout.session', mode: 'payment' }))).statusCode).toBe(200);
     expect(retrieve).not.toHaveBeenCalled();
     expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it('emails the platform owner when a renewal payment fails', async () => {
+    process.env.BILLING_ALERT_TOPIC_ARN = 'arn:aws:sns:us-east-1:123:autorepair-alarms-dev';
+    retrieve.mockResolvedValue(subscription({ status: 'past_due' }));
+    ddbMock.on(UpdateCommand).resolves({ Attributes: { status: 'active', cancelAtPeriodEnd: false } });
+    ddbMock.on(GetCommand).resolves({ Item: { name: 'Purrfect Auto' } });
+
+    const res = await handler(signedEvent('customer.subscription.updated', subscription({ status: 'past_due' })));
+
+    expect(res.statusCode).toBe(200);
+    expect(snsMock.commandCalls(PublishCommand)[0].args[0].input.Subject).toBe('[AutoRepair billing] Payment failed: Purrfect Auto');
+    delete process.env.BILLING_ALERT_TOPIC_ARN;
   });
 
   it('returns 500 (so Stripe retries) when saving fails', async () => {

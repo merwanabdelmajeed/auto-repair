@@ -1,6 +1,7 @@
 import type Stripe from 'stripe';
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, TABLE } from './dynamodb.js';
+import type { SubscriptionState } from './billingAlerts.js';
 
 // A tenant's subscription to the platform. Kept in its own TENANTS row
 // (SK 'BILLING'), not on the PROFILE row — PUT /tenants/me rewrites the
@@ -46,12 +47,17 @@ export async function saveCustomerId(tenantId: string, stripeCustomerId: string)
   }));
 }
 
-// Snapshot a Stripe subscription onto the tenant's billing row.
-export async function saveSubscription(tenantId: string, sub: Stripe.Subscription): Promise<void> {
+// Snapshot a Stripe subscription onto the tenant's billing row. Returns the
+// state before and after, so callers can react to transitions.
+export async function saveSubscription(
+  tenantId: string,
+  sub: Stripe.Subscription,
+): Promise<{ before: SubscriptionState | undefined; after: SubscriptionState }> {
   // Billing periods live on subscription items in current Stripe API versions.
   const periodEnd = sub.items.data[0]?.current_period_end;
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
-  await db.send(new UpdateCommand({
+  const currentPeriodEnd = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
+  const res = await db.send(new UpdateCommand({
     TableName: TABLE.TENANTS,
     Key: key(tenantId),
     UpdateExpression: 'SET stripeCustomerId = :c, stripeSubscriptionId = :s, #status = :st, currentPeriodEnd = :pe, cancelAtPeriodEnd = :cancel, updatedAt = :now',
@@ -60,9 +66,15 @@ export async function saveSubscription(tenantId: string, sub: Stripe.Subscriptio
       ':c': customerId,
       ':s': sub.id,
       ':st': sub.status,
-      ':pe': periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+      ':pe': currentPeriodEnd,
       ':cancel': sub.cancel_at_period_end,
       ':now': new Date().toISOString(),
     },
+    ReturnValues: 'UPDATED_OLD',
   }));
+  const old = res?.Attributes;
+  return {
+    before: old ? { status: old.status as string | undefined, cancelAtPeriodEnd: old.cancelAtPeriodEnd as boolean | undefined } : undefined,
+    after: { status: sub.status, cancelAtPeriodEnd: sub.cancel_at_period_end, currentPeriodEnd },
+  };
 }

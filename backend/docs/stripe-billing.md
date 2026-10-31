@@ -32,6 +32,15 @@ charges it automatically on day 30. A shop that has ever had a subscription
 `BillingFunction` in `template.yaml`; `'0'` turns trials off. In Stripe, turn on
 **Settings → Billing → Subscriptions and emails → trial-ending reminder**.
 
+## Email alerts to the platform owner
+
+Billing is status-only in the app: nothing gets locked. Instead, the webhook
+emails the platform owner through the stack's alerts topic (`autorepair-alarms[-dev]`,
+already subscribed to their email) when a shop's subscription changes:
+**cancellation scheduled**, **payment failed**, **unpaid**, **subscription
+ended**, or **payment recovered**. Only real transitions send an email, so a
+re-delivered webhook stays quiet. The logic is in `src/shared/utils/billingAlerts.ts`.
+
 ## Placeholders to replace
 
 | What | Placeholder | Where it lives |
