@@ -15,7 +15,7 @@ vi.mock('../api/tenant', () => ({
 vi.mock('../api/billing', () => ({ getBilling: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
 
 function billing(overrides: Record<string, unknown> = {}) {
-  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, ...overrides };
+  return { status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0, ...overrides };
 }
 
 const assign = vi.fn();
@@ -94,6 +94,28 @@ describe('Settings > Billing', () => {
     fireEvent.click(screen.getByText('Subscribe'));
     await waitFor(() => expect(screen.getByText('Could not start checkout. Please try again.')).toBeInTheDocument());
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('offers a free trial with the first charge date', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-31T18:00:00'));
+    vi.mocked(getBilling).mockResolvedValue(billing({ trialDays: 30 }));
+    vi.mocked(startCheckout).mockResolvedValue({ url: 'https://checkout.stripe.test/s/1' });
+    render(<Settings />);
+
+    await waitFor(() => expect(screen.getByText('Start 30-day free trial')).toBeInTheDocument());
+    expect(screen.getByText('November 30, 2026')).toBeInTheDocument();
+    expect(screen.getByText(/30 days free/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Start 30-day free trial'));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/s/1'));
+    vi.useRealTimers();
+  });
+
+  it('shows no trial offer once the shop has had a subscription', async () => {
+    vi.mocked(getBilling).mockResolvedValue(billing({ status: 'canceled', hasBillingAccount: true, trialDays: 0 }));
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Subscribe again')).toBeInTheDocument());
+    expect(screen.queryByText(/days free/)).not.toBeInTheDocument();
   });
 
   it('shows an error when billing fails to load', async () => {

@@ -1682,6 +1682,9 @@ Resources:
             - Suffix: !FindInMap [EnvironmentMap, !Ref Environment, Suffix]
           STRIPE_PRICE_ID: !FindInMap [EnvironmentMap, !Ref Environment, StripePriceId]
           PORTAL_URL: !FindInMap [EnvironmentMap, !Ref Environment, PortalUrl]
+          # Free days before the first charge, counted from sign-up. A shop's
+          # first subscription only; 0 turns trials off.
+          TRIAL_DAYS: '30'
       Events:
         BillingGet:
           Type: Api

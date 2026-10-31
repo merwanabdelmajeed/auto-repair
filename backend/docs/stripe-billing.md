@@ -23,6 +23,15 @@ and the subscription status, nothing else.
 Billing state is kept in its own `BILLING` row because `PUT /tenants/me`
 rewrites the whole `PROFILE` row.
 
+## Free trial
+
+A shop's **first** subscription gets `TRIAL_DAYS` (30) free days, counted from
+sign-up. Checkout still collects a card or bank account up front, and Stripe
+charges it automatically on day 30. A shop that has ever had a subscription
+(`stripeSubscriptionId` saved) gets no second trial. Set `TRIAL_DAYS` on
+`BillingFunction` in `template.yaml`; `'0'` turns trials off. In Stripe, turn on
+**Settings → Billing → Subscriptions and emails → trial-ending reminder**.
+
 ## Placeholders to replace
 
 | What | Placeholder | Where it lives |

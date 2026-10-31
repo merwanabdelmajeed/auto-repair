@@ -25,6 +25,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     requireRole(claims, ...ADMIN_ROLES);
     const { tenantId } = claims;
     const billing = await getBilling(tenantId);
+    // One free trial per shop: only before its first-ever subscription, so
+    // cancelling and resubscribing doesn't earn another free month.
+    const trialDays = Number(process.env.TRIAL_DAYS ?? 0);
+    const trialEligible = trialDays > 0 && !billing.stripeSubscriptionId;
 
     if (event.httpMethod === 'GET' && event.resource === '/billing') {
       return ok({
@@ -32,6 +36,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         currentPeriodEnd: billing.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: billing.cancelAtPeriodEnd ?? false,
         hasBillingAccount: !!billing.stripeCustomerId,
+        trialDays: trialEligible ? trialDays : 0,
       });
     }
 
@@ -51,8 +56,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         customer: customerId,
         line_items: [{ price: PRICE_ID, quantity: 1 }],
         client_reference_id: tenantId,
-        // Lets the webhook map subscription events back to the tenant.
-        subscription_data: { metadata: { tenantId } },
+        // tenantId lets the webhook map subscription events back to the tenant.
+        // With a trial, Checkout still collects a card or bank account up
+        // front but charges nothing until the trial ends.
+        subscription_data: {
+          metadata: { tenantId },
+          ...(trialEligible ? { trial_period_days: trialDays } : {}),
+        },
         success_url: `${PORTAL_URL}/settings?billing=success`,
         cancel_url: `${PORTAL_URL}/settings?billing=cancelled`,
       });

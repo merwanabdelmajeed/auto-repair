@@ -7,6 +7,9 @@ export interface BillingStatus {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   hasBillingAccount: boolean;
+  // Free days the shop would get by subscribing now (0 = no trial; only a
+  // shop's first subscription gets one).
+  trialDays: number;
 }
 
 export const getBilling = () => api.get<BillingStatus>('/billing');

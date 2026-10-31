@@ -18,6 +18,7 @@ const fakeStripe = {
 
 beforeEach(() => {
   ddbMock.reset();
+  delete process.env.TRIAL_DAYS;
   jest.mocked(getStripe).mockResolvedValue(fakeStripe as never);
   fakeStripe.customers.create.mockResolvedValue({ id: 'cus_new' });
   fakeStripe.checkout.sessions.create.mockResolvedValue({ url: 'https://checkout.stripe.test/s/1' });
@@ -45,13 +46,13 @@ describe('GET /billing', () => {
     billingRow(undefined);
     const res = await handler(fakeEvent('GET', '/billing', UserRole.LOCATION_MANAGER));
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body).data).toEqual({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false });
+    expect(JSON.parse(res.body).data).toEqual({ status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, hasBillingAccount: false, trialDays: 0 });
   });
 
   it('reports the saved subscription state', async () => {
     billingRow({ stripeCustomerId: 'cus_1', status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true });
     const res = await handler(fakeEvent('GET', '/billing'));
-    expect(JSON.parse(res.body).data).toEqual({ status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true, hasBillingAccount: true });
+    expect(JSON.parse(res.body).data).toEqual({ status: 'active', currentPeriodEnd: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: true, hasBillingAccount: true, trialDays: 0 });
   });
 
   it('rejects customers', async () => {
@@ -111,6 +112,46 @@ describe('POST /billing/checkout', () => {
     fakeStripe.customers.create.mockRejectedValue(new Error('stripe down'));
     const res = await handler(fakeEvent('POST', '/billing/checkout'));
     expect(res.statusCode).toBe(500);
+  });
+});
+
+describe('free trial', () => {
+  beforeEach(() => { process.env.TRIAL_DAYS = '30'; });
+
+  it('offers a 30-day trial to a shop that never subscribed', async () => {
+    billingRow(undefined);
+    const res = await handler(fakeEvent('GET', '/billing'));
+    expect(JSON.parse(res.body).data.trialDays).toBe(30);
+  });
+
+  it('starts Checkout with the trial (payment details collected, no charge until day 30)', async () => {
+    billingRow(undefined);
+    await handler(fakeEvent('POST', '/billing/checkout'));
+    const params = fakeStripe.checkout.sessions.create.mock.calls[0][0];
+    expect(params.subscription_data).toEqual({ metadata: { tenantId: 't1' }, trial_period_days: 30 });
+    expect(params.payment_method_collection).toBeUndefined(); // Stripe default: always collect
+  });
+
+  it('does not give a second trial to a shop that subscribed before', async () => {
+    billingRow({ stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_old', status: 'canceled' });
+    const get = await handler(fakeEvent('GET', '/billing'));
+    expect(JSON.parse(get.body).data.trialDays).toBe(0);
+
+    await handler(fakeEvent('POST', '/billing/checkout'));
+    expect(fakeStripe.checkout.sessions.create.mock.calls[0][0].subscription_data).toEqual({ metadata: { tenantId: 't1' } });
+  });
+
+  it('still trials a shop that opened Checkout before but never finished it', async () => {
+    billingRow({ stripeCustomerId: 'cus_1', status: 'none' });
+    await handler(fakeEvent('POST', '/billing/checkout'));
+    expect(fakeStripe.checkout.sessions.create.mock.calls[0][0].subscription_data.trial_period_days).toBe(30);
+  });
+
+  it('is off when TRIAL_DAYS is 0', async () => {
+    process.env.TRIAL_DAYS = '0';
+    billingRow(undefined);
+    await handler(fakeEvent('POST', '/billing/checkout'));
+    expect(fakeStripe.checkout.sessions.create.mock.calls[0][0].subscription_data.trial_period_days).toBeUndefined();
   });
 });
 

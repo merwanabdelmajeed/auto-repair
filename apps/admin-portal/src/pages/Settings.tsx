@@ -204,6 +204,7 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
   }
 
   const status = billing?.status ?? 'none';
+  const trialDays = billing?.trialDays ?? 0;
   const display = STATUS_DISPLAY[status] ?? { label: status, color: 'var(--color-text-muted)', bg: 'rgba(148,163,184,0.12)' };
   const live = LIVE_BILLING.has(status);
   const btn: React.CSSProperties = { padding: '10px 20px', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: redirecting ? 'not-allowed' : 'pointer', opacity: redirecting ? 0.7 : 1 };
@@ -245,7 +246,7 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   {!live && (
                     <button onClick={() => void goTo(startCheckout, 'Could not start checkout. Please try again.')} disabled={redirecting} style={{ ...btn, backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)' }}>
-                      {redirecting ? 'Opening…' : status === 'canceled' ? 'Subscribe again' : 'Subscribe'}
+                      {redirecting ? 'Opening…' : trialDays > 0 ? `Start ${trialDays}-day free trial` : status === 'canceled' ? 'Subscribe again' : 'Subscribe'}
                     </button>
                   )}
                   {billing?.hasBillingAccount && (live || status === 'canceled') && (
@@ -258,6 +259,12 @@ function BillingSection({ isOwner }: { isOwner: boolean }) {
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Only the shop owner can change billing.</div>
               )}
             </div>
+            {isOwner && !live && trialDays > 0 && (
+              <div style={{ marginTop: '14px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                {trialDays} days free. Add a card or bank account now; you won't be charged until{' '}
+                <strong>{fmtBillingDate(new Date(Date.now() + trialDays * 86_400_000).toISOString())}</strong>. Cancel anytime before then.
+              </div>
+            )}
             {isOwner && (
               <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                 Payments are handled securely by Stripe. Card and bank details are never stored by this app.
