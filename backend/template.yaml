@@ -25,7 +25,7 @@ Mappings:
     prod:
       Suffix: ''
       PortalUrl: 'https://main.d3erver6wxqmre.amplifyapp.com'
-      StripePriceId: 'price_REPLACE_WITH_LIVE_PRICE_ID'
+      StripePriceId: 'price_1UWleEBDZOaATiSi9vcoFXIZ'  # live mode
 
 Conditions:
   # WAF (per-IP rate limiting) is only worth its ~$6/mo Web ACL floor on the
