@@ -12,7 +12,7 @@ import { useVehicleEdit } from '../hooks/useVehicleEdit';
 import VinDetailsPrompt from '../components/VinDetailsPrompt';
 import AddVehicleForm from '../components/AddVehicleForm';
 import { listCustomers, type Customer } from '../api/customers';
-import CopyButton from '../components/CopyButton';
+import CallButton from '../components/CallButton';
 import { listAppointments, type Appointment } from '../api/appointments';
 import { fetchAllPages } from '../utils/fetchAllPages';
 
@@ -336,7 +336,7 @@ export default function VehiclesScreen({ navigation, route }: any) {
                             {owner.phone ? (
                               <View style={styles.ownerPhoneRow}>
                                 <Text style={styles.ownerEmail}>{owner.phone}</Text>
-                                <CopyButton value={owner.phone} label="Copy phone number" />
+                                <CallButton phone={owner.phone} name={displayName(owner)} />
                               </View>
                             ) : null}
                             <Text style={styles.ownerEmail}>{owner.email}</Text>

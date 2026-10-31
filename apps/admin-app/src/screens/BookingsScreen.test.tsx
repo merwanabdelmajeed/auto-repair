@@ -337,7 +337,7 @@ describe('BookingsScreen — customer phone and link', () => {
 
     expect(screen.getAllByText('5551234567')).toHaveLength(2);
     expect(screen.getByText('jane@shop.com')).toBeTruthy();
-    expect(screen.getByLabelText('Copy phone number')).toBeTruthy();
+    expect(screen.getByLabelText('Call Jane Doe')).toBeTruthy();
     fireEvent.press(screen.getByTestId('appt-customer-link'));
     expect(mockNavigate).toHaveBeenCalledWith('Customers', { customerId: 'u1', open: true });
   });

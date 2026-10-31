@@ -367,23 +367,24 @@ describe('CustomersScreen — open from an appointment', () => {
   });
 });
 
-describe('CustomersScreen — copy phone', () => {
-  it('shows a copy button next to the phone in the detail sheet', async () => {
+describe('CustomersScreen — call phone', () => {
+  it('shows a call button next to the phone in the detail sheet that asks before calling', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     setupApis();
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
     fireEvent.press(screen.getByText('Jane Doe'));
 
-    fireEvent.press(screen.getByLabelText('Copy phone number'));
-    await waitFor(() => expect(require('expo-clipboard').setStringAsync).toHaveBeenCalledWith('5551234567'));
+    fireEvent.press(screen.getByLabelText('Call Jane Doe'));
+    expect(alertSpy).toHaveBeenCalledWith('Call Jane Doe?', '5551234567', expect.any(Array));
   });
 
-  it('has no copy button when the customer has no phone', async () => {
+  it('has no call button when the customer has no phone', async () => {
     setupApis([customer({ phone: null })]);
     render(<CustomersScreen navigation={{ navigate: mockNavigate }} route={{ params: {} }} />);
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeTruthy());
     fireEvent.press(screen.getByText('Jane Doe'));
     expect(screen.getByText('No phone number')).toBeTruthy();
-    expect(screen.queryByTestId('copy-btn')).toBeNull();
+    expect(screen.queryByTestId('call-btn')).toBeNull();
   });
 });
